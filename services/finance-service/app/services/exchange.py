@@ -2,7 +2,7 @@ import requests
 import logging
 from decimal import Decimal
 from sqlalchemy.orm import Session
-from . import models
+from .. import models
 
 logger = logging.getLogger(__name__)
 
