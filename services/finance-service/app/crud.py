@@ -83,7 +83,16 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, owner
     db.add(db_invoice)
     await db.commit()
     await db.refresh(db_invoice)
-    return db_invoice
+    
+    query = (
+        select(models.Invoice)
+        .options(selectinload(models.Invoice.items))
+        .filter(models.Invoice.id == db_invoice.id)
+    )
+    result = await db.execute(query)
+    invoice_loaded = result.scalars().first()
+    
+    return invoice_loaded
 
 async def get_invoices(db: AsyncSession, owner_email: str):
     query = (
