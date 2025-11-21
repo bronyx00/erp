@@ -17,11 +17,13 @@ services:
     ports:
       - "15672:15672"
       - "5672:5672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
         test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
         interval: 10s
-        timeout: 5s
-        retries: 5
+        timeout: 10s
+        retries: 10
 
   # =========================================
   # SERVICIO: AUTH
@@ -34,6 +36,8 @@ services:
       POSTGRES_DB: auth_db
     ports:
       - "5432:5432"
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d auth_db"]
       interval: 5s
@@ -68,6 +72,8 @@ services:
       POSTGRES_DB: finance_db
     ports:
       - "5433:5432" # Nota: Puerto externo 5433 para no chocar con auth_db
+    volumes:
+      - finance_db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d finance_db"]
       interval: 5s
@@ -81,6 +87,7 @@ services:
       - ./services/finance-service/app:/app/app
     environment:
       - FINANCE_DATABASE_URL=postgresql+asyncpg://admin:admin@finance_db:5432/finance_db
+      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
     depends_on:
       finance_db:
         condition: service_healthy
@@ -109,3 +116,46 @@ services:
         condition: service_healthy
     # Reiniciar automáticamente si pierde conexión con Rabbit
     restart: always
+
+  # =========================================
+  # SERVICIO: INVENTORY
+  # =========================================
+  inventory_db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: inventory_db
+    ports:
+      - "5434:5432" # Puerto 5434 para no chocar
+    volumes:
+      - inventory_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d inventory_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  inventory-service:
+    build:
+      context: /services/inventory-service
+    volumes:
+      - ./services/inventory-service/app:/app/app
+    environment:
+      - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
+    depends_on:
+      inventory_db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.inventory.rule=PathPrefix(`/api/inventory`)"
+      - "traefik.http.services.inventory.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.inventory-strip.stripprefix.prefixes=/api/inventory"
+      - "traefik.http.routers.inventory.middlewares=inventory-strip"
+
+# --- Declaración de Volúmenes ---
+volumes:
+  auth_db_data:
+  finance_db_data:
+  rabbitmq_data:
+  inventory_db_data:

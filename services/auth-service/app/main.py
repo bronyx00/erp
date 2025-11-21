@@ -1,9 +1,18 @@
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, security, database, models
 
 app = FastAPI(title="Auth Service", root_path="/api/auth")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4200"], # Permitir Angular
+    allow_credentials=True,
+    allow_methods=["*"], # Permitir todos los métodos
+    allow_headers=["*"], # Permitir todas las cabeceras
+)
 
 # Crear tablas al iniciar (Solo para dev)
 @app.on_event("startup")

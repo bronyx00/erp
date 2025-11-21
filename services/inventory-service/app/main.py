@@ -1,0 +1,37 @@
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
+from . import crud, schemas, database, models
+
+# Inicialización de DB
+async def lifespan(app: FastAPI):
+    async with database.engine.begin() as conn:
+        await conn.run_sync(models.Base.metadata.create_all)
+    yield
+    
+app = FastAPI(title="Inventory Service", root_path="/api/inventory", lifespan=lifespan)
+
+# Configuración CORS}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4200"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/products", response_model=list[schemas.ProductResponse])
+async def read_products(db: AsyncSession = Depends(database.get_db)):
+    return await crud.get_products(db)
+
+@app.post("/products", response_model=schemas.ProductResponse)
+async def create_product(product: schemas.ProductCreate, db: AsyncSession = Depends(database.get_db)):
+    # Añadir validacion si el sku ya existe
+    return await crud.create_product(db, product)
+
+@app.get("/products/{product_id}", response_model=schemas.ProductResponse)
+async def read_product(product_id: int, db: AsyncSession = Depends(database.get_db)):
+    db_product = await crud.get_product_by_id(db, product_id)
+    if db_product is None:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    return db_product

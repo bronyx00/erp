@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy.future import select
 from .database import get_db, engine, SyncSessionLocal
 from contextlib import asynccontextmanager
 import logging
@@ -10,6 +11,7 @@ import json
 from apscheduler.schedulers.background import BackgroundScheduler
 from . import crud, schemas, database, models
 from .services import exchange
+from .security import get_current_user_email
 
 # --- Configuración de Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -60,6 +62,14 @@ async def lifespan(app: FastAPI):
 # --- Configuración de FastAPI ---
 app = FastAPI(title="Finance Service", root_path="/api/finance", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4200"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # --- Configuración de RAbbitMQ --- 
 def publish_invoice_created(invoice_data: dict):
     try:
@@ -93,9 +103,9 @@ async def startup():
         
 # --- Endpoints ---
 @app.post("/invoices", response_model=schemas.InvoiceResponse)
-async def create_invoice(invoice: schemas.InvoiceCreate, db: AsyncSession = Depends(database.get_db)):
+async def create_invoice(invoice: schemas.InvoiceCreate, db: AsyncSession = Depends(database.get_db), current_user_email: str = Depends(get_current_user_email)):
     # Guardar en DB
-    new_invoice = await crud.create_invoice(db, invoice)
+    new_invoice = await crud.create_invoice(db, invoice, owner_email=current_user_email)
     
     # Convertir a diccionario para enviar
     invoice_dict = {
@@ -111,18 +121,36 @@ async def create_invoice(invoice: schemas.InvoiceCreate, db: AsyncSession = Depe
     return new_invoice
 
 @app.get("/invoices", response_model=list[schemas.InvoiceResponse])
-async def read_invoices(db: AsyncSession = Depends(database.get_db)):
-    return await crud.get_invoices(db)
+async def read_invoices(db: AsyncSession = Depends(database.get_db), current_user_email: str = Depends(get_current_user_email)):
+    # --- LOG DE DEPURACIÓN ---
+    logger.info(f"🕵️‍♂️ Petición de facturas recibida.")
+    logger.info(f"👤 Usuario identificado en el Token: '{current_user_email}'")
+    # -------------------------
+    
+    facturas = await crud.get_invoices(db, owner_email=current_user_email)
+    
+    logger.info(f"📦 Facturas encontradas para {current_user_email}: {len(facturas)}")
+    return facturas
 
 # --- Consultar Tasa ---
 @app.get("/exchange-rate")
-async def get_current_rate():
-    """Devuelve la última tasa conocida"""
-    # result = await db.execute(select(models.ExchangeRate).order_by(models.ExchangeRate.acquired_at.desc()))
-    # return result.scalars().first()
+async def get_current_rate(db: AsyncSession = Depends(database.get_db)):
+    """Devuelve la última tasa conocida registrada en la Base de Datos."""
+    # Consultamos la tabla ExchangeRate, ordenamos por fecha descendente y tomamos la primera
+    query = select(models.ExchangeRate).order_by(models.ExchangeRate.acquired_at.desc()).limit(1)
+    result = await db.execute(query)
+    rate = result.scalars().first()
+    
+    if not rate:
+        return {
+            "status": "No data",
+            "message": "Aún no hay tasas registradas. Espera que el Scheduler ejecute la tarea."
+        }
+        
     return {
-        "currency": "VES",
-        "rate": 250.50, # Simulado hasta conectar DB síncrona
-        "source": "Simulado",
-        "status": "Scheduler activo en logs"
+        "currency_from": rate.currency_from,
+        "currency_to": rate.currency_to,
+        "rate": rate.rate,
+        "source": rate.source,
+        "acquired_at": rate.acquired_at
     }

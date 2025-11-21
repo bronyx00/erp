@@ -8,11 +8,6 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-
-# --- AGREGAR ESTA LÍNEA ---
-RUN pip install --upgrade pip 
-# --------------------------
-
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY ./app /app/app
