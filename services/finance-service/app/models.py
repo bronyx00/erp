@@ -19,8 +19,9 @@ class Invoice(Base):
     is_synced_compliance = Column(Boolean, default=False) 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relación con los items
+    # Relaciones
     items = relationship("InvoiceItem", back_populates="invoice")
+    payments = relationship("Payment", back_populates="invoice")
     
 class InvoiceItem(Base):
     __tablename__ = "invoice_items"
@@ -35,6 +36,22 @@ class InvoiceItem(Base):
     total_price = Column(Numeric(10, 2)) # qty * unit_price
     
     invoice = relationship("Invoice", back_populates="items")
+
+class Payment(Base):
+    __tablename__ = "payments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
+    
+    amount = Column(Numeric(10, 2), nullable=False) # Monto pagado
+    currency = Column(String(3), default="USD")     # Moneda del pago
+    payment_method = Column(String)
+    reference = Column(String, nullable=True)
+    notes = Column(String, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    invoice = relationship("Invoice", back_populates="payments")
 
 class ExchangeRate(Base):
     __tablename__ = "exchange_rates"

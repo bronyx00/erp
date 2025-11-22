@@ -86,7 +86,10 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, owner
     
     query = (
         select(models.Invoice)
-        .options(selectinload(models.Invoice.items))
+        .options(
+            selectinload(models.Invoice.items),
+            selectinload(models.Invoice.payments)
+        )
         .filter(models.Invoice.id == db_invoice.id)
     )
     result = await db.execute(query)
@@ -98,7 +101,54 @@ async def get_invoices(db: AsyncSession, owner_email: str):
     query = (
         select(models.Invoice)
         .filter(models.Invoice.owner_email == owner_email)
-        .options(selectinload(models.Invoice.items))
+        .options(selectinload(models.Invoice.items), selectinload(models.Invoice.payments))
+        .order_by(models.Invoice.created_at.desc())
         )
     result = await db.execute(query)
     return result.scalars().all()
+
+async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, owner_email: str):
+    # Buscar la factura y verificar que pertenezca al usuario
+    query = (
+        select(models.Invoice)
+        .filter(models.Invoice.id == payment.invoice_id, models.Invoice.owner_email == owner_email)
+        .options(selectinload(models.Invoice.payments))
+    )
+    result = await db.execute(query)
+    invoice = result.scalars().first()
+    
+    if not invoice:
+        raise ValueError("Factura no encontrada o acceso denegado")
+    
+    # Calcular saldo actual
+    total_paid = sum(p.amount for p in invoice.payments)
+    balance_due = invoice.amount - total_paid
+    
+    if payment.amount > balance_due:
+        # Se puede cambiar cuando queramos hacer el estado de 'crédito a favor', por ahora solo emite error
+        raise ValueError(f"El monto excede la deuda. Saldo pendiente: {balance_due}")
+    
+    # Registrar el Pago
+    db_payment = models.Payment(
+        invoice_id=payment.invoice_id,
+        amount=payment.amount,
+        currency=invoice.currency,
+        payment_method=payment.payment_method,
+        reference=payment.reference,
+        notes=payment.notes
+    )
+    db.add(db_payment)
+    
+    # Actualizar Status de la Factura
+    new_total_paid = total_paid + payment.amount
+    
+    if new_total_paid >= invoice.amount:
+        invoice.status = "PAID"
+    else:
+        invoice.status = "PARTIALLY_PAID"
+        
+    db.add(invoice) # Actualiza la factura también
+    
+    await db.commit()
+    await db.refresh(db_payment)
+    return db_payment

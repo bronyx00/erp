@@ -120,6 +120,13 @@ async def create_invoice(invoice: schemas.InvoiceCreate, db: AsyncSession = Depe
     
     return new_invoice
 
+@app.post("/payments", response_model=schemas.PaymentResponse)
+async def create_payment(payment: schemas.PaymentCreate, db: AsyncSession = Depends(database.get_db), current_user_email: str = Depends(get_current_user_email)):
+    try:
+        return await crud.create_payment(db, payment, owner_email=current_user_email)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/invoices", response_model=list[schemas.InvoiceResponse])
 async def read_invoices(db: AsyncSession = Depends(database.get_db), current_user_email: str = Depends(get_current_user_email)):
     # --- LOG DE DEPURACIÓN ---
