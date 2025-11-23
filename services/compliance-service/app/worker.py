@@ -58,16 +58,20 @@ def start_worker():
             time.sleep(5)
             
     channel = connection.channel()
-    
-    # Aseguramos que la cola existe
-    channel.queue_declare(queue=QUEUE_NAME, durable=True)
-    
-    # Asegura que Rabbit solo de 1 mensaje a la vez
+
+    channel.exchange_declare(exchange='erp_events', exchange_type='topic', durable=True)
+
+    # Declarar la cola
+    queue_name = "invoice_events"
+    channel.queue_declare(queue=queue_name, durable=True)
+
+    # Esto dice: "Mándame a esta cola todo lo que tenga la etiqueta 'invoice.created'"
+    channel.queue_bind(exchange='erp_events', queue=queue_name, routing_key='invoice.created')
+
     channel.basic_qos(prefetch_count=1)
-    
-    channel.basic_consume(queue=QUEUE_NAME, on_message_callback=callback)
-    
-    print("🎧 [Compliance] Esperando facturas.")
+    channel.basic_consume(queue=queue_name, on_message_callback=callback)
+
+    print("🎧 [Compliance] Escuchando eventos 'invoice.created'...")
     channel.start_consuming()
     
 if __name__ == "__main__":

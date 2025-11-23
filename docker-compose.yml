@@ -153,6 +153,22 @@ services:
       - "traefik.http.middlewares.inventory-strip.stripprefix.prefixes=/api/inventory"
       - "traefik.http.routers.inventory.middlewares=inventory-strip"
 
+  inventory-worker:
+    build:
+      context: ./services/inventory-service
+    volumes:
+      - ./services/inventory-service/app:/app/app
+    command: python -u app/worker.py
+    environment:
+      - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
+      - RABBITMQ_URL= amqp://guest:guest@rabbitmq:5672/%2F
+    depends_on:
+      inventory_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: always
+
   crm_db:
     image: postgres:15-alpine
     environment:

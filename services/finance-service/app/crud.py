@@ -3,6 +3,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
+from decimal import Decimal
 from . import models, schemas
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, owner
         if not product:
             raise ValueError(f"Producto ID {item.product_id} no encontrado")
         
-        unit_price = float(product['price'])
+        unit_price = Decimal(product['price'])
         line_total = unit_price * item.quantity
         total_amount += line_total
         
@@ -112,7 +113,10 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, owner
     query = (
         select(models.Invoice)
         .filter(models.Invoice.id == payment.invoice_id, models.Invoice.owner_email == owner_email)
-        .options(selectinload(models.Invoice.payments))
+        .options(
+            selectinload(models.Invoice.payments),
+            selectinload(models.Invoice.items)
+        )
     )
     result = await db.execute(query)
     invoice = result.scalars().first()
@@ -120,7 +124,7 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, owner
     if not invoice:
         raise ValueError("Factura no encontrada o acceso denegado")
     
-    # Calcular saldo actual
+    # Calcular saldo
     total_paid = sum(p.amount for p in invoice.payments)
     balance_due = invoice.amount - total_paid
     
@@ -128,7 +132,7 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, owner
         # Se puede cambiar cuando queramos hacer el estado de 'crédito a favor', por ahora solo emite error
         raise ValueError(f"El monto excede la deuda. Saldo pendiente: {balance_due}")
     
-    # Registrar el Pago
+    # Crear Pago
     db_payment = models.Payment(
         invoice_id=payment.invoice_id,
         amount=payment.amount,
@@ -141,9 +145,11 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, owner
     
     # Actualizar Status de la Factura
     new_total_paid = total_paid + payment.amount
+    is_fully_paid = False # Bandera para saber si debemos emitir evento
     
     if new_total_paid >= invoice.amount:
         invoice.status = "PAID"
+        is_fully_paid = True
     else:
         invoice.status = "PARTIALLY_PAID"
         
@@ -151,4 +157,4 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, owner
     
     await db.commit()
     await db.refresh(db_payment)
-    return db_payment
+    return db_payment, invoice, is_fully_paid

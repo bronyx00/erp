@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import logging
 import pika
 import json
+import os
 # Planificador
 from apscheduler.schedulers.background import BackgroundScheduler
 from . import crud, schemas, database, models
@@ -71,29 +72,52 @@ app.add_middleware(
 )
 
 # --- Configuración de RAbbitMQ --- 
-def publish_invoice_created(invoice_data: dict):
+def publish_event(routing_key: str, data: dict):
+    """
+    Publica cualquier evento en el bus de mensajes 'erp_events'.
+    routing_key: El 'asunto' del mensaje (ej. 'invoice.created', 'invoice.paid')
+    """
     try:
-        # Contectar a RabbitMQ
-        connection = pika.BlockingConnection(pika.URLParameters('amqp://guest:guest@rabbitmq:5672/%2F'))
+        # Conexión
+        url = os.getenv("RABBITMQ_URL", 'amqp://guest:guest@rabbitmq:5672/%2F')
+        connection = pika.BlockingConnection(pika.URLParameters(url))
         channel = connection.channel()
         
-        # Asegurar que la cola existe (para no enviar al vacío)
-        channel.queue_declare(queue='invoice_events', durable=True)
+        # Declaramos un 'Topic Exchange' (El centro de distribución)
+        channel.exchange_declare(exchange='erp_events', exchange_type='topic', durable=True)
         
-        # Publicar el mensaje
+        # Publicamos el mensaje al Exchange
         channel.basic_publish(
-            exchange='',
-            routing_key='invoice_events',
-            body=json.dumps(invoice_data),
-            properties=pika.BasicProperties(
-                delivery_mode=2, # Mensaje persiste (no se pierde si Rabbit reinicia)
-            )
+            exchange='erp_events', # ¡Ahora usamos un exchange!
+            routing_key=routing_key,
+            body=json.dumps(data),
+            properties=pika.BasicProperties(delivery_mode=2)
         )
         connection.close()
-        logger.info(f"📢 Evento enviado a RabbitMQ: {invoice_data}")
-        
+        logger.info(f"📢 Evento publicado: {routing_key}")
     except Exception as e:
-        logger.error(f"❌ Error conectado a RabbitMQ: {e}")
+        logger.error(f"❌ Error publicando evento {routing_key}: {e}")
+        
+        
+@app.post("/payments", response_model=schemas.PaymentResponse)
+async def create_payment(payment: schemas.PaymentCreate, db: AsyncSession = Depends(database.get_db), current_user_email: str = Depends(get_current_user_email)):
+    try:
+        new_payment, invoice, is_fully_paid = await crud.create_payment(db, payment, owner_email=current_user_email)
+        
+        if is_fully_paid:
+            event_data = {
+                "invoice_id": invoice.id,
+                "paid_at": str(new_payment.created_at),
+                "items": [
+                    {"product_id": item.product_id, "quantity": item.quantity}
+                    for item in invoice.items
+                ]
+            }
+            publish_event("invoice.paid", event_data)
+        
+        return new_payment
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
         
 # --- Eventos de Inicio ---
 @app.on_event("startup")
@@ -112,28 +136,18 @@ async def create_invoice(invoice: schemas.InvoiceCreate, db: AsyncSession = Depe
         "id": new_invoice.id,
         "amount": str(new_invoice.amount), 
         "currency": new_invoice.currency,
-        "customer_email": new_invoice.customer_email
+        "customer_email": new_invoice.customer_email,
+        "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in new_invoice.items]
     }
     
     # Enviar evento a RabbitMQ
-    publish_invoice_created(invoice_dict)
+    publish_event("invoice.created", invoice_dict)
     
     return new_invoice
 
-@app.post("/payments", response_model=schemas.PaymentResponse)
-async def create_payment(payment: schemas.PaymentCreate, db: AsyncSession = Depends(database.get_db), current_user_email: str = Depends(get_current_user_email)):
-    try:
-        return await crud.create_payment(db, payment, owner_email=current_user_email)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
+    
 @app.get("/invoices", response_model=list[schemas.InvoiceResponse])
 async def read_invoices(db: AsyncSession = Depends(database.get_db), current_user_email: str = Depends(get_current_user_email)):
-    # --- LOG DE DEPURACIÓN ---
-    logger.info(f"🕵️‍♂️ Petición de facturas recibida.")
-    logger.info(f"👤 Usuario identificado en el Token: '{current_user_email}'")
-    # -------------------------
-    
     facturas = await crud.get_invoices(db, owner_email=current_user_email)
     
     logger.info(f"📦 Facturas encontradas para {current_user_email}: {len(facturas)}")
