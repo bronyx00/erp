@@ -161,7 +161,6 @@ services:
     command: python -u app/worker.py
     environment:
       - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
-      - RABBITMQ_URL= amqp://guest:guest@rabbitmq:5672/%2F
     depends_on:
       inventory_db:
         condition: service_healthy

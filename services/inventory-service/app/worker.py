@@ -5,8 +5,9 @@ import time
 import sys
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from .models import Product
-from .database import DATABASE_URL
+# Esto permite importar los modelos como si fuéramos parte del paquete
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.database import DATABASE_URL
 
 # Configuración de RabbitMQ
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/%2F")
@@ -44,7 +45,10 @@ def callback(ch, method, properties, body):
         message = json.loads(body)
         
         if method.routing_key == "invoice.paid":
-            items = message.get("items", [])
+            items = message.get("items")
+            if not items and "data" in message:
+                items = message["data"].get("items")
+                
             if items:
                 update_stock(items)
             else:
@@ -85,5 +89,5 @@ def start_worker():
     print("🎧 [Inventory Worker] Escuchando eventos de ventas (invoice.paid)...")
     channel.start_consuming()
     
-if __name__ == "__name__":
+if __name__ == "__main__":
     start_worker()
