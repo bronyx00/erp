@@ -47,3 +47,23 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
         }
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/users", response_model=schemas.UserResponse)
+async def create_sub_user(
+    user: schemas.SubUserCreate,
+    db: AsyncSession = Depends(database.get_db),
+    current_user: schemas.TokenPayload = Depends(security.get_current_user)
+):
+    # Verifica Permisos
+    if current_user.role not in ["OWNER", "ADMIN"]:
+        raise HTTPException(
+            status_code=403,
+            detail="No tienes permisos para crear usuarios."
+        )
+    # Verificar si el email ya existe
+    db_user = await crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Este email ya está registrado")
+    
+    # Crear el empleado vinculado a la misma empresa
+    return await crud.create_employee(db, user, tenant_id=current_user.tenant_id)

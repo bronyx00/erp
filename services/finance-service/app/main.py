@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from typing import Optional
 from .database import get_db, engine, SyncSessionLocal
 from contextlib import asynccontextmanager
 import logging
@@ -12,7 +13,9 @@ import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from . import crud, schemas, database, models
 from .services import exchange
-from .security import get_current_tenant_id
+from .security import get_current_tenant_id, oauth2_scheme, SECRET_KEY, ALGORITHM
+from jose import jwt, JWTError
+
 
 # --- Configuración de Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -134,10 +137,11 @@ async def startup():
 async def create_invoice(
     invoice: schemas.InvoiceCreate, 
     db: AsyncSession = Depends(database.get_db), 
-    tenant_id: int = Depends(get_current_tenant_id)
+    tenant_id: int = Depends(get_current_tenant_id),
+    token: str = Depends(oauth2_scheme)
 ):
     # Guardar en DB
-    new_invoice = await crud.create_invoice(db, invoice, tenant_id=tenant_id)
+    new_invoice = await crud.create_invoice(db, invoice, tenant_id=tenant_id, token=token)
     
     # Convertir a diccionario para enviar
     invoice_dict = {
@@ -186,3 +190,46 @@ async def get_current_rate(db: AsyncSession = Depends(database.get_db)):
         "source": rate.source,
         "acquired_at": rate.acquired_at
     }
+    
+# --- Función auxiliar para validar token de supervisor ---
+def validate_supervisor_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        role = payload.get("role")
+        if role not in ["OWNER", "ADMIN"]:
+            raise HTTPException(status_code=403, detail="Se requiere autorización de Supervisor.")
+        return True
+    except JWTError:
+        raise HTTPException(status_code=403, detail="Credenciales de supervisor inválidas.")
+    
+# --- ENDPOINT ANULAR FACTURA ---
+@app.post("/invoices/{invoice_id}/void", response_model=schemas.InvoiceResponse)
+async def void_invoice(
+    invoice_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    tenant_id: int = Depends(get_current_tenant_id),
+    x_supervisor_token: Optional[str] = Header(None, alias="X-Supervisor-Token")
+):
+    try:
+        invoice, previous_status = await crud.void_invoice(db, invoice_id, tenant_id)
+        
+        # REGLA DE NEGOCIO: Si ya estaba pagada, se exige autorización
+        if previous_status in ["PAID", "PARTIALLY_PAID"]:
+            if not x_supervisor_token:
+                raise HTTPException(status_code=403, detail="Factura pagada. Se requiere aprobación del Supervisor.")
+
+            # Validar que el token pertenezca a un jefe
+            validate_supervisor_token(x_supervisor_token)
+                
+        # Emitir evento para devolver stock
+        event_data = {
+            "invoice_id": invoice.id,
+            "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in invoice.items]
+        }
+        # Usa la etiqueta 'invoice.voided' para que el inventario sepa que debe sumar
+        publish_event("invoice.voided", event_data)
+        
+        return invoice
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

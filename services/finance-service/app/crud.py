@@ -11,13 +11,14 @@ logger = logging.getLogger(__name__)
 # URL internal de Docker
 INVENTORY_SERVICE_URL = "http://inventory-service:8000"
 
-async def get_product_details(product_id: int):
+async def get_product_details(product_id: int, token: str):
+    headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient() as client:
         try:
-            resp = await client.get(f"{INVENTORY_SERVICE_URL}/products/{product_id}")
+            resp = await client.get(f"{INVENTORY_SERVICE_URL}/products/{product_id}", headers=headers)
             if resp.status_code == 200:
                 return resp.json()
-            logger.error(f"Producto {product_id} no enocntrado en inventary-service")
+            logger.error(f"Producto {product_id} error: {resp.status_code} - {resp.text}")
             return None
         except Exception as e:
             logger.error(f"Error contactando inventory-service: {e}")
@@ -37,16 +38,16 @@ async def get_latest_rate(db: AsyncSession, currency_from: str = "USD", currency
     result = await db.execute(query)
     return result.scalars().first()
 
-async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int):
-    logger.info(f"Calculando factura para {invoice.customer_email} con {len(invoice.items)} items")
+async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int, token: str):
+    logger.info(f"Calculando factura con {len(invoice.items)} items")
     # Calcular totales y validar productos
     total_amount = 0
     db_items = []
     
     for item in invoice.items:
-        product = await get_product_details(item.product_id)
+        product = await get_product_details(item.product_id, token)
         if not product:
-            raise ValueError(f"Producto ID {item.product_id} no encontrado")
+            raise ValueError(f"Producto ID {item.product_id} no encontrado o sin permiso")
         
         unit_price = Decimal(product['price'])
         line_total = unit_price * item.quantity
@@ -94,9 +95,8 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         .filter(models.Invoice.id == db_invoice.id)
     )
     result = await db.execute(query)
-    invoice_loaded = result.scalars().first()
     
-    return invoice_loaded
+    return result.scalars().first()
 
 async def get_invoices(db: AsyncSession, tenant_id: int):
     query = (
@@ -158,3 +158,36 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     await db.commit()
     await db.refresh(db_payment)
     return db_payment, invoice, is_fully_paid
+
+async def void_invoice(db: AsyncSession, invoice_id: int, tenant_id: int):
+    # Buscar la factura con sus items
+    query = (
+        select(models.Invoice)
+        .filter(models.Invoice.id == invoice_id, models.Invoice.tenant_id == tenant_id)
+        .options(selectinload(models.Invoice.items), selectinload(models.Invoice.payments))
+    )
+    result = await db.execute(query)
+    invoice = result.scalars().first()
+    
+    if not invoice:
+        raise ValueError("Factura no encontrada")
+    
+    if invoice.status == "VOID":
+        raise ValueError("La factura ya está anulada")
+    
+    previous_status = invoice.status
+    invoice.status = "VOID"
+    
+    db.add(invoice)
+    await db.commit()
+    
+    query_reload = (
+        select(models.Invoice)
+        .filter(models.Invoice.id == invoice.id)
+        .options(selectinload(models.Invoice.items), selectinload(models.Invoice.payments))
+    )
+    result_reload = await db.execute(query_reload)
+    invoice_reload = result_reload.scalars().first()
+    
+    # Retornamos la factura y el estado previo para saber si hay que devolver stock/dinero
+    return invoice_reload, previous_status

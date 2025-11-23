@@ -6,7 +6,7 @@ from . import models, schemas, security
 async def get_user_by_email(db: AsyncSession, email: str):
     """Busca un usuario por email"""
     query = select(models.User).options(selectinload(models.User.tenant)).filter(models.User.email == email)
-    result = await db.execute(select(models.User).filter(models.User.email == email))
+    result = await db.execute(query)
     return result.scalars().first()
 
 async def register_company_and_owner(db: AsyncSession, user_data: schemas.UserCreate):
@@ -42,3 +42,20 @@ async def register_company_and_owner(db: AsyncSession, user_data: schemas.UserCr
     created_user = result.scalars().first()
 
     return created_user
+
+async def create_employee(db: AsyncSession, user_data: schemas.SubUserCreate, tenant_id: int):
+    hashed_pw = security.get_password_hash(user_data.password)
+    
+    new_user = models.User(
+        email=user_data.email,
+        hashed_password=hashed_pw,
+        role=user_data.role,
+        tenant_id=tenant_id,
+        is_active=True
+    )
+    db.add(new_user)
+    await db.commit()
+    
+    query = select(models.User).options(selectinload(models.User.tenant)).filter(models.User.id == new_user.id)
+    result = await db.execute(query)
+    return result.scalars().first()

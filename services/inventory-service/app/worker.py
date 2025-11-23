@@ -5,7 +5,7 @@ import time
 import sys
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-# Esto permite importar los modelos como si fuéramos parte del paquete
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.database import DATABASE_URL
 
@@ -18,22 +18,28 @@ SYNC_DATABASE_URL = DATABASE_URL.replace("+asyncpg", "")
 engine = create_engine(SYNC_DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 
-def update_stock(items):
-    """Descuenta el stock de los productos vendidos."""
+def update_stock(items, action="decrease"):
+    """
+    Descuenta el stock de los productos vendidos.
+    action: 'decrease' (venta) o 'increase' (devolucion)
+    """
     db = SessionLocal()
     try:
-        print(f"📦 Iniciando descuento de stock para {len(items)} productos...")
+        print(f"📦 Actualizando stock ({action})...")
         for item in items:
             product_id = item['product_id']
             qty = item['quantity']
             
-            stmt = text("UPDATE products SET stock = stock - :qty WHERE id = :pid")
+            if action == "decrease":
+                stmt = text("UPDATE products SET stock = stock - :qty WHERE id = :pid")
+            else: # increase
+                stmt = text("UPDATE products SET stock = stock + :qty WHERE id = :pid")
+                
             db.execute(stmt, {"qty": qty, "pid": product_id})
-            print(f"   📉 Producto ID {product_id}: Descontados {qty} unidades.")
+            print(f"   Product {product_id}: {action} {qty}")
         db.commit()
-        print("✅ Stock actualizado correctamente.")
     except Exception as e:
-        print(f"❌ Error actualizando stock: {e}")
+        print(f"❌ Error stock: {e}")
         db.rollback()
     finally:
         db.close()
@@ -43,20 +49,21 @@ def callback(ch, method, properties, body):
     print(f"📥 [Inventory] Evento recibido: {method.routing_key}")
     try:
         message = json.loads(body)
+        items = message.get("items") or message.get("data", {}).get("items")
         
-        if method.routing_key == "invoice.paid":
-            items = message.get("items")
-            if not items and "data" in message:
-                items = message["data"].get("items")
-                
-            if items:
-                update_stock(items)
+        if items:
+            if method.routing_key == "invoice.paid":
+                update_stock(items, action="decrease")
+            elif method.routing_key == "invoice.voided":
+                update_stock(items, action="increase")
             else:
-                print("⚠️ El evento no contenía items.")
+                print(f"⚠️ Evento desconocido: {method.routing_key}")
+        else:
+            print("⚠️ El evento no contenía items.")
             
         ch.basic_ack(delivery_tag=method.delivery_tag)
     except Exception as e:
-        print(f"Error procesando mensaje: {e}")
+        print(f"❌ Error: {e}")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         
 def start_worker():
@@ -82,6 +89,7 @@ def start_worker():
     
     # Escucha específicamente "invoice.paid"
     channel.queue_bind(exchange='erp_events', queue=queue_name, routing_key='invoice.paid')
+    channel.queue_bind(exchange="erp_events", queue=queue_name, routing_key='invoice.voided')
     
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(queue=queue_name, on_message_callback=callback)
