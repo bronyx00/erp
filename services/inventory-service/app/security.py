@@ -9,6 +9,10 @@ ALGORITHM = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 def get_current_tenant_id(token: str = Depends(oauth2_scheme)) -> int:
+    """
+    Valida el token y extrae el ID de la Empresa (Tenant ID).
+    Esto permite que múltiples usuarios de la misma empresa vean los mismos datos.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Credenciales inválidas",

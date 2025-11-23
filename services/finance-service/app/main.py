@@ -12,7 +12,7 @@ import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from . import crud, schemas, database, models
 from .services import exchange
-from .security import get_current_user_email
+from .security import get_current_tenant_id
 
 # --- Configuración de Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -100,9 +100,13 @@ def publish_event(routing_key: str, data: dict):
         
         
 @app.post("/payments", response_model=schemas.PaymentResponse)
-async def create_payment(payment: schemas.PaymentCreate, db: AsyncSession = Depends(database.get_db), current_user_email: str = Depends(get_current_user_email)):
+async def create_payment(
+    payment: schemas.PaymentCreate, 
+    db: AsyncSession = Depends(database.get_db), 
+    tenant_id: int = Depends(get_current_tenant_id)
+):
     try:
-        new_payment, invoice, is_fully_paid = await crud.create_payment(db, payment, owner_email=current_user_email)
+        new_payment, invoice, is_fully_paid = await crud.create_payment(db, payment, tenant_id=tenant_id)
         
         if is_fully_paid:
             event_data = {
@@ -127,9 +131,13 @@ async def startup():
         
 # --- Endpoints ---
 @app.post("/invoices", response_model=schemas.InvoiceResponse)
-async def create_invoice(invoice: schemas.InvoiceCreate, db: AsyncSession = Depends(database.get_db), current_user_email: str = Depends(get_current_user_email)):
+async def create_invoice(
+    invoice: schemas.InvoiceCreate, 
+    db: AsyncSession = Depends(database.get_db), 
+    tenant_id: int = Depends(get_current_tenant_id)
+):
     # Guardar en DB
-    new_invoice = await crud.create_invoice(db, invoice, owner_email=current_user_email)
+    new_invoice = await crud.create_invoice(db, invoice, tenant_id=tenant_id)
     
     # Convertir a diccionario para enviar
     invoice_dict = {
@@ -147,10 +155,13 @@ async def create_invoice(invoice: schemas.InvoiceCreate, db: AsyncSession = Depe
 
     
 @app.get("/invoices", response_model=list[schemas.InvoiceResponse])
-async def read_invoices(db: AsyncSession = Depends(database.get_db), current_user_email: str = Depends(get_current_user_email)):
-    facturas = await crud.get_invoices(db, owner_email=current_user_email)
+async def read_invoices(
+    db: AsyncSession = Depends(database.get_db), 
+    tenant_id: int = Depends(get_current_tenant_id)
+):
+    facturas = await crud.get_invoices(db, tenant_id=tenant_id)
     
-    logger.info(f"📦 Facturas encontradas para {current_user_email}: {len(facturas)}")
+    logger.info(f"📦 Facturas encontradas para {tenant_id}: {len(facturas)}")
     return facturas
 
 # --- Consultar Tasa ---

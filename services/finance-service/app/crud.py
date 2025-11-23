@@ -37,7 +37,7 @@ async def get_latest_rate(db: AsyncSession, currency_from: str = "USD", currency
     result = await db.execute(query)
     return result.scalars().first()
 
-async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, owner_email: str):
+async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int):
     logger.info(f"Calculando factura para {invoice.customer_email} con {len(invoice.items)} items")
     # Calcular totales y validar productos
     total_amount = 0
@@ -62,7 +62,7 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, owner
     
     # Crear Factura
     db_invoice = models.Invoice(
-        owner_email=owner_email,
+        tenant_id=tenant_id,
         customer_email=invoice.customer_email,
         amount=total_amount,
         currency=invoice.currency,
@@ -98,21 +98,21 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, owner
     
     return invoice_loaded
 
-async def get_invoices(db: AsyncSession, owner_email: str):
+async def get_invoices(db: AsyncSession, tenant_id: int):
     query = (
         select(models.Invoice)
-        .filter(models.Invoice.owner_email == owner_email)
+        .filter(models.Invoice.tenant_id == tenant_id)
         .options(selectinload(models.Invoice.items), selectinload(models.Invoice.payments))
         .order_by(models.Invoice.created_at.desc())
         )
     result = await db.execute(query)
     return result.scalars().all()
 
-async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, owner_email: str):
+async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenant_id: int):
     # Buscar la factura y verificar que pertenezca al usuario
     query = (
         select(models.Invoice)
-        .filter(models.Invoice.id == payment.invoice_id, models.Invoice.owner_email == owner_email)
+        .filter(models.Invoice.id == payment.invoice_id, models.Invoice.tenant_id == tenant_id)
         .options(
             selectinload(models.Invoice.payments),
             selectinload(models.Invoice.items)

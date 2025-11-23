@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
+from .security import get_current_tenant_id
 
 # Inicialización de DB
 async def lifespan(app: FastAPI):
@@ -21,17 +22,28 @@ app.add_middleware(
 )
 
 @app.get("/products", response_model=list[schemas.ProductResponse])
-async def read_products(db: AsyncSession = Depends(database.get_db)):
-    return await crud.get_products(db)
+async def read_products(
+    db: AsyncSession = Depends(database.get_db),
+    tenant_id: int = Depends(get_current_tenant_id)    
+):
+    return await crud.get_products(db, tenant_id=tenant_id)
 
 @app.post("/products", response_model=schemas.ProductResponse)
-async def create_product(product: schemas.ProductCreate, db: AsyncSession = Depends(database.get_db)):
+async def create_product(
+    product: schemas.ProductCreate, 
+    db: AsyncSession = Depends(database.get_db),
+    tenant_id: int = Depends(get_current_tenant_id)
+):
     # Añadir validacion si el sku ya existe
-    return await crud.create_product(db, product)
+    return await crud.create_product(db, product, tenant_id=tenant_id)
 
 @app.get("/products/{product_id}", response_model=schemas.ProductResponse)
-async def read_product(product_id: int, db: AsyncSession = Depends(database.get_db)):
-    db_product = await crud.get_product_by_id(db, product_id)
+async def read_product(
+    product_id: int, 
+    db: AsyncSession = Depends(database.get_db),
+    tenant_id: int = Depends(get_current_tenant_id)
+):
+    db_product = await crud.get_product_by_id(db, product_id, tenant_id)
     if db_product is None:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     return db_product

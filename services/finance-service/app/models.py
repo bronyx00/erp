@@ -7,7 +7,7 @@ class Invoice(Base):
     __tablename__ = "invoices"
     
     id = Column(Integer, primary_key=True, index=True)
-    owner_email = Column(String, index=True, nullable=False) # Quien creo la factura
+    tenant_id = Column(Integer, index=True, nullable=False) # Empresa que creo la Factura
     customer_email = Column(String, index=True) # Email del cliente
     
     # Datos de la Transacción

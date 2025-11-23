@@ -6,7 +6,7 @@ class Customer(Base):
     __tablename__ = "customers"
     
     id = Column(Integer, primary_key=True, index=True)
-    owner_email = Column(String, index=True, nullable=False)
+    tenant_id = Column(Integer, index=True, nullable=False)
     name = Column(String, index=True, nullable=False)
     email = Column(String, index=True)
     tax_id = Column(String) # RIF, Cedula o NIT
