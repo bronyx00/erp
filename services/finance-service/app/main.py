@@ -192,10 +192,20 @@ async def get_current_rate(db: AsyncSession = Depends(database.get_db)):
     }
     
 # --- Función auxiliar para validar token de supervisor ---
-def validate_supervisor_token(token: str):
+def validate_supervisor_token(token: str, required_tenant_id: int):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         role = payload.get("role")
+        
+        supervisor_tenant_id = payload.get("tenant_id")
+        
+        # El ID de la empresa del supervisor DEBE coincidir con el ID de la empresa actual
+        if supervisor_tenant_id != required_tenant_id:
+            raise HTTPException(
+                status_code=403,
+                detail="ACCESO DENEGADO: El supervisor pertenece a otra empresa."
+            )
+        
         if role not in ["OWNER", "ADMIN"]:
             raise HTTPException(status_code=403, detail="Se requiere autorización de Supervisor.")
         return True
@@ -210,26 +220,32 @@ async def void_invoice(
     tenant_id: int = Depends(get_current_tenant_id),
     x_supervisor_token: Optional[str] = Header(None, alias="X-Supervisor-Token")
 ):
-    try:
-        invoice, previous_status = await crud.void_invoice(db, invoice_id, tenant_id)
-        
-        # REGLA DE NEGOCIO: Si ya estaba pagada, se exige autorización
-        if previous_status in ["PAID", "PARTIALLY_PAID"]:
-            if not x_supervisor_token:
-                raise HTTPException(status_code=403, detail="Factura pagada. Se requiere aprobación del Supervisor.")
-
-            # Validar que el token pertenezca a un jefe
-            validate_supervisor_token(x_supervisor_token)
-                
-        # Emitir evento para devolver stock
-        event_data = {
-            "invoice_id": invoice.id,
-            "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in invoice.items]
-        }
-        # Usa la etiqueta 'invoice.voided' para que el inventario sepa que debe sumar
-        publish_event("invoice.voided", event_data)
-        
-        return invoice
+    # Buscar primero la factura
+    invoice = await crud.get_invoice_by_id(db, invoice_id, tenant_id)
     
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Factura no encontrada o acceso denegado.")
+    
+    if invoice.status == "VOID":
+        raise HTTPException(status_code=400, detail="La factura ya está anulada")
+    
+    # Validar antes de escribir
+    # Si está pagada o tiene pagos, exige supervisor
+    if invoice.status in ["PAID", "PARTIALLY_PAID"]:
+        if not x_supervisor_token:
+            raise HTTPException(
+                status_code=403,
+                detail="Factura con pagos. Se requiere aprobación del Supervisor."
+            )
+        
+        validate_supervisor_token(x_supervisor_token, tenant_id)
+        
+    invoice = await crud.set_invoice_void(db, invoice)
+    
+    event_data = {
+        "invoice_id": invoice.id,
+        "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in invoice.items]
+    }
+    publish_event("invoice.voided", event_data)
+    
+    return invoice

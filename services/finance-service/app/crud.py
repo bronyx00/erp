@@ -159,35 +159,22 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     await db.refresh(db_payment)
     return db_payment, invoice, is_fully_paid
 
-async def void_invoice(db: AsyncSession, invoice_id: int, tenant_id: int):
-    # Buscar la factura con sus items
+async def get_invoice_by_id(db: AsyncSession, invoice_id: int, tenant_id: int):
+    """Busca una factura asegurando que pertenece al Tenant."""
     query = (
         select(models.Invoice)
         .filter(models.Invoice.id == invoice_id, models.Invoice.tenant_id == tenant_id)
         .options(selectinload(models.Invoice.items), selectinload(models.Invoice.payments))
     )
     result = await db.execute(query)
-    invoice = result.scalars().first()
-    
-    if not invoice:
-        raise ValueError("Factura no encontrada")
-    
-    if invoice.status == "VOID":
-        raise ValueError("La factura ya está anulada")
-    
-    previous_status = invoice.status
+    return result.scalars().first()
+
+async def set_invoice_void(db: AsyncSession, invoice: models.Invoice):
+    """Marca la factura como anulada y guarda en DB."""
     invoice.status = "VOID"
-    
     db.add(invoice)
     await db.commit()
     
-    query_reload = (
-        select(models.Invoice)
-        .filter(models.Invoice.id == invoice.id)
-        .options(selectinload(models.Invoice.items), selectinload(models.Invoice.payments))
-    )
-    result_reload = await db.execute(query_reload)
-    invoice_reload = result_reload.scalars().first()
-    
-    # Retornamos la factura y el estado previo para saber si hay que devolver stock/dinero
-    return invoice_reload, previous_status
+    # Recargamos para devolver el objeto actualizado y limpio
+    await db.refresh(invoice)
+    return invoice
