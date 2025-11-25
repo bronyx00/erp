@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 from . import crud, schemas, security, database, models
 
 app = FastAPI(title="Auth Service", root_path="/api/auth")
@@ -67,3 +68,17 @@ async def create_sub_user(
     
     # Crear el empleado vinculado a la misma empresa
     return await crud.create_employee(db, user, tenant_id=current_user.tenant_id)
+
+@app.get("/users", response_model=List[schemas.UserResponse])
+async def read_users(
+    db: AsyncSession = Depends(database.get_db),
+    current_user: schemas.TokenPayload = Depends(security.get_current_user)
+):
+    """
+    Lista los empleados de la empresa.
+    Solo permitido para OWNER y ADMIN.
+    """
+    if current_user.role not in ["OWNER", "ADMIN"]:
+        raise HTTPException(status_code=403, detail="No tienes permisos para ver usuarios.")
+    
+    return await crud.get_users_by_tenant(db, tenant_id=current_user.tenant_id)

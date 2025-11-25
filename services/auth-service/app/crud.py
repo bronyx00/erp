@@ -59,3 +59,12 @@ async def create_employee(db: AsyncSession, user_data: schemas.SubUserCreate, te
     query = select(models.User).options(selectinload(models.User.tenant)).filter(models.User.id == new_user.id)
     result = await db.execute(query)
     return result.scalars().first()
+
+async def get_users_by_tenant(db: AsyncSession, tenant_id: int):
+    """Devuelve todos los usuarios que pertenecen a una empresa."""
+    query = select(models.User).filter(
+        models.User.tenant_id == tenant_id,
+        models.User.is_active == True
+    )
+    result = await db.execute(query)
+    return result.scalars().all()
