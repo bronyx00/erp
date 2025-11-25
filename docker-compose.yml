@@ -169,6 +169,9 @@ services:
         condition: service_healthy
     restart: always
 
+  # =========================================
+  # SERVICIO: CRM
+  # =========================================
   crm_db:
     image: postgres:15-alpine
     environment:
@@ -202,6 +205,42 @@ services:
       - "traefik.http.services.crm.loadbalancer.server.port=8000"
       - "traefik.http.middlewares.crm-strip.stripprefix.prefixes=/api/crm"
       - "traefik.http.routers.crm.middlewares=crm-strip"
+  # =========================================
+  # SERVICIO: HHRR (RECURSOS HUMANOS)
+  # =========================================
+  hhrr_db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: hhrr_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - hhrr_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d hhrr_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  hhrr-service:
+    build:
+      context: ./services/hhrr-service
+    volumes:
+      - ./services/hhrr-service/app:/app/app
+    environment:
+      - HHRR_DATABASE_URL=postgresql+asyncpg://admin:admin@hhrr_db:5432/hhrr_db
+      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
+    depends_on:
+      hhrr_db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hhrr.rule=PathPrefix(`/api/hhrr`)"
+      - "traefik.http.services.hhrr.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.hhrr-strip.stripprefix.prefixes=/api/hhrr"
+      - "traefik.http.routers.hhrr.middlewares=hhrr-strip"
 
 # --- Declaración de Volúmenes ---
 volumes:
@@ -210,3 +249,4 @@ volumes:
   rabbitmq_data:
   inventory_db_data:
   crm_db_data:
+  hhrr_db_data:
