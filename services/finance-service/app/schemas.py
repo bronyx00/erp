@@ -48,3 +48,15 @@ class InvoiceResponse(BaseModel):
     amount_ves: Optional[Decimal] = None
     
     model_config = ConfigDict(from_attributes=True)
+    
+# --- REPORTES ---
+class DailySales(BaseModel):
+    date: datetime
+    total_sales: Decimal
+    invoice_count: int
+
+class DashboardMetrics(BaseModel):
+    today_sales: Decimal
+    month_sales: Decimal
+    pending_balance: Decimal # Cuentas por cobrar
+    total_invoices_today: int

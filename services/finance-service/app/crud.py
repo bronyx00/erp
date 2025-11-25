@@ -3,6 +3,8 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
+from sqlalchemy import func
+from datetime import datetime
 from decimal import Decimal
 from . import models, schemas
 
@@ -178,3 +180,45 @@ async def set_invoice_void(db: AsyncSession, invoice: models.Invoice):
     # Recargamos para devolver el objeto actualizado y limpio
     await db.refresh(invoice)
     return invoice
+
+# --- REPORTES ---
+async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):
+    today = datetime.utcnow().date()
+    start_of_month = today.replace(day=1)
+    
+    # Ventas de Hoy
+    query_today = select(
+        func.sum(models.Invoice.amount),
+        func.count(models.Invoice.id)
+    ).filter(
+        models.Invoice.tenant_id == tenant_id,
+        models.Invoice.status != "VOID", # Ignorar anuladas
+        func.date(models.Invoice.created_at) == today
+    )
+    result_today = await db.execute(query_today)
+    today_amount, today_count = result_today.first()
+    
+    # Ventas del Mes
+    query_month = select(func.sum(models.Invoice.amount)).filter(
+        models.Invoice.tenant_id == tenant_id,
+        models.Invoice.status != "VOID",
+        models.Invoice.created_at >= start_of_month
+    )
+    result_month = await db.execute(query_month)
+    month_amount = result_month.scalar()
+    
+    # Por Cobrar (Facturas ISSUED o PARTIALLY_PAID)
+    # Nota: es aproximado. Sumaremos el total de facturas no pagadas completamente
+    query_pending = select(func.sum(models.Invoice.amount)).filter(
+        models.Invoice.tenant_id == tenant_id,
+        models.Invoice.status.in_(["ISSUED", "PARTIALLY_PAID"])
+    )
+    result_pending = await db.execute(query_pending)
+    pending_amount = result_pending.scalar()
+    
+    return {
+        "today_sales": today_amount or 0,
+        "total_invoices_today": today_count or 0,
+        "month_sales": month_amount or 0,
+        "pending_balance": pending_amount or 0
+    }
