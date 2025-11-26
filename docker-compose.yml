@@ -241,7 +241,59 @@ services:
       - "traefik.http.services.hhrr.loadbalancer.server.port=8000"
       - "traefik.http.middlewares.hhrr-strip.stripprefix.prefixes=/api/hhrr"
       - "traefik.http.routers.hhrr.middlewares=hhrr-strip"
+  # =========================================
+  # SERVICIO: ACCOUNTING (CONTABILIDAD) 
+  # =========================================
+  accounting_db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: accounting_db
+    ports:
+      - "5437:5432"
+    volumes:
+      - accounting_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d accounting_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    
+  accounting-service:
+    build:
+      context: ./services/accounting-service
+    volumes:
+      - ./services/accounting-service/app:/app/app
+    environment:
+      - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
+      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
+    depends_on:
+      accounting_db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.accounting.rule=PathPrefix(`/api/accounting`)"
+      - "traefik.http.services.accounting.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.accounting-strip.stripprefix.prefixes=/api/accounting"
+      - "traefik.http.routers.accounting.middlewares=accounting-strip"
 
+  accounting-worker:
+    build:
+      context: ./services/accounting-service
+    volumes:
+      - ./services/accounting-service/app:/app/app
+    command: python -u app/worker.py
+    environment:
+      - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
+    depends_on:
+      accounting_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: always
+    
 # --- Declaración de Volúmenes ---
 volumes:
   auth_db_data:
@@ -250,3 +302,4 @@ volumes:
   inventory_db_data:
   crm_db_data:
   hhrr_db_data:
+  accounting_db_data:

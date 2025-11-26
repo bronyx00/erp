@@ -114,6 +114,8 @@ async def create_payment(
         if is_fully_paid:
             event_data = {
                 "invoice_id": invoice.id,
+                "tenant_id": tenant_id,
+                "total_amount": float(invoice.amount),
                 "paid_at": str(new_payment.created_at),
                 "items": [
                     {"product_id": item.product_id, "quantity": item.quantity}
