@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Date
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Date, ForeignKey
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from .database import Base
 
 class Employee(Base):
@@ -21,5 +22,18 @@ class Employee(Base):
     hired_at = Column(Date, nullable=True) # Fecha ingreso
     
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+class Payroll(Base):
+    __tablename__ = "payrolls"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, index=True, nullable=False)
+    
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    total_amount = Column(Numeric(10, 2), nullable=False)
+    status = Column(String, default="PAID")
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

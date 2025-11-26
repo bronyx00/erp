@@ -13,7 +13,7 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, index=True, nullable=False)
     
-    transactionType = Column(String, nullable=False)        # INCOME o EXPENSE
+    transaction_type = Column(String, nullable=False)        # INCOME o EXPENSE
     category = Column(String, nullable=False)               # Ventas, Nómina, Alquiler
     amount = Column(Numeric(10, 2), nullable=False)         
     currency = Column(String(3), default="USD")

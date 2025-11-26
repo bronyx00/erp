@@ -27,7 +27,7 @@ async def create_expense(
 ):
     return await crud.create_transaction(db, transaction, tenant_id)
 
-@app.get("balance", response_model=schemas.BalanceResponse)
+@app.get("/balance", response_model=schemas.BalanceResponse)
 async def get_balance(
     db: AsyncSession = Depends(database.get_db),
     tenant_id: int = Depends(get_current_tenant_id)

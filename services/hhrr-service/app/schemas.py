@@ -22,3 +22,19 @@ class EmployeeResponse(EmployeeBase):
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+    
+# --- NOMINA ---
+class PayrollCreate(BaseModel):
+    period_start: date
+    period_end: date
+    # En el futuro añadir bonos, extras, etc
+    
+class PayrollResponse(BaseModel):
+    id: int
+    period_start: date
+    period_end: date
+    total_amount: Decimal
+    status: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+    

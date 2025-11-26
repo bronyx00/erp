@@ -47,14 +47,51 @@ def register_income_from_invoice(data):
         db.rollback()
     finally:
         db.close()
+        
+def register_transaction(data, trans_type):
+    db = SessionLocal()
+    try:
+        tenant_id = data.get("tenant_id")
+        if not tenant_id: return
+        
+        # Adaptamos los campos según el evento
+        amount = data.get("amount") or data.get("total_amount", 0)
+        category = data.get("category", "Ventas")
+        desc = data.get("description", "")
+        ref_id = data.get("reference_id") or str(data.get("invoice_id", ""))
+        
+        trans = Transaction(
+            tenant_id=tenant_id,
+            transaction_type=trans_type, # INCOME o EXPENSE
+            category=category,
+            amount=amount,
+            currency="USD",
+            description=desc,
+            reference_id=ref_id
+        )
+        db.add(trans)
+        db.commit()
+        print(f"📝 {trans_type} registrado: ${amount} - {category}")
+    
+    except Exception as e:
+        print(f"❌ Error DB: {e}")
+        db.rollback()
+    finally:
+        db.close()
     
 def callback(ch, method, properties, body):
     print(f"📥 [Accounting] Evento: {method.routing_key}")
     try:
         message = json.loads(body)
+        # A veces el payload viene directo o dentro de 'data'
+        payload = message if "tenant_id" in message else message.get("data", {})
+        
         if method.routing_key == "invoice.paid":
-            data = message if "invoice_id" in message else message.get("data", {})
-            register_income_from_invoice(data)
+            # Venta -> Ingreso
+            register_transaction(payload, "INCOME")
+        elif method.routing_key == "payroll.paid":
+            # Nómina -> Gasto
+            register_transaction(payload, "EXPENSE")
             
         ch.basic_ack(delivery_tag=method.delivery_tag)
     except Exception as e:
@@ -71,6 +108,7 @@ def start_worker():
     queue_name = result.method.queue
     
     channel.queue_bind(exchange='erp_events', queue=queue_name, routing_key='invoice.paid')
+    channel.queue_bind(exchange='erp-events', queue=queue_name, routing_key='payroll.paid')
     
     channel.basic_consume(queue=queue_name, on_message_callback=callback)
     print("🎧 [Accounting Worker] Escuchando dinero...")

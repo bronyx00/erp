@@ -22,7 +22,7 @@ async def get_balance(db: AsyncSession, tenant_id: int):
     # Sumar Ingresos
     q_income = select(func.sum(models.Transaction.amount)).filter(
         models.Transaction.tenant_id == tenant_id,
-        models.Transaction.transactionType == "INCOME"
+        models.Transaction.transaction_type == "INCOME"
     )
     res_income = await db.execute(q_income)
     total_income = res_income.scalar() or 0
@@ -30,7 +30,7 @@ async def get_balance(db: AsyncSession, tenant_id: int):
     # Sumar Egresos
     q_expense = select(func.sum(models.Transaction.amount)).filter(
         models.Transaction.tenant_id == tenant_id,
-        models.Transaction.transactionType == "EXPENSE"
+        models.Transaction.transaction_type == "EXPENSE"
     )
     res_expense = await db.execute(q_expense)
     total_expense = res_expense.scalar() or 0
