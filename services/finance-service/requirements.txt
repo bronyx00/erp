@@ -20,3 +20,7 @@ httpx==0.27.0
 # --- SEGURIDAD ---
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.9
+
+# --- GENERADOR PDF ---
+python-multipart==0.0.9
+reportlab==4.2.0

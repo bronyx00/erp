@@ -6,9 +6,25 @@ from .database import Base
 class Invoice(Base):
     __tablename__ = "invoices"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True) # ID interno Global
     tenant_id = Column(Integer, index=True, nullable=False) # Empresa que creo la Factura
-    customer_email = Column(String, index=True) # Email del cliente
+    
+    # --- NUMERACIÓN FISCAL ---
+    # Este número se reinicia para cada empresa
+    invoice_number = Column(Integer, nullable=False)
+    control_number = Column(String, nullable=True) # Opcional según formato
+    
+    # Datos fiscales Snapshot
+    # Por si la empresa cambia de dirección mañana, la factura vieja no cambia
+    company_name_snapshot = Column(String)
+    company_rif_snapshot = Column(String)
+    compant_address_snapshot = Column(String)
+    
+    # Cliente
+    customer_name = Column(String)      # Nombre o Razón Social Cliente
+    customer_rif = Column(String)       # RIF/Cédula Cliente
+    customer_email = Column(String, index=True)
+    customer_address = Column(String)
     
     # Datos de la Transacción
     amount = Column(Numeric(10, 2), nullable=True)  # Moneda siempre en Decimal/Numeric
@@ -18,6 +34,21 @@ class Invoice(Base):
     status = Column(String, default="DRAFT")        # DRAFT, SENT, PAID
     is_synced_compliance = Column(Boolean, default=False) 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # CAMPOS FISCALES
+    # Todos estos se guardan en la moneda base
+    subtotal_exento = Column(Numeric(12, 2), default=0)     # Monto no gravado
+    subtotal_base_g = Column(Numeric(12, 2), default=0)     # Base Imponible Alícuota General (16%)
+    subtotal_base_r = Column(Numeric(12, 2), default=0)     # Base Imponible Alícuota Reducida (ej. 8%)
+    subtotal_base_a = Column(Numeric(12, 2), default=0)     # Base Imponible Alícuota Adicional (lujo)
+    
+    tax_g = Column(Numeric(12, 2), default=0)               # IVA 16% calculado
+    tax_r = Column(Numeric(12, 2), default=0)               # IVA reducido calculado
+    tax_a = Column(Numeric(12, 2), default=0)               # IVA adicional calculado
+    
+    total_amount = Column(Numeric(12, 2), nullable=False)   # Suma de todo lo anterior
+    
+    rate = Column(Numeric(12, 2), nullable=False)           # Tasa BCV del momento exacto de la venta
     
     # Relaciones
     items = relationship("InvoiceItem", back_populates="invoice")

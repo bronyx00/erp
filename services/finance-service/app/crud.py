@@ -40,10 +40,21 @@ async def get_latest_rate(db: AsyncSession, currency_from: str = "USD", currency
     result = await db.execute(query)
     return result.scalars().first()
 
-async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int, token: str):
-    logger.info(f"Calculando factura con {len(invoice.items)} items")
-    # Calcular totales y validar productos
-    total_amount = 0
+async def get_next_invoice_number(db: AsyncSession, tenant_id: int) -> int:
+    """Busca el último número de factura de esta empresa y suma 1"""
+    query = select(func.max(models.Invoice.invoice_number)).filter(models.Invoice.tenant_id == tenant_id)
+    result = await db.execute(query)
+    max_enum = result.scalar()
+    return (max_enum or 0) + 1
+
+async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int, token: str, tenant_data: dict):
+    
+    # Obtener consecutivo
+    next_number = await get_next_invoice_number(db, tenant_id)
+    
+    # Cálculos (Subtotales e IVA)
+    total_base = 0
+    total_tax = 0
     db_items = []
     
     for item in invoice.items:
@@ -52,25 +63,44 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
             raise ValueError(f"Producto ID {item.product_id} no encontrado o sin permiso")
         
         unit_price = Decimal(product['price'])
-        line_total = unit_price * item.quantity
-        total_amount += line_total
+        
+        # Lógica de Impuesto según configuración
+        item_subtotal = unit_price * item.quantity
+        item_tax = 0
+        
+        if tenant_data.get('tax_active', True):
+            rate = Decimal(tenant_data.get('tax_rate', 16)) / 100
+            item_tax = item_subtotal * rate
+            
+        total_base += item_subtotal
+        total_tax += item_tax
         
         db_items.append(models.InvoiceItem(
             product_id=item.product_id,
             product_name=product['name'],
             quantity=item.quantity,
             unit_price=unit_price,
-            total_price=line_total
+            total_price=item_subtotal
         ))
     
-    # Crear Factura
+    total_final = total_base + total_tax
+    
+    # Crear Factura con Datos Fiscales
     db_invoice = models.Invoice(
         tenant_id=tenant_id,
+        invoice_number=next_number,
+        control_number=f"00-{next_number}",
+        
+        # Snapshot de la empresa
+        company_name_snapshot=tenant_data.get('business_name'),
+        company_rif_snapshot=tenant_data.get('rif'),
+        company_address_snapshot=tenant_data.get('address'),
+        
+        # Cliente
         customer_email=invoice.customer_email,
-        amount=total_amount,
-        currency=invoice.currency,
-        status="ISSUED",
-        items=db_items
+        # Buscar luego los datos del cliente por CRM
+        
+        amount=total_final,
     )
     
     # Buscar Tasa de Cambio
@@ -79,7 +109,7 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         if rate_entry:
             # Calculamos el contravalor
             db_invoice.exchange_rate = rate_entry.rate
-            db_invoice.amount_ves = float(total_amount) * float(rate_entry.rate)
+            db_invoice.amount_ves = float(total_final) * float(rate_entry.rate)
         else:
             logger.warning("⚠️ ADVERTENCIA: No se encontró tasa de cambio en la DB. Guardando sin conversión.")
     

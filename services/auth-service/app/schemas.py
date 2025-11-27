@@ -4,6 +4,12 @@ from typing import Optional
 # --- TENANT ---
 class TenantBase(BaseModel):
     name: str
+    business_name: Optional[str] = None
+    rif: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    tax_active: bool = True
+    tax_rate: int = 16
 
 class TenantCreate(TenantBase):
     """Datos necesarios para registrar una nueva empresa."""

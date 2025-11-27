@@ -108,7 +108,7 @@ def start_worker():
     queue_name = result.method.queue
     
     channel.queue_bind(exchange='erp_events', queue=queue_name, routing_key='invoice.paid')
-    channel.queue_bind(exchange='erp-events', queue=queue_name, routing_key='payroll.paid')
+    channel.queue_bind(exchange='erp_events', queue=queue_name, routing_key='payroll.paid')
     
     channel.basic_consume(queue=queue_name, on_message_callback=callback)
     print("🎧 [Accounting Worker] Escuchando dinero...")

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -14,6 +15,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from . import crud, schemas, database, models
 from .services import exchange
 from .security import get_current_tenant_id, oauth2_scheme, SECRET_KEY, ALGORITHM
+from .utils.pdf_generator import generate_invoice_pdf
 from jose import jwt, JWTError
 
 
@@ -259,3 +261,33 @@ async def get_dashboard_metrics(
     tenant_id: int = Depends(get_current_tenant_id),
 ):
     return await crud.get_dashboard_metrics(db, tenant_id)
+
+# --- ENDPOINT PDF ---
+@app.get("/invoices/{invoice_id}/pdf")
+async def get_invoice_pdf(
+    invoice_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    tenant_id: int = Depends(get_current_tenant_id)
+):
+    # Buscar factura completa 
+    invoice = await crud.get_invoice_by_id(db, invoice_id, tenant_id)
+    if not invoice:
+        raise HTTPException(status_Code=404, detail="Factura no encontrada")
+    
+    # Generar PDF en memoria
+    pdf_buffer = generate_invoice_pdf(
+        invoice_data={
+            "id": invoice.id,
+            "created_at": invoice.created_at,
+            "customer_email": invoice.customer_email,
+            "amount_ves": invoice.amount_ves
+        },
+        items=invoice.items
+    )
+    
+    # Deolver como archivo descargable
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=factura_{invoice.id}.pdf"}
+    )
