@@ -12,19 +12,51 @@ logger = logging.getLogger(__name__)
 
 # URL internal de Docker
 INVENTORY_SERVICE_URL = "http://inventory-service:8000"
+AUTH_URL = "http://auth-service:8000"
+CRM_URL = "http://crm-service:8000"
 
+# ---- HELPERS PARA DATOS EXTERNOS ----
 async def get_product_details(product_id: int, token: str):
     headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(f"{INVENTORY_SERVICE_URL}/products/{product_id}", headers=headers)
+            return resp.json() if resp.status_code == 200 else None
+        except Exception as e:
+            logger.error(f"Error Inventory: {e}")
+            return None
+
+async def get_tenant_data(token: str):
+    """Obtiene los datos fiscales de la empresa desde Auth"""
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(f"{AUTH_URL}/tenant/me", headers={"Authorization": f"Bearer {token}"})
+            return resp.json() if resp.status_code == 200 else None
+        except Exception as e:
+            logger.error(f"Error Auth: {e}")
+            return None
+        
+async def get_customer_by_tax_id(tax_id: str, token: str):
+    """Busca datos del cliente en CRM usando el tax_id"""
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(f"{CRM_URL}/customers", headers={"Authorization": f"Bearer {token}"})
             if resp.status_code == 200:
-                return resp.json()
-            logger.error(f"Producto {product_id} error: {resp.status_code} - {resp.text}")
+                customers = resp.json()
+                for c in customers:
+                    if c.get('tax_id') == tax_id:
+                        return c
             return None
         except Exception as e:
-            logger.error(f"Error contactando inventory-service: {e}")
+            logger.error(f"Error CRM: {e}")
             return None
+        
+async def get_next_invoice_number(db: AsyncSession, tenant_id: int) -> int:
+    """Calcula el siguiente número correlativo para la empresa"""
+    query = select(func.max(models.Invoice.invoice_number)).filter(models.Invoice.tenant_id == tenant_id)
+    result = await db.execute(query)
+    max_num = result.scalr()
+    return (max_num or 0) + 1
 
 async def get_latest_rate(db: AsyncSession, currency_from: str = "USD", currency_to: str = "VES"):
     """Busca la tasa más reciente guardada por el Scheduler"""
@@ -47,30 +79,41 @@ async def get_next_invoice_number(db: AsyncSession, tenant_id: int) -> int:
     max_enum = result.scalar()
     return (max_enum or 0) + 1
 
-async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int, token: str, tenant_data: dict):
+async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int, token: str):
     
-    # Obtener consecutivo
-    next_number = await get_next_invoice_number(db, tenant_id)
+    # Obtiene Datos Fiscales de la Empresa
+    tenant_data = await get_tenant_data(token)
+    if not tenant_data:
+        raise ValueError("No se pudieron obtener los datos fiscales de la empresa")
     
+    # Obtener Datos del Cliente
+    customer_data = {}
+    if invoice.customer_tax_id:
+        customer_data = await get_customer_by_tax_id(invoice.customer_tax_id)
+
     # Cálculos (Subtotales e IVA)
-    total_base = 0
-    total_tax = 0
+    total_base = Decimal(0)
+    total_tax = Decimal(0)
     db_items = []
     
+    tax_rate = Decimal(tenant_data.get('tax_rate', 16)) / 100 if tenant_data.get('tax_active') else Decimal(0)
+        
     for item in invoice.items:
         product = await get_product_details(item.product_id, token)
         if not product:
-            raise ValueError(f"Producto ID {item.product_id} no encontrado o sin permiso")
+            raise ValueError(f"Producto ID {item.product_id} no encontrado")
+        
+        # Validar Stock
+        if product['stock'] < item.quantity:
+            raise ValueError(f"Stock insuficiente para {product['name']}")
         
         unit_price = Decimal(product['price'])
         
         # Lógica de Impuesto según configuración
         item_subtotal = unit_price * item.quantity
-        item_tax = 0
         
-        if tenant_data.get('tax_active', True):
-            rate = Decimal(tenant_data.get('tax_rate', 16)) / 100
-            item_tax = item_subtotal * rate
+        # Cálculo de impuesto por ítem
+        item_tax = item_subtotal * tax_rate
             
         total_base += item_subtotal
         total_tax += item_tax
@@ -85,33 +128,42 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
     
     total_final = total_base + total_tax
     
-    # Crear Factura con Datos Fiscales
-    db_invoice = models.Invoice(
-        tenant_id=tenant_id,
-        invoice_number=next_number,
-        control_number=f"00-{next_number}",
-        
-        # Snapshot de la empresa
-        company_name_snapshot=tenant_data.get('business_name'),
-        company_rif_snapshot=tenant_data.get('rif'),
-        company_address_snapshot=tenant_data.get('address'),
-        
-        # Cliente
-        customer_email=invoice.customer_email,
-        # Buscar luego los datos del cliente por CRM
-        
-        amount=total_final,
-    )
+    # Obtener Consecutivo Fiscal
+    next_number = await get_next_invoice_number(db, tenant_id)
     
-    # Buscar Tasa de Cambio
+    # Tasa de Cambio
+    rate_val = Decimal(1)
     if invoice.currency == "USD":
         rate_entry = await get_latest_rate(db)
         if rate_entry:
-            # Calculamos el contravalor
-            db_invoice.exchange_rate = rate_entry.rate
-            db_invoice.amount_ves = float(total_final) * float(rate_entry.rate)
-        else:
-            logger.warning("⚠️ ADVERTENCIA: No se encontró tasa de cambio en la DB. Guardando sin conversión.")
+            rate_val = rate_entry.rate
+    
+    # Crear Objeto Factura (Snapshot)
+    db_invoice = models.Invoice(
+        tenant_id=tenant_id,
+        invoice_number=next_number,
+        control_number=f"00-{next_number:08d}",
+        
+        # Snapshot Empresa
+        company_name_snapshot=tenant_data.get('name'), # Nombre comercial
+        company_rif_snapshot=tenant_data.get('rif'),
+        compant_address_snapshot=tenant_data.get('address'),
+        
+        # Snapshot Cliente
+        customer_name=customer_data.get('name') or 'CLIENTE GENÉRICO',
+        customer_rif=customer_data.get('tax_id') or 'V-00000000',
+        customer_email=customer_data.get('email') or f"cliente@{tenant_data.get('name')}.com",
+        customer_address=customer_data.get('address'),
+        customer_phone=customer_data.get('phone'),
+        
+        # Montos Globales
+        subtotal_usd=total_base,
+        tax_amount_usd=total_tax,
+        amount_ves=total_final * rate_val,
+        
+        status="ISSUED",
+        items=db_items
+    )
     
     # Guardar
     db.add(db_invoice)

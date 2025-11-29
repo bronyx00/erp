@@ -152,7 +152,7 @@ async def create_invoice(
         "id": new_invoice.id,
         "amount": str(new_invoice.amount), 
         "currency": new_invoice.currency,
-        "customer_email": new_invoice.customer_email,
+        "customer_tax_id": new_invoice.customer_tax_id,
         "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in new_invoice.items]
     }
     

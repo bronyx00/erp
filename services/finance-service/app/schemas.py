@@ -15,7 +15,7 @@ class InvoiceItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
 class InvoiceCreate(BaseModel):
-    customer_email: str
+    customer_tax_id: str
     currency: str = "USD"
     items: List[InvoiceItemCreate] # Recibe una lista de items
 
