@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List
 from . import crud, schemas, security, database, models
 
@@ -82,3 +83,15 @@ async def read_users(
         raise HTTPException(status_code=403, detail="No tienes permisos para ver usuarios.")
     
     return await crud.get_users_by_tenant(db, tenant_id=current_user.tenant_id)
+
+@app.get("/tenant/me", response_model=schemas.TenantResponse)
+async def get_my_tenant(
+    db: AsyncSession = Depends(database.get_db),
+    current_user: schemas.TokenPayload = Depends(security.get_current_user)
+):
+    """Devuelve los datos de la empresa del usuario logueado"""
+    result = await db.execute(select(models.Tenant)).filter(models.Tenant.id == current_user.tenant_id)
+    tenant = result.scalars().first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    return tenant

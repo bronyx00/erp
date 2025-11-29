@@ -34,14 +34,15 @@ class Tenant(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)   # Nombre de la empresa
     
+    # ---- DATOS FISCALES ----
     rif = Column(String, nullable=False)                 # Ej: J-12345678-9
     business_name = Column(String, nullable=False)       # Razón Social
     address = Column(String, nullable=False)             # Dirección fiscal
     phone = Column(String, nullable=True)
     
     # ---- PREFERENCIAS DE FACTURACIÖN ----
-    preferred_invoice_format = Column(SQLEnum(InvoiceFormat), default=InvoiceFormat.TICKET)
-    preferred_currency_display = Column(SQLEnum(CurrencyDisplay), default=CurrencyDisplay.VES_ONLY)
+    invoice_format = Column(SQLEnum(InvoiceFormat), default=InvoiceFormat.TICKET)
+    currency_display = Column(SQLEnum(CurrencyDisplay), default=CurrencyDisplay.VES_ONLY)
     
     # Campo simple para manejar sucursales por ahora (Cambiar luego por tabla)
     current_local_id = Column(String, default="CASA MATRIZ")

@@ -73,35 +73,44 @@ class FiscalTicketGenerator:
         
         def generate(self):
             # Encabezado fiscal
+            self._draw_text_center("SENIAT", FONT_BOLD, FONT_SIZE_S)
             self._draw_text_center(self.config.get('business_name', 'NEGOCIO DEMO C.A'), FONT_BOLD, FONT_SIZE_L)
-            self._draw_text_center(f"RIF: {self.config.get('rif', 'J-00000000-0')}", FONT_BOLD)
+            self._draw_text_center(f"RIF: J-{self.config.get('rif', 'J-00000000-0')}", FONT_BOLD, FONT_SIZE_M)
             
             # Dirección multilínea
-            address = self.config.get('address', 'Dirección Fiscal no configurada')
-            # Funcion
-            self._draw_text_center(address[:40], size=FONT_SIZE_S)
-            if len(address) > 40: self._draw_text_center(address[40:80], size=FONT_SIZE_S)
+            address = self.invoice.get('company_address_snapshot') or ""
+            for line in textwrap.wrap(address, width=38):
+                self._draw_text_center(line, FONT_SIZE_S)
+            
+            self._draw_line()
             
             self._draw_text_center(f"Telf: {self.config.get('phone', '')}", size=FONT_SIZE_S)
             self._draw_line()
             
-            # Datos del Documento y Cliente
-            invoice_number = str(self.invoice.get('id')).zfill(8)
-            self._draw_text_left(f"FACTURA: 000-001-00{invoice_number}")
-            # Serial de la Impresora Fiscal (Simulado)
-            self._draw_text_left(f"SERIAL: Z3A0923412")
             
+            invoice_number = str(self.invoice.get('invoice_number')).zfill(8)
+            control = self.invoice.get('control_number') or f"00-{invoice_number}"
+            self._draw_text_left(f"FACTURA: {invoice_number}")
+            self._draw_text_left(f"N° CONTROL: {control}")
+            
+            # Fecha y hora
             created_at = self.invoice.get('created_at')
             if isinstance(created_at, str): created_at = datetime.fromisoformat(created_at)
             self._draw_text_left(f"FECHA: {created_at.strftime('%d/%m/%Y')}   HORA: {created_at.strftime('%H:%M')}")
             self._draw_text_left(f"CAJA: 01     CAJERO: ADMINISTRADOR") # Cambiar luego
             
+            # Datos del Cliente
             self._move_down(5)
-            customer_info = self.invoice.get('customer_email') or "CLIENTE CONTADO"
+            customer_info = self.invoice.get('customer_name') or "CLIENTE CONTADO"
+            customer_rif = self.invoice.get('customer_rif') or "V-00000000"
             self._draw_text_left(f"CLIENTE: {customer_info}")
-            self._draw_text_left(f"RIF/C.I.: V-00000000") # Placeholder
+            if customer_rif:   
+                self._draw_text_left(f"RIF/C.I.: {customer_info}") 
             self._draw_line()
 
+
+            self._draw_text_center("FACTURA", FONT_SIZE_M, FONT_BOLD)
+            
             # Items de Venta
             self.c.setFont(FONT_BOLD, FONT_SIZE_S)
             
@@ -140,18 +149,7 @@ class FiscalTicketGenerator:
                 # Para DUAL y MIXED, los subtotales suelen mostrarse en la moneda principal (USD)
                 # y solo el gran total final se muestra en ambas.
                 return f"${val_usd:,.2f}"
-
-            if Decimal(self.invoice.get('subtotal_exento', 0)) > 0:
-                self._draw_row("MONTO EXENTO:", _fmt_total('subtotal_exento'))
-
-            # Base Imponible y Alicuota (Asumiendo 16% General)
-            base_g = Decimal(self.invoice.get('subtotal_base_g', 0))
-            tax_g = Decimal(self.invoice.get('tax_g', 0))
             
-            if base_g > 0:
-                self._draw_row("BASE IMPONIBLE (G) 16%:", _fmt_total('subtotal_base_g'))
-                self._draw_row("IVA (G) 16%:", _fmt_total('tax_g'))
-
             self._draw_line()
             
             # GRAN TOTAL

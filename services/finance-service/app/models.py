@@ -11,8 +11,8 @@ class Invoice(Base):
     
     # --- NUMERACIÓN FISCAL ---
     # Este número se reinicia para cada empresa
-    invoice_number = Column(Integer, nullable=False)
-    control_number = Column(String, nullable=True) # Opcional según formato
+    invoice_number = Column(Integer, nullable=False)                # Consecutivo (ej. 148988)
+    control_number = Column(String, nullable=True)                  # Serie 00-XXXX
     
     # Datos fiscales Snapshot
     # Por si la empresa cambia de dirección mañana, la factura vieja no cambia
@@ -21,38 +21,32 @@ class Invoice(Base):
     compant_address_snapshot = Column(String)
     
     # Cliente
-    customer_name = Column(String)      # Nombre o Razón Social Cliente
-    customer_rif = Column(String)       # RIF/Cédula Cliente
+    customer_name = Column(String)                                  # Nombre o Razón Social Cliente
+    customer_rif = Column(String)                                   # RIF/Cédula Cliente
     customer_email = Column(String, index=True)
     customer_address = Column(String)
+    customer_phone = Column(String)
+
+    # ---- MONTOS ----
+    # Base Imponible y Exento
+    subtotal_usd = Column(Numeric(12, 2), default=0)
+    tax_amount_usd = Column(Numeric(12, 2), default=0)
+    total_usd = Column(Numeric(12, 2), nullable=False)
     
-    # Datos de la Transacción
-    amount = Column(Numeric(10, 2), nullable=True)  # Moneda siempre en Decimal/Numeric
-    currency = Column(String(3), default="USD")     # USD, VES 
-    exchange_rate = Column(Numeric(20, 6), nullable=True) # Tasa usada
-    amount_ves = Column(Numeric(20, 2), nullable=True) # Contravalor en Bs.
-    status = Column(String, default="DRAFT")        # DRAFT, SENT, PAID
-    is_synced_compliance = Column(Boolean, default=False) 
+    # Conversión BCV
+    currency = Column(String(3), default="USD")                     # USD, VES 
+    exchange_rate = Column(Numeric(12, 4), nullable=True)           # Tasa usada
+    amount_ves = Column(Numeric(20, 2), nullable=True)              # Contravalor en Bs.
+    
+    status = Column(String, default="ISSUED")                       # ISSUED, PAID, VOID
+    is_synced_compliance = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # CAMPOS FISCALES
-    # Todos estos se guardan en la moneda base
-    subtotal_exento = Column(Numeric(12, 2), default=0)     # Monto no gravado
-    subtotal_base_g = Column(Numeric(12, 2), default=0)     # Base Imponible Alícuota General (16%)
-    subtotal_base_r = Column(Numeric(12, 2), default=0)     # Base Imponible Alícuota Reducida (ej. 8%)
-    subtotal_base_a = Column(Numeric(12, 2), default=0)     # Base Imponible Alícuota Adicional (lujo)
-    
-    tax_g = Column(Numeric(12, 2), default=0)               # IVA 16% calculado
-    tax_r = Column(Numeric(12, 2), default=0)               # IVA reducido calculado
-    tax_a = Column(Numeric(12, 2), default=0)               # IVA adicional calculado
-    
-    total_amount = Column(Numeric(12, 2), nullable=False)   # Suma de todo lo anterior
-    
-    rate = Column(Numeric(12, 2), nullable=False)           # Tasa BCV del momento exacto de la venta
     
     # Relaciones
     items = relationship("InvoiceItem", back_populates="invoice")
     payments = relationship("Payment", back_populates="invoice")
+    
+    
     
 class InvoiceItem(Base):
     __tablename__ = "invoice_items"

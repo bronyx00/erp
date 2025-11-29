@@ -14,7 +14,12 @@ async def register_company_and_owner(db: AsyncSession, user_data: schemas.UserCr
     Crea una nueva EMPRESA y su usuario DUEÑO en una sola transacción.
     """
     # Crea el objeto Tenant
-    new_tenant = models.Tenant(name=user_data.company_name)
+    new_tenant = models.Tenant(
+        name=user_data.company_name,
+        business_name=user_data.company_business_name,
+        rif=user_data.company_rif,
+        address=user_data.company_address
+    )
     db.add(new_tenant)
     
     # Flush para que la DB asigne el ID al tenant sin cerrar la transacción
@@ -25,7 +30,7 @@ async def register_company_and_owner(db: AsyncSession, user_data: schemas.UserCr
     new_user = models.User(
         email=user_data.email,
         hashed_password=hashed_pw,
-        role="OWNER",               # Rol por defecto al registrarse
+        role=models.UserRole.OWNER, # Rol por defecto al registrarse
         tenant_id=new_tenant.id
     )
     db.add(new_user)
@@ -33,11 +38,7 @@ async def register_company_and_owner(db: AsyncSession, user_data: schemas.UserCr
     # Confirmar todo
     await db.commit()
     
-    query = (
-        select(models.User)
-        .options(selectinload(models.User.tenant))
-        .filter(models.User.id == new_user.id)
-    )
+    query = select(models.User).options(selectinload(models.User.tenant)).filter(models.User.id == new_user.id)
     result = await db.execute(query)
     created_user = result.scalars().first()
 

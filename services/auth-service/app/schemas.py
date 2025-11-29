@@ -9,6 +9,8 @@ class TenantBase(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = None
     tax_active: bool = True
+    invoice_format: str = "TICKET"
+    currency_display: str = "VES_ONLY"
     tax_rate: int = 16
 
 class TenantCreate(TenantBase):
@@ -31,7 +33,11 @@ class UserCreate(UserBase):
     Incluye el nombre de la empresa que está fundando.
     """
     password: str
-    company_name: str
+    # Datos de la empresa
+    company_name: str           # Nombre Comercial
+    company_rif: str            # RIF Obligatorio
+    company_address: str        # Dirección Obligatoria
+    company_business_name: str  # Razón Social
 
 class SubUserCreate(UserBase):
     """Creación de empleados."""
