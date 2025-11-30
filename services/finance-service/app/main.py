@@ -150,9 +150,10 @@ async def create_invoice(
     # Convertir a diccionario para enviar
     invoice_dict = {
         "id": new_invoice.id,
-        "amount": str(new_invoice.total_amount), 
+        "amount": str(new_invoice.total_usd),
+        "total_usd": str(new_invoice.total_usd),
         "currency": new_invoice.currency,
-        "customer_tax_id": new_invoice.customer_tax_id,
+        "customer_rif": new_invoice.customer_rif,
         "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in new_invoice.items]
     }
     

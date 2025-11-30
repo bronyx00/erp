@@ -143,7 +143,6 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         tenant_id=tenant_id,
         invoice_number=next_number,
         control_number=f"00-{next_number:08d}",
-        currency=invoice.currency,
         
         # Snapshot Empresa
         company_name_snapshot=tenant_data.get('name'), # Nombre comercial
@@ -153,7 +152,7 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         # Snapshot Cliente
         customer_name=customer_data.get('name') or 'CLIENTE GENÉRICO',
         customer_rif=invoice.customer_tax_id,
-        customer_email=customer_data.get('email') or f"cliente@{tenant_data.get('name')}.com",
+        customer_email=customer_data.get('email') or f"cliente@email.com",
         customer_address=customer_data.get('address'),
         customer_phone=customer_data.get('phone'),
         
@@ -161,6 +160,9 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         subtotal_usd=total_base,
         tax_amount_usd=total_tax,
         total_usd=total_final,
+        
+        currency=invoice.currency,
+        exchange_rate=rate_val,
         amount_ves=total_final * rate_val,
         
         status="ISSUED",
@@ -170,19 +172,19 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
     # Guardar
     db.add(db_invoice)
     await db.commit()
-    await db.refresh(db_invoice)
     
     query = (
         select(models.Invoice)
         .options(
             selectinload(models.Invoice.items),
-            selectinload(models.Invoice.payments)
+            selectinload(models.Invoice.payments) # <--- Esto evita el MissingGreenlet
         )
         .filter(models.Invoice.id == db_invoice.id)
     )
     result = await db.execute(query)
-    
-    return result.scalars().first()
+    invoice_loaded = result.scalars().first()
+    return invoice_loaded
+
 
 async def get_invoices(db: AsyncSession, tenant_id: int):
     query = (

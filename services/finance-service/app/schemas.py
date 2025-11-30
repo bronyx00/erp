@@ -35,18 +35,26 @@ class PaymentResponse(BaseModel):
 
 class InvoiceResponse(BaseModel):
     id: int
+    invoice_number: int
+    control_number: Optional[str] = None
     status: str
-    amount: Decimal # Total calculado
+    
+    subtotal_usd: Decimal
+    tax_amount_usd: Decimal
+    total_usd: Decimal
+    
     currency: str
-    items: List[InvoiceItemResponse] # Devuelve el detalle}
-    payments: List[PaymentResponse] = []
-    created_at: datetime
     exchange_rate: Optional[Decimal] = None
     amount_ves: Optional[Decimal] = None
     
-    # Para recibir los datos del cliente en la respuesta
+    # Datos Cliente
     customer_name: Optional[str] = None
     customer_rif: Optional[str] = None
+    customer_email: Optional[str] = None
+    
+    items: List[InvoiceItemResponse] # Devuelve el detalle}
+    payments: List[PaymentResponse] = []
+    created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
     
