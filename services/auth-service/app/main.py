@@ -90,7 +90,7 @@ async def get_my_tenant(
     current_user: schemas.TokenPayload = Depends(security.get_current_user)
 ):
     """Devuelve los datos de la empresa del usuario logueado"""
-    result = await db.execute(select(models.Tenant)).filter(models.Tenant.id == current_user.tenant_id)
+    result = await db.execute(select(models.Tenant).filter(models.Tenant.id == current_user.tenant_id))
     tenant = result.scalars().first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")

@@ -18,7 +18,7 @@ class Invoice(Base):
     # Por si la empresa cambia de dirección mañana, la factura vieja no cambia
     company_name_snapshot = Column(String)
     company_rif_snapshot = Column(String)
-    compant_address_snapshot = Column(String)
+    company_address_snapshot = Column(String)
     
     # Cliente
     customer_name = Column(String)                                  # Nombre o Razón Social Cliente

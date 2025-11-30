@@ -17,6 +17,8 @@ services:
     ports:
       - "15672:15672"
       - "5672:5672"
+    environment:
+      - RABBITMQ_ERLANG_COOKIE=secret_cookie_erp_system
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:

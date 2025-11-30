@@ -89,7 +89,7 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
     # Obtener Datos del Cliente
     customer_data = {}
     if invoice.customer_tax_id:
-        customer_data = await get_customer_by_tax_id(invoice.customer_tax_id)
+        customer_data = await get_customer_by_tax_id(invoice.customer_tax_id, token) or {}
 
     # Cálculos (Subtotales e IVA)
     total_base = Decimal(0)
@@ -143,15 +143,16 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         tenant_id=tenant_id,
         invoice_number=next_number,
         control_number=f"00-{next_number:08d}",
+        currency=invoice.currency,
         
         # Snapshot Empresa
         company_name_snapshot=tenant_data.get('name'), # Nombre comercial
         company_rif_snapshot=tenant_data.get('rif'),
-        compant_address_snapshot=tenant_data.get('address'),
+        company_address_snapshot=tenant_data.get('address'),
         
         # Snapshot Cliente
         customer_name=customer_data.get('name') or 'CLIENTE GENÉRICO',
-        customer_rif=customer_data.get('tax_id') or 'V-00000000',
+        customer_rif=invoice.customer_tax_id,
         customer_email=customer_data.get('email') or f"cliente@{tenant_data.get('name')}.com",
         customer_address=customer_data.get('address'),
         customer_phone=customer_data.get('phone'),
@@ -159,6 +160,7 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         # Montos Globales
         subtotal_usd=total_base,
         tax_amount_usd=total_tax,
+        total_usd=total_final,
         amount_ves=total_final * rate_val,
         
         status="ISSUED",
