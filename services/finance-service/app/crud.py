@@ -15,6 +15,10 @@ INVENTORY_SERVICE_URL = "http://inventory-service:8000"
 AUTH_URL = "http://auth-service:8000"
 CRM_URL = "http://crm-service:8000"
 
+# Función auxiliar para redondear dinero
+def round_money(amount: Decimal) -> Decimal:
+    return amount.quantize(Decimal("0.01"))
+
 # ---- HELPERS PARA DATOS EXTERNOS ----
 async def get_product_details(product_id: int, token: str):
     headers = {"Authorization": f"Bearer {token}"}
@@ -113,7 +117,7 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         item_subtotal = unit_price * item.quantity
         
         # Cálculo de impuesto por ítem
-        item_tax = item_subtotal * tax_rate
+        item_tax = round_money(item_subtotal * tax_rate)
             
         total_base += item_subtotal
         total_tax += item_tax
@@ -126,7 +130,7 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
             total_price=item_subtotal
         ))
     
-    total_final = total_base + total_tax
+    total_final = round_money(total_base + total_tax)
     
     # Obtener Consecutivo Fiscal
     next_number = await get_next_invoice_number(db, tenant_id)
@@ -177,13 +181,12 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         select(models.Invoice)
         .options(
             selectinload(models.Invoice.items),
-            selectinload(models.Invoice.payments) # <--- Esto evita el MissingGreenlet
+            selectinload(models.Invoice.payments) 
         )
         .filter(models.Invoice.id == db_invoice.id)
     )
     result = await db.execute(query)
-    invoice_loaded = result.scalars().first()
-    return invoice_loaded
+    return result.scalars().first()
 
 
 async def get_invoices(db: AsyncSession, tenant_id: int):
@@ -216,14 +219,17 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     total_paid = sum(p.amount for p in invoice.payments)
     balance_due = invoice.total_usd - total_paid
     
-    if payment.amount > balance_due:
+    payment_amount_rounded = round_money(payment.amount)
+    balance_due_rounded = round_money(balance_due)
+    
+    if payment_amount_rounded > balance_due_rounded:
         # Se puede cambiar cuando queramos hacer el estado de 'crédito a favor', por ahora solo emite error
-        raise ValueError(f"El monto excede la deuda. Saldo pendiente: {balance_due}")
+        raise ValueError(f"El monto excede la deuda. Saldo pendiente: {balance_due_rounded}")
     
     # Crear Pago
     db_payment = models.Payment(
         invoice_id=payment.invoice_id,
-        amount=payment.amount,
+        amount=payment_amount_rounded,
         currency=invoice.currency,
         payment_method=payment.payment_method,
         reference=payment.reference,
@@ -232,7 +238,7 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     db.add(db_payment)
     
     # Actualizar Status de la Factura
-    new_total_paid = total_paid + payment.amount
+    new_total_paid = total_paid + payment_amount_rounded
     is_fully_paid = False # Bandera para saber si debemos emitir evento
     
     if new_total_paid >= invoice.total_usd:

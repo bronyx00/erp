@@ -12,32 +12,28 @@
       <button (click)="logout()" class="btn-logout">Salir</button>
     </header>
 
-    <div class="shortcuts-bar">
-      <div class="key"><span class="k">F1</span> Buscar</div>
-      <div class="key"><span class="k">F5</span> Cobrar</div>
-      <div class="key"><span class="k">ESC</span> Limpiar/Salir</div>
-    </div>
-  </div>
-
-  <div class="ticket-section">
-    <div class="ticket-footer">
-      <button class="btn-checkout" (click)="initiateCheckout()" 
-              [disabled]="cartService.items().length === 0 || isProcessing">
-        <span class="key-hint">[F5]</span> COBRAR
-      </button>
-    </div>
-
     <div class="products-grid">
       @for (product of filteredProducts(); track product.id) {
-        <div class="product-card" (click)="cartService.addToCart(product)" [class.no-stock]="product.stock <= 0">
+        <div class="product-card" 
+             (click)="cartService.addToCart(product)" 
+             [class.no-stock]="product.stock <= 0">
           <div class="prod-name">{{ product.name }}</div>
           <div class="prod-sku">{{ product.sku }}</div>
           <div class="prod-price">{{ product.price | currency:'USD' }}</div>
           <div class="prod-stock">Stock: {{ product.stock }}</div>
         </div>
       } @empty {
-        <p class="empty-msg">No se encontraron productos.</p>
+        <div class="empty-msg">
+          <p>No se encontraron productos.</p>
+          <small>Presiona F1 para buscar</small>
+        </div>
       }
+    </div>
+
+    <div class="shortcuts-bar">
+      <div class="key"><span class="k">F1</span> Buscar</div>
+      <div class="key"><span class="k">F5</span> Cobrar</div>
+      <div class="key"><span class="k">ESC</span> Limpiar/Salir</div>
     </div>
   </div>
 
@@ -66,7 +62,7 @@
       } @empty {
         <div class="empty-cart">
           <p>El carrito está vacío</p>
-          <p>Seleccione productos</p>
+          <p>Seleccione productos del catálogo</p>
         </div>
       }
     </div>
@@ -92,8 +88,11 @@
         </datalist>
       </div>
 
-      <button class="btn-checkout" (click)="initiateCheckout()" ...>
-        </button>
+      <button class="btn-checkout" 
+              (click)="initiateCheckout()" 
+              [disabled]="cartService.items().length === 0 || isProcessing">
+        <span class="key-hint">[F5]</span> COBRAR
+      </button>
     </div>
   </div>
 
@@ -101,11 +100,16 @@
     <div class="modal-overlay">
       <div class="modal-content">
         <h3>Completar Pago</h3>
+        
+        <div class="total-display">
+            {{ cartService.total() | currency:'USD' }}
+        </div>
+
         <div class="modal-actions">
           <button type="button" class="btn-cancel" (click)="cancelCheckout()">
             <span class="key-hint">[ESC]</span> Cancelar
           </button>
-          <button type="submit" class="btn-confirm" [disabled]="isProcessing">
+          <button type="button" class="btn-confirm" (click)="confirmPayment()" [disabled]="isProcessing">
             <span class="key-hint">[F5]</span> CONFIRMAR E IMPRIMIR
           </button>
         </div>
