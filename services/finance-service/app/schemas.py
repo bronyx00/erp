@@ -1,7 +1,33 @@
 from pydantic import BaseModel, ConfigDict
 from decimal import Decimal
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Generic, TypeVar
+
+T = TypeVar("T")
+
+# --- GENERIC PAGINATOR ---
+class MetaData(BaseModel):
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+    
+class PaginatedResponse(BaseModel, Generic[T]):
+    data: List[T]
+    meta: MetaData
+    
+# --- INVOICE SUMMARY (Ligera) ---
+class InvoiceSummary(BaseModel):
+    id: int
+    invoice_number: int
+    control_number: Optional[str] = None
+    status: str
+    total_usd: Decimal
+    customer_name: Optional[str] = None
+    customer_rif: Optional[str] = None
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
 
 class InvoiceItemCreate(BaseModel):
     product_id: int

@@ -15,6 +15,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from . import crud, schemas, database, models
 from .services import exchange
 from .security import get_current_tenant_id, oauth2_scheme, SECRET_KEY, ALGORITHM
+from .schemas import PaginatedResponse, InvoiceSummary
 from .utils.pdf_generator import generate_invoice_pdf
 from jose import jwt, JWTError
 
@@ -163,15 +164,18 @@ async def create_invoice(
     return new_invoice
 
     
-@app.get("/invoices", response_model=list[schemas.InvoiceResponse])
+@app.get("/invoices", response_model=PaginatedResponse[InvoiceSummary])
 async def read_invoices(
+    page: int = 1,
+    limit: int = 50,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
     db: AsyncSession = Depends(database.get_db), 
     tenant_id: int = Depends(get_current_tenant_id)
 ):
-    facturas = await crud.get_invoices(db, tenant_id=tenant_id)
-    
-    logger.info(f"📦 Facturas encontradas para {tenant_id}: {len(facturas)}")
-    return facturas
+    return await crud.get_invoices(
+        db, tenant_id=tenant_id, page=page, limit=limit, status=status, search=search
+    )
 
 # --- Consultar Tasa ---
 @app.get("/exchange-rate")

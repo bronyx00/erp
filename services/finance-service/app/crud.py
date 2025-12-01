@@ -3,7 +3,8 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from sqlalchemy import func
+from sqlalchemy import func, case, String
+from typing import Optional
 from datetime import datetime
 from decimal import Decimal
 from . import models, schemas
@@ -189,15 +190,54 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
     return result.scalars().first()
 
 
-async def get_invoices(db: AsyncSession, tenant_id: int):
-    query = (
-        select(models.Invoice)
-        .filter(models.Invoice.tenant_id == tenant_id)
-        .options(selectinload(models.Invoice.items), selectinload(models.Invoice.payments))
-        .order_by(models.Invoice.created_at.desc())
+async def get_invoices(
+    db: AsyncSession, 
+    tenant_id: int,
+    page: int = 1,
+    limit: int = 50,
+    status: Optional[str] = None,
+    search: Optional[str] = None
+):
+    offset = (page - 1) * limit
+    
+    # Query Base
+    query = select(models.Invoice).filter(models.Invoice.tenant_id == tenant_id)
+    
+    # Filtros Dinámicos
+    if status:
+        query = query.filter(models.Invoice.status == status)
+        
+    if search:
+        # Búsqueda insesible a mayúsculas en nombre o número
+        search_term = f"%{search}%"
+        query = query.filter(
+            (models.Invoice.customer_name.ilike(search_term)) |
+            (models.Invoice.invoice_number.cast(String).ilike(search_term))
         )
+    
+    # Contar total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Ordenar y Paginar
+    query = query.order_by(models.Invoice.created_at.desc()).offset(offset).limit(limit)
+    
     result = await db.execute(query)
-    return result.scalars().all()
+    invoices = result.scalars().all()
+    
+    # Cálculo total de páginas
+    total_pages = (total + limit - 1) // limit 
+    
+    return {
+        "data": invoices,
+        "meta": {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages
+        }
+    }
 
 async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenant_id: int):
     # Buscar la factura y verificar que pertenezca al usuario
