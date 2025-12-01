@@ -1,0 +1,43 @@
+.inventory-container {
+  display: flex; justify-content: center; align-items: center;
+  min-height: 90vh; background: #f1f5f9; padding: 2rem;
+}
+
+.form-card {
+  background: white; width: 100%; max-width: 500px;
+  padding: 2rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+}
+
+header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;
+  h2 { margin: 0; color: #0f172a; }
+  .btn-back { background: none; border: 1px solid #ccc; padding: 0.4rem 1rem; border-radius: 6px; cursor: pointer; }
+}
+
+.success-banner {
+  background: #dcfce7; color: #166534; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; text-align: center; font-weight: bold; border: 1px solid #bbf7d0;
+}
+
+.form-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+}
+
+.full-width { grid-column: span 2; }
+
+.form-group {
+  label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #475569; font-size: 0.9rem; }
+  input, textarea {
+    width: 100%; padding: 0.8rem; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; transition: border-color 0.2s; box-sizing: border-box;
+    &:focus { border-color: #3b82f6; outline: none; }
+  }
+}
+
+.btn-save {
+  width: 100%; margin-top: 2rem; padding: 1rem;
+  background: #2563eb; color: white; border: none; border-radius: 8px;
+  font-size: 1.1rem; font-weight: 800; cursor: pointer;
+  transition: background 0.2s;
+  
+  &:hover:not(:disabled) { background: #1d4ed8; }
+  &:disabled { background: #94a3b8; }
+}

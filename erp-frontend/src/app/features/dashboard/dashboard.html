@@ -1,0 +1,243 @@
+<div class="dashboard-container">
+  
+  <header>
+    <div class="brand">
+      <h1>ERP Dashboard</h1>
+      <span class="role-badge">{{ authService.currentUserRole() }}</span>
+    </div>
+    <div class="nav-menu">
+      @if (authService.currentUserRole() === 'OWNER' || authService.currentUserRole() === 'ADMIN') {
+        <a routerLink="/team" class="nav-link">👥 Mi Equipo</a>
+      }
+      @if (authService.currentUserRole() === 'OWNER' || authService.currentUserRole() === 'HR') {
+        <a routerLink="/hr" class="nav-link">📇 RRHH</a>
+      }
+      <div class="user-info">
+        <span>{{ userEmail() }}</span>
+        <button (click)="logout()" class="btn-logout">Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="top-section">
+      @if (metrics(); as m) {
+        <div class="metrics-grid">
+          <div class="metric-card blue">
+            <h3>Ventas Hoy</h3>
+            <p>{{ m.today_sales | currency:'USD' }}</p>
+            <small>{{ m.total_invoices_today }} facturas</small>
+          </div>
+          <div class="metric-card green">
+            <h3>Ventas Mes</h3>
+            <p>{{ m.month_sales | currency:'USD' }}</p>
+          </div>
+          <div class="metric-card orange">
+            <h3>Por Cobrar</h3>
+            <p>{{ m.pending_balance | currency:'USD' }}</p>
+          </div>
+        </div>
+      }
+      
+      <section class="rate-card">
+        <h3>💵 Tasa del Día</h3>
+        <div class="rate-value">
+          @if (currentRate(); as rate) {
+            <span class="big-number">{{ rate.rate | number:'1.2-4' }}</span>
+            <span class="currency">Bs/USD</span>
+          } @else {
+            <span>Cargando...</span>
+          }
+        </div>
+      </section>
+    </div>
+
+    <div class="content-grid">
+      
+      <section class="invoices-list">
+        <h2>Facturas Recientes</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Factura N°</th>
+              <th>Cliente</th>
+              <th>Total ($)</th>
+              <th>Total (Bs)</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (inv of invoices(); track inv.id) {
+              <tr>
+                <td>
+                  <strong>#{{ inv.invoice_number | number:'6.0-0' }}</strong>
+                  <br><small class="text-muted">{{ inv.control_number }}</small>
+                </td>
+                <td>
+                  {{ inv.customer_name || 'Cliente Genérico' }}
+                  <br><small class="text-muted">{{ inv.customer_rif }}</small>
+                </td>
+                <td class="amount">{{ inv.total_usd | currency:'USD' }}</td>
+                <td class="amount-ves">{{ inv.amount_ves | currency:'VED':'Bs ' }}</td>
+                
+                <td>
+                  <span class="badge" 
+                        [class.paid]="inv.status === 'PAID'"
+                        [class.partial]="inv.status === 'PARTIALLY_PAID'"
+                        [class.void]="inv.status === 'VOID'">
+                    {{ inv.status }}
+                  </span>
+                </td>
+
+                <td class="actions-cell">
+                  <button class="btn-mini-pdf" (click)="downloadPdf(inv)" title="Imprimir Ticket">🖨️</button>
+
+                  @if (inv.status !== 'PAID' && inv.status !== 'VOID') {
+                    <button class="btn-mini-pay" (click)="openPaymentModal(inv)" title="Pagar">$</button>
+                  }
+                  @if (inv.status !== 'VOID') {
+                    <button class="btn-mini-cancel" (click)="askCancelInvoice(inv)" title="Anular">✕</button>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="empty-msg">No hay facturas.</td></tr>
+            }
+          </tbody>
+        </table>
+      </section>
+
+      <section class="new-invoice">
+        <h2>Nueva Venta (Admin)</h2>
+        <form [formGroup]="invoiceForm" (ngSubmit)="onSubmitInvoice()">
+          
+          <div class="form-group">
+            <label>Cliente</label>
+            <div class="input-with-btn">
+              <select formControlName="selectedCustomerTaxId">
+                <option value="" disabled selected>Seleccione Cliente...</option>
+                @for (cust of customers(); track cust.id) {
+                  <option [value]="cust.tax_id">
+                    {{ cust.name }} ({{ cust.tax_id }})
+                  </option>
+                }
+              </select>
+              <button type="button" class="btn-mini-add" (click)="openNewCustomerModal()">+</button>
+            </div>
+          </div>
+
+          <div class="products-container">
+            <div formArrayName="items">
+              @for (item of itemsFormArray.controls; track $index) {
+                <div [formGroupName]="$index" class="product-row">
+                  <div class="col-product">
+                    <select formControlName="product_id">
+                      <option [ngValue]="null">Producto...</option>
+                      @for (prod of products(); track prod.id) {
+                        <option [value]="prod.id">{{ prod.name }} - ${{ prod.price }} (Stock: {{prod.stock}})</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="col-qty">
+                    <input type="number" formControlName="quantity" min="1" placeholder="#">
+                  </div>
+                  <button type="button" class="btn-remove" (click)="removeItem($index)">✕</button>
+                </div>
+              }
+            </div>
+            <button type="button" class="btn-add" (click)="addItem()">+ Agregar Ítem</button>
+          </div>
+
+          <button type="submit" class="btn-submit" [disabled]="invoiceForm.invalid || isSubmitting || itemsFormArray.length === 0">
+            {{ isSubmitting ? 'Procesando...' : 'Emitir Factura' }}
+          </button>
+          
+          @if (successMessage) { <p class="success">{{ successMessage }}</p> }
+          @if (errorMessage) { <p class="error">{{ errorMessage }}</p> }
+        </form>
+      </section>
+    </div>
+  </main>
+
+  @if (showCustomerModal) {
+    <div class="modal-overlay">
+      <div class="modal-content">
+        <h3>Nuevo Cliente</h3>
+        <form [formGroup]="customerForm" (ngSubmit)="saveCustomer()">
+          <div class="form-group">
+            <label>Nombre / Razón Social</label>
+            <input type="text" formControlName="name">
+          </div>
+          <div class="form-group">
+            <label>RIF / Cédula</label>
+            <input type="text" formControlName="tax_id">
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" formControlName="email">
+          </div>
+          <div class="form-group">
+            <label>Dirección</label>
+            <input type="text" formControlName="address">
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" (click)="closeModal()">Cancelar</button>
+            <button type="submit" class="btn-save" [disabled]="customerForm.invalid">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  @if (showPaymentModal) {
+    <div class="modal-overlay">
+      <div class="modal-content">
+        <h3>Registrar Cobro #{{ selectedInvoice?.invoice_number }}</h3>
+        <div class="invoice-summary">
+          <p>Total: <strong>{{ selectedInvoice?.total_usd | currency:'USD' }}</strong></p>
+        </div>
+        <form [formGroup]="paymentForm" (ngSubmit)="onSubmitPayment()">
+          <div class="form-group">
+            <label>Monto ($)</label>
+            <input type="number" formControlName="amount">
+          </div>
+          <div class="form-group">
+            <label>Método</label>
+            <select formControlName="payment_method">
+              <option value="TarjetaDebito">Tarjeta Débito</option>
+              <option value="Cash">Efectivo</option>
+              <option value="PagoMovil">Pago Móvil</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" (click)="closePaymentModal()">Cancelar</button>
+            <button type="submit" class="btn-save">Confirmar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+  
+  @if (showSupervisorModal) {
+      <div class="modal-overlay">
+        <div class="modal-content warning-mode">
+            <h3 style="color: #ef4444;">⚠️ Autorización Requerida</h3>
+            <form [formGroup]="supervisorForm" (ngSubmit)="onSupervisorSubmit()">
+                 <div class="form-group">
+                    <label>Email Supervisor</label>
+                    <input type="email" formControlName="email">
+                 </div>
+                 <div class="form-group">
+                    <label>Contraseña</label>
+                    <input type="password" formControlName="password">
+                 </div>
+                 <div class="modal-actions">
+                    <button type="button" class="btn-cancel" (click)="showSupervisorModal = false">Cancelar</button>
+                    <button type="submit" class="btn-save danger">Autorizar</button>
+                 </div>
+            </form>
+        </div>
+      </div>
+  }
+</div>

@@ -1,0 +1,51 @@
+<div class="inventory-container">
+  <div class="form-card">
+    <header>
+      <h2>📦 Nuevo Producto</h2>
+      <button class="btn-back" (click)="goBack()">Volver</button>
+    </header>
+
+    @if (lastProductSaved) {
+      <div class="success-banner">
+        ✅ Guardado: {{ lastProductSaved }}
+      </div>
+    }
+
+    <form [formGroup]="productForm" (ngSubmit)="onSubmit()" (keydown.enter)="$event.stopPropagation()">
+      
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label>SKU / Código de Barras</label>
+          <input #skuInput type="text" formControlName="sku" placeholder="Escanea o escribe..." autofocus>
+        </div>
+
+        <div class="form-group full-width">
+          <label>Nombre del Producto</label>
+          <input type="text" formControlName="name" placeholder="Ej. Arroz Primor 1kg">
+        </div>
+
+        <div class="form-group">
+          <label>Precio Venta ($)</label>
+          <input type="number" formControlName="price" step="0.01">
+        </div>
+
+        <div class="form-group">
+          <label>Stock Inicial</label>
+          <input type="number" formControlName="stock">
+        </div>
+        
+        <div class="form-group full-width">
+          <label>Descripción (Opcional)</label>
+          <textarea formControlName="description" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="btn-save" [disabled]="productForm.invalid || isSubmitting">
+          {{ isSubmitting ? 'Guardando...' : 'GUARDAR Y SEGUIR (Enter)' }}
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>

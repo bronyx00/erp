@@ -1,0 +1,87 @@
+<div class="hr-container">
+      <header>
+        <h2>📁 Recursos Humanos</h2>
+        <p>Gestión de personal y nómina.</p>
+      </header>
+
+      <div class="content-grid">
+        <section class="form-section">
+          <h3>Nuevo Ingreso</h3>
+          <form [formGroup]="employeeForm" (ngSubmit)="onSubmit()">
+            
+            <div class="row">
+              <div class="form-group">
+                <label>Nombres</label>
+                <input type="text" formControlName="first_name" placeholder="Ej. Juan">
+              </div>
+              <div class="form-group">
+                <label>Apellidos</label>
+                <input type="text" formControlName="last_name" placeholder="Ej. Pérez">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Cédula / Identificación</label>
+              <input type="text" formControlName="identification" placeholder="V-12345678">
+            </div>
+
+            <div class="row">
+              <div class="form-group">
+                <label>Cargo</label>
+                <select formControlName="position">
+                  <option value="Cajero">Cajero</option>
+                  <option value="Gerente">Gerente</option>
+                  <option value="Almacenista">Almacenista</option>
+                  <option value="Contador">Contador</option>
+                  <option value="Vendedor">Vendedor</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Sueldo Base ($)</label>
+                <input type="number" formControlName="salary" min="0">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Fecha de Ingreso</label>
+              <input type="date" formControlName="hired_at">
+            </div>
+            
+            <div class="form-group">
+              <label>Email (Opcional)</label>
+              <input type="email" formControlName="email">
+            </div>
+
+            
+
+            <button type="submit" class="btn-save" [disabled]="employeeForm.invalid || isSubmitting">
+              {{ isSubmitting ? 'Guardando...' : 'Guardar Ficha' }}
+            </button>
+
+            @if (errorMessage) { <p class="error">{{ errorMessage }}</p> }
+          </form>
+        </section>
+
+        <section class="list-section">
+          <h3>Nómina Activa</h3>
+          <div class="employee-cards">
+            @for (emp of employees(); track emp.id) {
+              <div class="employee-card">
+                <div class="card-header">
+                  <span class="name">{{ emp.first_name }} {{ emp.last_name }}</span>
+                  <span class="role-badge">{{ emp.position }}</span>
+                </div>
+                <div class="card-body">
+                  <p><strong>ID:</strong> {{ emp.identification }}</p>
+                  <p><strong>Sueldo:</strong> {{ emp.salary | currency:'USD' }}</p>
+                  <p><strong>Ingreso:</strong> {{ emp.hired_at | date:'mediumDate' }}</p>
+                  @if (emp.email) { <p class="email">{{ emp.email }}</p> }
+                </div>
+              </div>
+            } @empty {
+              <div class="empty-state">No hay empleados registrados.</div>
+            }
+          </div>
+        </section>
+      </div>
+    </div>
