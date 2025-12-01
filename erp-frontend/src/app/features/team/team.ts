@@ -1,12 +1,12 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormBuilder, ReactiveFormsModule, Validator, Validators } from '@angular/forms';
 import { UsersService, User } from '../../core/services/users';
 
 @Component({
   selector: 'app-team',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [ReactiveFormsModule],
   templateUrl: './team.html',
   styleUrl: './team.scss',
 })

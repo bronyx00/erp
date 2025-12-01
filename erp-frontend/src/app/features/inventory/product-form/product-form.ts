@@ -1,5 +1,5 @@
 import { Component, inject, ElementRef, ViewChild, Inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { InventoryService, ProductCreate } from '../../../core/services/inventory';
 import { Router } from '@angular/router';
@@ -7,7 +7,7 @@ import { Router } from '@angular/router';
 @Component({
   selector: 'app-product-form',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [ReactiveFormsModule],
   templateUrl: './product-form.html',
   styleUrl: './product-form.scss',
 })
