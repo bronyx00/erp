@@ -69,3 +69,13 @@ class DashboardMetrics(BaseModel):
     month_sales: Decimal
     pending_balance: Decimal # Cuentas por cobrar
     total_invoices_today: int
+    
+class SalesReportItem(BaseModel):
+    date: datetime
+    payment_method: str
+    currency: str
+    total_amount: Decimal
+    transaction_count: int
+    
+class SalesReportResponse(BaseModel):
+    items: List[SalesReportItem]

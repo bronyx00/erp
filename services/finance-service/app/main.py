@@ -256,6 +256,13 @@ async def void_invoice(
     return invoice
 
 # --- REPORTES ----
+@app.get("/reports/sales-by-method", response_model=list[schemas.SalesReportItem])
+async def get_sales_report_by_method(
+    db: AsyncSession = Depends(database.get_db),
+    tenant_id: int = Depends(get_current_tenant_id)
+):
+    return await crud.get_sales_report_by_method(db, tenant_id)
+
 @app.get("/reports/dashboard", response_model=schemas.DashboardMetrics)
 async def get_dashboard_metrics(
     db: AsyncSession = Depends(database.get_db),

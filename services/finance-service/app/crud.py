@@ -308,3 +308,40 @@ async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):
         "month_sales": month_amount or 0,
         "pending_balance": pending_amount or 0
     }
+
+async def get_sales_report_by_method(db: AsyncSession, tenant_id: int):
+    """
+    Agrupa los pagos por Fecha, Método y Moneda.
+    """
+    query = (
+        select(
+            func.date(models.Payment.created_at).label("payment_date"),
+            models.Payment.payment_method,
+            models.Payment.currency,
+            func.sum(models.Payment.amount).label("total_amount"),
+            func.count(models.Payment.id).label("count")
+        )
+        .join(models.Invoice, models.Invoice.id == models.Payment.invoice_id)
+        .filter(models.Invoice.tenant_id == tenant_id)
+        .group_by(
+            func.date(models.Payment.created_at),
+            models.Payment.payment_method,
+            models.Payment.currency
+        )
+        .order_by(func.date(models.Payment.created_at).desc())
+    )
+    
+    result = await db.execute(query)
+    rows = result.all()
+    
+    report_data = []
+    for row in rows:
+        report_data.append({
+            "date": row.payment_date,
+            "payment_method": row.payment_method,
+            "currency": row.currency,
+            "total_amount": row.total_amount,
+            "transaction_count": row.count
+        })
+        
+    return report_data

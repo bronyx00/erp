@@ -8,6 +8,7 @@
     <div class="nav-menu">
       @if (authService.currentUserRole() === 'OWNER' || authService.currentUserRole() === 'ADMIN') {
         <a routerLink="/team" class="nav-link">👥 Mi Equipo</a>
+        <a routerLink="/reports/sales" class="nav-link">📊 Reportes</a>
       }
       @if (authService.currentUserRole() === 'OWNER' || authService.currentUserRole() === 'HR') {
         <a routerLink="/hr" class="nav-link">📇 RRHH</a>

@@ -60,6 +60,14 @@ export interface PaymentCreate {
   notes?: string;
 }
 
+export interface SalesReportItem {
+  date: string;
+  payment_method: string;
+  currency: string;
+  total_amount: number;
+  transaction_count: number;
+}
+
 export interface DashboardMetrics {
   today_sales: number;
   month_sales: number;
@@ -82,6 +90,10 @@ export class FinanceService {
   // Obtener las metricas
   getMetrics(): Observable<DashboardMetrics> {
     return this.http.get<DashboardMetrics>(`${this.API_URL}/reports/dashboard`);
+  }
+
+  getSalesReport(): Observable<SalesReportItem[]> {
+    return this.http.get<SalesReportItem[]>(`${this.API_URL}/reports/sales-by-method`);
   }
 
   // Crear una factura nueva

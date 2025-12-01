@@ -8,6 +8,7 @@ import { inject } from '@angular/core';
 import { AuthService } from './core/services/auth';
 import { Router } from '@angular/router';
 import { ProductFormComponent } from './features/inventory/product-form/product-form';
+import { SalesReportComponent } from './features/reports/sales-report/sales-report';
 
 // Protección simple de la ruta
 const authGuard = () => {
@@ -63,6 +64,11 @@ export const routes: Routes = [
         path: 'hhrr',
         component: EmployeesComponent,
         canActivate: [authGuard, hhrrGuard]
+    },
+    { 
+        path: 'reports/sales', 
+        component: SalesReportComponent,
+        canActivate: [authGuard, adminGuard]
     },
     { 
         path: 'inventory/add', 

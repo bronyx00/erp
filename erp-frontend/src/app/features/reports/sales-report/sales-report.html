@@ -1,0 +1,49 @@
+<div class="report-container">
+  <header>
+    <div class="title-group">
+      <a routerLink="/dashboard" class="btn-back">← Volver</a>
+      <h2>📊 Reporte de Ventas Diarias</h2>
+    </div>
+    <div class="summary-badge">
+      Total Histórico (USD): <strong>{{ totalUSD() | currency:'USD' }}</strong>
+    </div>
+  </header>
+
+  @if (isLoading()) {
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>Cargando datos...</p>
+    </div>
+  } @else {
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Método de Pago</th>
+            <th>Moneda</th>
+            <th>Transacciones</th>
+            <th class="text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of reportData(); track $index) {
+            <tr>
+              <td>{{ item.date | date:'longDate' }}</td>
+              <td>
+                <span class="method-badge" [class]="item.payment_method.toLowerCase()">
+                  {{ item.payment_method }}
+                </span>
+              </td>
+              <td>{{ item.currency }}</td>
+              <td class="text-center">{{ item.transaction_count }}</td>
+              <td class="text-right amount">{{ item.total_amount | number:'1.2-2' }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="5" class="empty">No hay registros de ventas aún.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
