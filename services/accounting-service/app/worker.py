@@ -100,7 +100,19 @@ def callback(ch, method, properties, body):
         
 def start_worker():
     print("⏳ [Accounting Worker] Conectando...")
-    connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
+    connection = None
+    
+    # --- LÓGICA DE REINTENTO ---
+    while True:
+        try:
+            connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
+            break
+        except pika.connections.AMQPConnectionError:
+            print("     Reintentando conexión en 5s...")
+            time.sleep(5)
+    
+    
+    
     channel = connection.channel()
     channel.exchange_declare(exchange='erp_events', exchange_type='topic', durable=True)
     

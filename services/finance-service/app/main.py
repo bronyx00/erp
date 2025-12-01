@@ -117,7 +117,7 @@ async def create_payment(
             event_data = {
                 "invoice_id": invoice.id,
                 "tenant_id": tenant_id,
-                "total_amount": float(invoice.amount),
+                "total_amount": float(invoice.total_usd),
                 "paid_at": str(new_payment.created_at),
                 "items": [
                     {"product_id": item.product_id, "quantity": item.quantity}
@@ -277,12 +277,7 @@ async def get_invoice_pdf(
     
     # Generar PDF en memoria
     pdf_buffer = generate_invoice_pdf(
-        invoice_data={
-            "id": invoice.id,
-            "created_at": invoice.created_at,
-            "customer_email": invoice.customer_email,
-            "amount_ves": invoice.amount_ves
-        },
+        invoice_data=invoice,
         items=invoice.items
     )
     

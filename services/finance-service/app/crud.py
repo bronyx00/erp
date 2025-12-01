@@ -214,7 +214,7 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     
     # Calcular saldo
     total_paid = sum(p.amount for p in invoice.payments)
-    balance_due = invoice.amount - total_paid
+    balance_due = invoice.total_usd - total_paid
     
     if payment.amount > balance_due:
         # Se puede cambiar cuando queramos hacer el estado de 'crédito a favor', por ahora solo emite error
@@ -235,7 +235,7 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     new_total_paid = total_paid + payment.amount
     is_fully_paid = False # Bandera para saber si debemos emitir evento
     
-    if new_total_paid >= invoice.amount:
+    if new_total_paid >= invoice.total_usd:
         invoice.status = "PAID"
         is_fully_paid = True
     else:
@@ -274,7 +274,7 @@ async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):
     
     # Ventas de Hoy
     query_today = select(
-        func.sum(models.Invoice.amount),
+        func.sum(models.Invoice.total_usd),
         func.count(models.Invoice.id)
     ).filter(
         models.Invoice.tenant_id == tenant_id,
@@ -285,7 +285,7 @@ async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):
     today_amount, today_count = result_today.first()
     
     # Ventas del Mes
-    query_month = select(func.sum(models.Invoice.amount)).filter(
+    query_month = select(func.sum(models.Invoice.total_usd)).filter(
         models.Invoice.tenant_id == tenant_id,
         models.Invoice.status != "VOID",
         models.Invoice.created_at >= start_of_month
@@ -295,7 +295,7 @@ async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):
     
     # Por Cobrar (Facturas ISSUED o PARTIALLY_PAID)
     # Nota: es aproximado. Sumaremos el total de facturas no pagadas completamente
-    query_pending = select(func.sum(models.Invoice.amount)).filter(
+    query_pending = select(func.sum(models.Invoice.total_usd)).filter(
         models.Invoice.tenant_id == tenant_id,
         models.Invoice.status.in_(["ISSUED", "PARTIALLY_PAID"])
     )

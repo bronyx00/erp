@@ -18,12 +18,13 @@ FONT_SIZE_M = 9
 FONT_SIZE_L = 11
 
 class FiscalTicketGenerator:
-    def __init__(self, buffer, invoice):
+    def __init__(self, buffer, invoice, items=None):
         self.c = canvas.Canvas(buffer, pagesize=(PAGE_WIDTH, MAX_HEIGHT))
         self.invoice = invoice
         self.y = MAX_HEIGHT - 10 # Posición vertical inicial (cursor)
         self.left_margin = 2 * mm
         self.right_margin = PAGE_WIDTH - (2 * mm)
+        self.items = items if items is not None else getattr(invoice, 'items', [])
 
     # --- MÉTODOS AUXILIARES DE DIBUJO ---
     
@@ -224,10 +225,8 @@ def generate_invoice_pdf(invoice_data, items):
     items: Lista de InvoiceItems.
     """
     buffer = BytesIO()
-    # Aseguramos que el objeto invoice tenga la lista de items accesible
-    invoice_data.items = items 
     
-    generator = FiscalTicketGenerator(buffer, invoice_data)
+    generator = FiscalTicketGenerator(buffer, invoice_data, items)
     generator.generate()
     
     buffer.seek(0)
