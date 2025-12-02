@@ -1,6 +1,7 @@
-import { Injectable, inject } from "@angular/core";
+import { Injectable, inject, Inject } from '@angular/core';
 import { HttpClient } from "@angular/common/http";
-import { Observable } from "rxjs";
+import { Observable, of } from "rxjs";
+import { ApiService } from '../api/api.service';
 
 // Modelo de ítem de Factura
 export interface InvoiceItem {
@@ -75,10 +76,16 @@ export interface DashboardMetrics {
   total_invoices_today: number;
 }
 
+export interface SalesDataPoint {
+  month: string;
+  sales_usd: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class FinanceService {
+  private api = Inject(ApiService);
   private http = inject(HttpClient);
   private readonly API_URL = 'http://localhost:80/api/finance';
 
@@ -94,6 +101,26 @@ export class FinanceService {
 
   getSalesReport(): Observable<SalesReportItem[]> {
     return this.http.get<SalesReportItem[]>(`${this.API_URL}/reports/sales-by-method`);
+  }
+
+  // Obtiene las ventas de los últimos 12 meses para la gráfica
+  getSalesOverTime(): Observable<SalesDataPoint[]> {
+    // return this.api.get<SalesDataPoint[]>('finance/sales-over-time');
+    // MOCK temporal
+    return of([
+      { month: 'Ene', sales_usd: 15000 },
+      { month: 'Feb', sales_usd: 22000 },
+      { month: 'Mar', sales_usd: 18500 },
+      { month: 'Abr', sales_usd: 25000 },
+      { month: 'May', sales_usd: 31000 },
+      { month: 'Jun', sales_usd: 35000 },
+      { month: 'Jul', sales_usd: 28000 },
+      { month: 'Ago', sales_usd: 42000 },
+      { month: 'Sep', sales_usd: 39500 },
+      { month: 'Oct', sales_usd: 45000 },
+      { month: 'Nov', sales_usd: 50500 },
+      { month: 'Dic', sales_usd: 62000 }
+    ]);
   }
 
   // Crear una factura nueva

@@ -1,12 +1,13 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { InvoiceStore } from '../invoicing/services/invoice.store'; // Verifica la ruta
-import { FinanceService, DashboardMetrics, ExchangeRate } from '../../core/services/finance';
+import { InvoiceStore } from '../invoicing/services/invoice.store'; 
+import { FinanceService, DashboardMetrics, ExchangeRate, SalesDataPoint } from '../../core/services/finance';
+import { SalesChartComponent } from '../../shared/components/sales-chart/sales-chart';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, SalesChartComponent],
   templateUrl: './dashboard.html',
 })
 export class DashboardComponent implements OnInit {
@@ -17,6 +18,8 @@ export class DashboardComponent implements OnInit {
   // Estado local para los números de arriba
   metrics = signal<DashboardMetrics | null>(null);
   rate = signal<ExchangeRate | null>(null);
+  salesOverTime = signal<SalesDataPoint[]>([]);
+
 
   ngOnInit() {
     // 1. Cargar la lista de facturas
@@ -25,5 +28,8 @@ export class DashboardComponent implements OnInit {
     // 2. Cargar KPIs
     this.financeService.getMetrics().subscribe(data => this.metrics.set(data));
     this.financeService.getCurrentRate().subscribe(data => this.rate.set(data));
+
+    // 3. Cargar datos de la gráfica
+    this.financeService.getSalesOverTime().subscribe(data => this.salesOverTime.set(data));
   }
 }

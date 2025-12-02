@@ -23,6 +23,26 @@
     </div>
   </div>
 
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+    </div>
+
+  <section class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+    <h3 class="font-semibold text-slate-800 border-b pb-4 mb-4">
+      Ventas Mensuales (Últimos 12 Meses)
+    </h3>
+    @if (salesOverTime().length > 0) {
+      <app-sales-chart [salesData]="salesOverTime()"></app-sales-chart>
+    } @else {
+      <div class="h-[400px] flex items-center justify-center text-slate-400">
+        No hay datos suficientes para generar la gráfica.
+      </div>
+    }
+  </section>
+  
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    </div>
+  
+
   <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
       <h3 class="font-semibold text-slate-800">Últimas Transacciones</h3>
