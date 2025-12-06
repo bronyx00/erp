@@ -105,3 +105,7 @@ class SalesReportItem(BaseModel):
     
 class SalesReportResponse(BaseModel):
     items: List[SalesReportItem]
+    
+class SalesDataPoint(BaseModel):
+    month: str
+    sales_usd: float

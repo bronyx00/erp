@@ -2,6 +2,13 @@ import { Injectable, inject, Inject } from '@angular/core';
 import { HttpClient } from "@angular/common/http";
 import { Observable, of } from "rxjs";
 import { ApiService } from '../api/api.service';
+import type { PaymentMethodType } from '../../features/pos/pos';
+
+// Modelo de un Item de Pago Individual
+export interface PaymentDetail {
+  method: PaymentMethodType;
+  amount: number;
+}
 
 // Modelo de ítem de Factura
 export interface InvoiceItem {
@@ -46,6 +53,26 @@ export interface Invoice {
   payments?: any[];
 }
 
+// Modelo de una Factura Simplificada para el Reporte
+export interface DailyInvoice {
+  id: number;
+  invoice_number: string;
+  created_at: string;
+  total_usd: number;
+  // amount_ves: number;
+  payments: PaymentDetail[];
+  seller_name: string;
+}
+
+// Modelo del Reporte de Cierre de Caja
+export interface DailySalesReport {
+  date: string;
+  total_sales_usd: number;
+  total_invoices: number;
+  summary_by_method: Record<PaymentDetail['method'], number>;
+  invoices: DailyInvoice[];
+}
+
 export interface ExchangeRate {
   currency: string;
   rate: number;
@@ -80,6 +107,44 @@ export interface SalesDataPoint {
   month: string;
   sales_usd: number;
 }
+
+export interface SaleTransaction {
+  customer_name: string;
+  subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  total_usd: number;
+  payment_method: PaymentMethodType;
+  amount_received: number;   // Monto que el cliente entrega
+  change_due: number;       // Cambio a devolver
+  items: {
+    sku: string;
+    name: string;
+    quantity: number;
+    price: number;
+    line_total: number;
+  }[];
+}
+
+// MOCK DATA para el reporte
+const MOCK_REPORT: DailySalesReport = {
+  date: new Date().toISOString().split('T')[0],
+  total_sales_usd: 1545.50,
+  total_invoices: 10,
+  summary_by_method: {
+    EFECTIVO: 550.00,
+    "TARJETA DEBITO": 750.50,
+    TRANSFERENCIA: 245.00,
+    "PAGO MOVIL": 89.00,
+    OTROS: 0.00
+  },
+  invoices: [
+    { id: 1, invoice_number: '001-001-0001', created_at: new Date().toISOString(), total_usd: 150.00, seller_name: 'Carlos López', payments: [{ method: 'EFECTIVO', amount: 150.00 }] },
+    { id: 2, invoice_number: '001-001-0002', created_at: new Date().toISOString(), total_usd: 500.50, seller_name: 'Carlos López', payments: [{ method: 'TARJETA DEBITO', amount: 500.50 }] },
+    { id: 3, invoice_number: '001-001-0003', created_at: new Date().toISOString(), total_usd: 300.00, seller_name: 'Ana Pérez', payments: [{ method: 'EFECTIVO', amount: 100.00 }, { method: 'TARJETA DEBITO', amount: 200.00 }] },
+    // ... más facturas mockeadas
+  ]
+};
 
 @Injectable({
   providedIn: 'root'
@@ -142,6 +207,15 @@ export class FinanceService {
       headers = { 'X-Supervisor-Token': supervisorToken };
     }
     return this.http.post(`${this.API_URL}/invoices/${id}/void`, {}, { headers });
+  }
+
+  /**
+   * Obtiene el reporte de ventas diarias por método de pago.
+   */
+  getDailySalesReport(date: string): Observable<DailySalesReport> {
+    // return this.http.get<DailySalesReport>(`${this.API_URL}/reports/daily-sales?date=${date}`); // Real
+    console.log(`Mock: Solicitando reporte para la fecha ${date}`);
+    return of(MOCK_REPORT);
   }
 
   // Obtener la tada del día

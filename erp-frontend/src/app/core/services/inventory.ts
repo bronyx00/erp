@@ -1,6 +1,6 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
 
 export interface Product {
   id: number;
@@ -9,6 +9,14 @@ export interface Product {
   price: number;
   stock: number;
 }
+
+const MOCK_PRODUCTS: Product[] = [
+  { id: 101, name: 'Laptop Pro X', sku: 'LTPRX1', price: 1250.00, stock: 15 },
+  { id: 102, name: 'Monitor 27" 4K', sku: 'MON4K7', price: 350.00, stock: 50 },
+  { id: 103, name: 'Mouse Inalámbrico', sku: 'MOUWIR', price: 25.50, stock: 200 },
+  { id: 104, name: 'Teclado Mecánico', sku: 'TECKME', price: 89.99, stock: 75 },
+  { id: 105, name: 'Cable USB-C 2M', sku: 'CABLEC', price: 8.00, stock: 500 },
+];
 
 export interface ProductCreate {
   sku: string;
@@ -37,6 +45,21 @@ export class InventoryService {
    */
   getProductById(id: number): Observable<Product> {
     return this.http.get<Product>(`${this.API_URL}/products/${id}`);
+  }
+
+  /**
+   * Busca producto por SKU o nombre.
+   */
+  searchProducts(query: string): Observable<Product[]> {
+    if (!query) return of([]);
+    const lowerQuery = query.toLowerCase();
+
+    const results = MOCK_PRODUCTS.filter(p =>
+      p.name.toLowerCase().includes(lowerQuery) ||
+      p.sku.toLowerCase().includes(lowerQuery)
+    );
+
+    return of(results)
   }
 
   /**

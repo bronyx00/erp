@@ -3,13 +3,16 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 export interface Customer {
-  id?: number;
+  id: number;
   name: string;
   email: string;
   tax_id?: string;
-  phone?: string;
+  phone: string;
   address?: string;
   is_active?: boolean;
+  total_puchases?: number;
+  last_puchase_date?: Date;
+  puchases_history?: any[];
 }
 
 @Injectable({

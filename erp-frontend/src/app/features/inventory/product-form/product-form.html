@@ -1,51 +1,51 @@
-<div class="inventory-container">
-  <div class="form-card">
-    <header>
-      <h2>📦 Nuevo Producto</h2>
-      <button class="btn-back" (click)="goBack()">Volver</button>
-    </header>
+<div class="p-6 max-w-4xl mx-auto">
+  <h1 class="text-3xl font-bold mb-6 text-gray-800 border-b pb-2">Registro de Nuevo Producto</h1>
 
-    @if (lastProductSaved) {
-      <div class="success-banner">
-        ✅ Guardado: {{ lastProductSaved }}
+  @if (lastProductSaved) {
+    <div class="border px-4 py-3 rounded relative mb-4 bg-green-100 border-green-400 text-green-700" role="alert">
+      <span class="block sm:inline">✅ Guardado: {{ lastProductSaved }}</span>
+    </div>
+  }
+
+  <div class="bg-white shadow-xl rounded-xl p-8">
+    <form [formGroup]="productForm" (ngSubmit)="onSubmit()" (keydown.enter)="$event.stopPropagation()" class="space-y-6">
+
+      <div class="grid grid-cols-3 gap-6">
+        <div class="col-span-1">
+          <label class="block text-sm font-medium text-gray-700 mb-1">SKU / Código de Barras Único</label>
+          <input #skuInput type="text" formControlName="sku" placeholder="7 592498 220457" autofocus required
+                class="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+            >
+        </div>
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del Producto</label>
+          <input type="text" formControlName="name" placeholder="Arroz Santoni 900gr" required
+                class="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+          >
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+          <textarea formControlName="description" rows="5" class="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-6 border-t pt-6">
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Precio de Venta</label>
+            <input type="number" formControlName="price" placeholder="3.21" required min="0.01" step="0.01" class="w-full p-3 border border-gray-300 rounded-lg text-lg font-semibold focus:ring-green-500 focus:border-green-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Stock Inicial</label>
+            <input type="number" formControlName="stock" placeholder="50" required min="0" step="1" class="w-full p-3 border border-gray-300 rounded-lg text-lg font-semibold focus:ring-green-500 focus:border-green-500">
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-4 space-x-3 border-t">
+          <button type="submit" class="btn-save" [disabled]="productForm.invalid || isSubmitting" class="px-6 py-3 rounded-xl font-bold text-lg transition-all shadow-md">
+            {{ isSubmitting ? 'Guardando...' : 'Guardar' }}
+          </button>
+        </div>
       </div>
-    }
-
-    <form [formGroup]="productForm" (ngSubmit)="onSubmit()" (keydown.enter)="$event.stopPropagation()">
-      
-      <div class="form-grid">
-        <div class="form-group full-width">
-          <label>SKU / Código de Barras</label>
-          <input #skuInput type="text" formControlName="sku" placeholder="Escanea o escribe..." autofocus>
-        </div>
-
-        <div class="form-group full-width">
-          <label>Nombre del Producto</label>
-          <input type="text" formControlName="name" placeholder="Ej. Arroz Primor 1kg">
-        </div>
-
-        <div class="form-group">
-          <label>Precio Venta ($)</label>
-          <input type="number" formControlName="price" step="0.01">
-        </div>
-
-        <div class="form-group">
-          <label>Stock Inicial</label>
-          <input type="number" formControlName="stock">
-        </div>
-        
-        <div class="form-group full-width">
-          <label>Descripción (Opcional)</label>
-          <textarea formControlName="description" rows="2"></textarea>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button type="submit" class="btn-save" [disabled]="productForm.invalid || isSubmitting">
-          {{ isSubmitting ? 'Guardando...' : 'GUARDAR Y SEGUIR (Enter)' }}
-        </button>
-      </div>
-
     </form>
   </div>
 </div>

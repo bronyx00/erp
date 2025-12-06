@@ -274,6 +274,16 @@ async def get_dashboard_metrics(
 ):
     return await crud.get_dashboard_metrics(db, tenant_id)
 
+@app.get("/sales-over-time", response_model=list[schemas.SalesDataPoint])
+def read_sales_over_time(db: AsyncSession = Depends(database.get_db), tenant_id: int = Depends(get_current_tenant_id)):
+    """
+    Retorna la suma de ventas en USD por mes para la gráfica.
+    """
+    # Asume que get_current_active_user ya extrae el tenant_id implícitamente
+    sales_data = crud.get_sales_over_time(db)
+    
+    return sales_data
+
 # --- ENDPOINT PDF ---
 @app.get("/invoices/{invoice_id}/pdf")
 async def get_invoice_pdf(

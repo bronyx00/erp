@@ -16,6 +16,9 @@ export class EmployeesComponent implements OnInit {
 
   employees = signal<Employee[]>([]);
   isSubmitting = false;
+  isModalOpen = signal(false);
+  isLoading = signal(true)
+  createUser = signal(false);
   errorMessage = '';
 
   employeeForm = this.fb.group({
@@ -25,7 +28,7 @@ export class EmployeesComponent implements OnInit {
     phone: [''],
     position: ['Vendedor', [Validators.required]],
     salary: [0, [Validators.required, Validators.min(0)]],
-    email: ['', [Validators.email]],
+    email: [''],
     hired_at: [new Date().toISOString().split('T')[0], [Validators.required]]
   });
 
@@ -34,10 +37,22 @@ export class EmployeesComponent implements OnInit {
   }
 
   loadEmployees() {
+    this.isLoading.set(true);
     this.hhrrService.getEmployees().subscribe({
-      next: (data) => this.employees.set(data),
+      next: (data) => {
+        this.employees.set(data),
+        this.isLoading.set(false)
+      },
       error: (e) => console.error('Error cargando empleados', e)
     });
+  }
+
+  openModal(): void {
+    this.isModalOpen.set(true);
+  }
+
+  closeModal(): void {
+    this.isModalOpen.set(false);
   }
 
   onSubmit() {
@@ -72,6 +87,7 @@ export class EmployeesComponent implements OnInit {
             hired_at: new Date().toISOString().split('T')[0]
           });
           alert('Empleado registrado exitosamente');
+          this.isModalOpen.set(false);
         },
         error: (e) => {
           console.error(e);

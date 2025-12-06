@@ -2,10 +2,10 @@ import httpx
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
-from sqlalchemy import func, case, String
+from sqlalchemy.orm import selectinload, Session
+from sqlalchemy import func, String, extract, and_
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 from . import models, schemas
 
@@ -391,3 +391,38 @@ async def get_sales_report_by_method(db: AsyncSession, tenant_id: int):
         })
         
     return report_data
+
+def get_sales_over_time(db: Session):
+    """
+    Calcula la suma de ventas (total_usd) por mes para el último año.
+    """
+    # Establecer la fecha de inicio (hace 12 meses)
+    today = date.today()
+    one_year_ago = today.replace(year=today.year - 1)
+    
+    sales_data = db.query(
+        extract('month', models.Invoice.created_at).label('month_num'),
+        func.sum(models.Invoice.total_usd).label('sales_usd')
+    ).filter(
+        models.Invoice.created_at >= one_year_ago,
+        models.Invoice.status != 'VOID' 
+    ).group_by(
+        'month_num'
+    ).order_by(
+        'month_num'
+    ).all()
+    
+    # Mapeo de número a nombre corto del mes
+    month_map = {
+        1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 
+        7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'
+    }
+
+    result = []
+    for month_num, sales_usd in sales_data:
+        result.append({
+            'month': month_map.get(int(month_num), str(int(month_num))),
+            'sales_usd': float(sales_usd) if sales_usd else 0.0 # Asegura que sea flotante
+        })
+        
+    return result

@@ -1,45 +1,54 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FinanceService, SalesReportItem  } from '../../../core/services/finance';
-import { RouterLink } from '@angular/router';
+// En src/app/features/reports/sales-report/sales-report.ts
+
+import { Component, OnInit, inject, signal } from '@angular/core';
+import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { FinanceService, DailySalesReport } from '../../../core/services/finance';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-sales-report',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule],
   templateUrl: './sales-report.html',
   styleUrls: ['./sales-report.scss']
 })
-export class SalesReportComponent implements OnInit {
+export class DailySalesReportComponent implements OnInit {
   private financeService = inject(FinanceService);
   
-  // Usamos signals para TODO el estado reactivo
-  reportData = signal<SalesReportItem[]>([]);
-  isLoading = signal<boolean>(true); // Signal en lugar de variable simple
-  totalUSD = signal<number>(0);
+  report = signal<DailySalesReport | null>(null);
+  isLoading = signal(true);
+  
+  // Para la selección de fecha
+  selectedDate: string = new Date().toISOString().split('T')[0]; // Fecha de hoy en formato YYYY-MM-DD
 
-  ngOnInit() {
-    console.log('Iniciando petición de reporte...'); // Debug
+  ngOnInit(): void {
+    this.loadReport(this.selectedDate);
+  }
 
-    this.financeService.getSalesReport().subscribe({
-      next: (data) => {
-        console.log('Datos recibidos:', data); // Verás esto en la consola del navegador (F12)
-        
-        this.reportData.set(data);
-        
-        // Calcular total asegurando que sea número (Number())
-        const total = data
-          .filter(i => i.currency === 'USD')
-          .reduce((acc, curr) => acc + Number(curr.total_amount), 0);
-          
-        this.totalUSD.set(total);
-        this.isLoading.set(false); // Actualizamos el signal para quitar el "Cargando"
-      },
-      error: (e) => {
-        console.error('Error en el reporte:', e);
-        this.isLoading.set(false);
-        alert('Error cargando el reporte. Revisa la consola del navegador.');
-      }
+  loadReport(date: string): void {
+    this.isLoading.set(true);
+    this.report.set(null); // Limpiar el reporte anterior
+    
+    this.financeService.getDailySalesReport(date).subscribe(data => {
+      this.report.set(data);
+      this.isLoading.set(false);
     });
+  }
+  
+  // Maneja el cambio de fecha en el input
+  onDateChange(): void {
+    this.loadReport(this.selectedDate);
+  }
+
+  // Helper para obtener el nombre legible del método de pago
+  getMethodLabel(method: string): string {
+    const map: Record<string, string> = {
+      CASH: 'Efectivo',
+      CARD: 'Tarjeta de Débito/Crédito',
+      TRANSFER: 'Transferencia Bancaria',
+      MOBILE_PAYMENT: 'Pago Móvil',
+      OTHER: 'Otro/Crédito'
+    };
+    return map[method] || method;
   }
 }
