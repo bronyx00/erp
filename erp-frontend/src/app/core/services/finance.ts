@@ -4,6 +4,29 @@ import { Observable, of } from "rxjs";
 import { ApiService } from '../api/api.service';
 import type { PaymentMethodType } from '../../features/pos/pos';
 
+// --- Interfaces de Contabilidad ---
+
+export type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
+
+export interface AccountingAccount {
+  id: number;
+  code: string; // Ej: 1100 (Activos Circulantes)
+  name: string;
+  type: AccountType; // Tipo de cuenta (Activo, Pasivo, etc.)
+  balance: number; // Saldo actual
+}
+
+export interface LedgerEntry {
+  id: number;
+  date: string;
+  description: string;
+  debitAccount: string; // Código de la cuenta que recibe
+  creditAccount: string // Código de la cuenta que da
+  amount: number;
+  reference: string; // Ej: Factura # 1234
+}
+
+
 // Modelo de un Item de Pago Individual
 export interface PaymentDetail {
   method: PaymentMethodType;
@@ -14,6 +37,7 @@ export interface PaymentDetail {
 export interface InvoiceItem {
   product_name: string;
   quantity: number;
+  description?: string;
   unit_price: number;
   total_price: number;
 }
@@ -126,6 +150,36 @@ export interface SaleTransaction {
   }[];
 }
 
+// --- Servicio de Finanzas (FinanceService) ---
+
+const MOCK_ACCOUNTS: AccountingAccount[] = [
+    { id: 1, code: '1101', name: 'Caja y Bancos', type: 'ASSET', balance: 55000.00 },
+    { id: 2, code: '1201', name: 'Cuentas por Cobrar', type: 'ASSET', balance: 12500.50 },
+    { id: 3, code: '2101', name: 'Cuentas por Pagar', type: 'LIABILITY', balance: 4500.00 },
+    { id: 4, code: '3101', name: 'Capital Social', type: 'EQUITY', balance: 50000.00 },
+    { id: 5, code: '4101', name: 'Ingresos por Ventas', type: 'REVENUE', balance: 20000.00 },
+    { id: 6, code: '5101', name: 'Gastos Administrativos', type: 'EXPENSE', balance: 7500.00 },
+];
+
+const MOCK_INVOICES: Invoice[] = [
+    { 
+        id: 1, invoice_number: 126, customer_name: 'Tecno Soluciones, C.A.', customer_rif: 'J-12345678',
+        created_at: '2025-11-15', status: 'PAID', subtotal_usd: 1000.00, 
+        tax_amount_usd: 160.00, total_usd: 1160.00, exchange_rate: 257.3, currency: 'USD',
+        items: [
+            { product_name: 'Servicio de Consultoria' ,description: 'Servicio de Consultoría Q4', quantity: 1, unit_price: 1000.00, total_price: 1000.00 }
+        ]
+    },
+    { 
+        id: 2, invoice_number: 565, customer_name: 'Distribuidora Global', customer_rif: 'G-98765432',
+        created_at: '2025-11-20', status: 'ISSUED', subtotal_usd: 500.00, 
+        tax_amount_usd: 80.00, total_usd: 580.00, exchange_rate: 257.3, currency: 'USD',
+        items: [
+            { product_name: 'Licencia de Software', description: 'Licencia Software ERP', quantity: 1, unit_price: 500.00, total_price: 500.00 }
+        ]
+    },
+];
+
 // MOCK DATA para el reporte
 const MOCK_REPORT: DailySalesReport = {
   date: new Date().toISOString().split('T')[0],
@@ -166,6 +220,11 @@ export class FinanceService {
 
   getSalesReport(): Observable<SalesReportItem[]> {
     return this.http.get<SalesReportItem[]>(`${this.API_URL}/reports/sales-by-method`);
+  }
+
+  getChartOfAccounts(): Observable<AccountingAccount[]> {
+    console.log('MOCK: Obteniendo plan de cuentas.')
+    return of (MOCK_ACCOUNTS)
   }
 
   // Obtiene las ventas de los últimos 12 meses para la gráfica
@@ -221,5 +280,13 @@ export class FinanceService {
   // Obtener la tada del día
   getCurrentRate(): Observable<ExchangeRate> {
     return this.http.get<ExchangeRate>(`${this.API_URL}/exchange-rate`);
+  }
+
+  // Registro Contable (Asiento)
+  createLedgerEntry(entry: LedgerEntry): Observable<LedgerEntry> {
+    console.log('MOCK: Creando Asiento Contable (Registro en Libro Mayor).', entry);
+    // Simula la asignación de un ID por el backend
+    const newEntry: LedgerEntry = { ...entry, id: Math.floor(Math.random() * 1000) + 10 }; 
+    return of(newEntry);
   }
 }

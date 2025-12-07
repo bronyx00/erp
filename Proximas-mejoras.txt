@@ -1,0 +1,33 @@
+1. Añadir las opciones del servicio del frontend de hhrr para el backend para que sea mas detallada la creacion de un empleado nuevo
+
+2. Añadir la opcion para que los supervisores de cada area (CONTABILIDAD, CAJA, ALMACEN, ETC) para que solo puedan leer los datos (a menos que le den permisos para editar),
+y tambien para hacer notas sobre lo que han hecho los demas para que lo mejoren. Tambien para hacerle reseñas a los trabajadores.
+
+3. Añadir un horario de operacion del negocio para que los empleados no puedan entrar al sistema de la empresa cuando no estan en hora laboral (que solo lo pueda hacer el dueño)
+
+4. Añadir firmas para las cosas que se hagan en los servicios de la plataforma. Por ejemplo, cuando se cree una factura se vea el nombre del cajero quien vendio esos productos,
+que cuando un almacenista añada un producto nuevo se vea cual almacenista fue. Y asi con todos los demas servicios.
+
+5. Añadir comparacion en la grafica del dashboard con el año anterior. Que se vea toda la grafica del año anterior y en paralelo se vea como esta yendo el año corriente. Para hacer comparativas
+
+6. Añadir un sistema / servicio para gestionar cotizaciones / presupuesto para clientes que sea totalmente digital.
+Usar estar imagenes de referencias: 
+https://odoocdn.com/openerp_website/static/src/img/apps/sales/manage_02.webp
+https://odoocdn.com/openerp_website/static/src/img/apps/sales/quote_template.webp
+
+
+7. Añadir un servicio de Planeacion de projectos.
+Usar Archivos de referencias:
+https://odoocdn.com/openerp_website/static/src/img/apps/project/project-planning.webp
+https://youtu.be/T45Jo3s_Pt4    
+
+8. Crear una lista de permisos para reutilizar y no tener que reescribir siempre el mismo codigo
+
+9. crear facturas digitales en pdf para enviarlas por correo, diferentes a los resumenes ya se hacen. Es algo mas grande.
+Usar esta imagen de referencia:
+https://odoocdn.com/openerp_website/static/src/img/apps/accounting/accounting-bill.webp
+
+10. Añadir la creacion de horarios para asignarselas a cada empleado, en caso de que sea por turnos rotativos. Que los puedan crear
+los supervisores o los trabajadores de hhrr. De aqui se sacará su horario para poder ingresar a su cuenta del trabajo
+
+11. 

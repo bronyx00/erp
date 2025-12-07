@@ -72,7 +72,21 @@ export class EmployeesComponent implements OnInit {
         position: val.position || 'Vendedor',
         salary: Number(val.salary),
         hired_at: val.hired_at || undefined,
-        is_active: true
+        is_active: true,
+        emergency_contact: {
+          name: '',
+          phone: '',
+          relationship: ''
+        },
+        documents: [
+          { 
+            name: '', 
+            type: 'PDF', 
+            uploaded_date: '', 
+            url: ''
+          }
+        ],
+        status: 'Active'
       };
 
       this.hhrrService.createEmployee(newEmp).subscribe({

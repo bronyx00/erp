@@ -20,9 +20,25 @@ import { AuthService } from '../services/auth';
              class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
              Dashboard
           </a>
+          <a routerLink="/hhrr" 
+             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
+             Detalles de Empleados
+          </a>
           <a routerLink="/hhrr/employees" 
              class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
              Recursos Humanos
+          </a>
+          <a routerLink="/accounting" 
+             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
+             Contabilidad y Finanzas
+          </a>
+          <a routerLink="/accounting/books" 
+             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
+             Libros Contables
+          </a>
+          <a routerLink="/accounting/expenses" 
+             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
+              Gastos
           </a>
           <a routerLink="/crm" 
              class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
@@ -31,6 +47,10 @@ import { AuthService } from '../services/auth';
           <a routerLink="/pos" 
              class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
              Punto de Venta
+          </a>
+          <a routerLink="/inventory/products" 
+             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
+             Inventario
           </a>
           <a routerLink="/inventory/products/new" 
              class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">

@@ -3,12 +3,12 @@
   <div class="flex-grow p-6 transition-all duration-300" 
        [ngClass]="{'mr-[400px]': isDetailPanelOpen, 'mr-0': !isDetailPanelOpen}">
     
-    <div class="flex justify-between items-center mb-6">
-      <h2 class="text-2xl font-semibold text-gray-800 flex items-center">
-        <i class="fas fa-handshake mr-3 text-indigo-600"></i> Gestión de Clientes (CRM)
+    <div class="flex justify-between items-center mb-6 border-b pb-4">
+      <h2 class="text-3xl font-bold text-gray-800 flex items-center">
+        <i class="fas fa-handshake mr-3 text-indigo-600"></i> Gestión de Clientes
       </h2>
       <button (click)="openCreateModal()"
-              class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out flex items-center">
+              class="px-5 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition flex items-center">
         <i class="fas fa-user-plus mr-2"></i> Añadir Nuevo Cliente
       </button>
     </div>

@@ -23,6 +23,11 @@ export const routes: Routes = [
       // --- RECURSOS HUMANOS (HHRR) ---
       // Requiere permisos de gestión y hhrr
       {
+        path: 'hhrr',
+        loadComponent: () => import('./features/employees/employees-detail/employee-detail').then(m => m.EmployeeDetailComponent),
+        canActivate: [roleGuard(['OWNER', 'HHRR'])]
+      },
+      {
         path: 'hhrr/employees',
         loadComponent: () => import('./features/employees/employees').then(m => m.EmployeesComponent),
         canActivate: [roleGuard(['OWNER', 'ADMIN', 'HHRR'])]
@@ -43,10 +48,34 @@ export const routes: Routes = [
       // --- INVENTARIO ---
       // Requiere permisos de gestión o almacén
       {
+        path: 'inventory/products',
+        loadComponent: () => import('./features/inventory/product-list/product-list').then(m => m.ProductListComponent),
+        canActivate: [roleGuard(['OWNER', 'STORE'])]
+      },
+      {
         path: 'inventory/products/new',
         loadComponent: () => import('./features/inventory/product-form/product-form').then(m => m.ProductFormComponent),
-        canActivate: [roleGuard(['OWNER', 'ADMIN', 'MANAGER', 'STORE'])],
+        canActivate: [roleGuard(['OWNER', 'STORE'])],
         title: 'ERP - Nuevo Producto',
+      },
+      // --- CONTABILIDAD ---
+      // Requiere permisos de gestión o contabilidad
+      {
+        path: 'accounting/expenses',
+        loadComponent: () => import('./features/expenses/expense-dashboard/expense-dashboard').then(m => m.ExpenseDashboardComponent),
+        canActivate: [roleGuard(['OWNER', 'COUNTER'])],
+        title: 'ERP - Control de Gastos',
+      },
+      {
+        path: 'accounting/books',
+        loadComponent: () => import('./features/accounting/accounting-books/accounting-books').then(m => m.AccountingBooksComponent),
+        canActivate: [roleGuard(['OWNER', 'COUNTER'])]
+      },
+      {
+        path: 'accounting',
+        loadComponent: () => import('./features/accounting/accounting-service').then(m => m.AccountingServiceComponent),
+        canActivate: [roleGuard(['OWNER', 'ADMIN', 'MANAGER', 'COUNTER'])],
+        title: 'ERP - Contabilidad y Finanzas',
       },
       // --- REPORTES ---
       // Requiere permisos de supervición o caja

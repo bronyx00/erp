@@ -1,0 +1,124 @@
+<div class="p-6 bg-gray-50 min-h-full">
+  <div class="flex justify-between items-center mb-6 border-b pb-4">
+    <h2 class="text-3xl font-bold text-gray-800 flex items-center">
+      <i class="fas fa-cubes mr-3 text-indigo-600"></i> Gestión de Productos
+    </h2>
+    <button (click)="navigateToCreate()"  
+            class="px-5 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition flex items-center">
+      <i class="fas fa-plus mr-2"></i> Nuevo Producto
+    </button>
+  </div>
+
+  <div class="bg-white p-4 rounded-xl shadow-lg mb-6 flex flex-wrap gap-4 items-center">
+    
+    <div class="flex-1 min-w-[200px]">
+      <label for="search" class="sr-only">Buscar Producto</label>
+      <div class="relative">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <i class="fas fa-search text-gray-400"></i>
+        </div>
+        <input type="text" id="search" name="search" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()"
+               placeholder="Buscar por nombre o SKU..."
+               class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+      </div>
+    </div>
+
+    <div class="min-w-[150px]">
+      <select id="category" name="category" [(ngModel)]="selectedCategory" (ngModelChange)="applyFilters()"
+              class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+        <option value="all">Todas las Categorías</option>
+        <option *ngFor="let cat of uniqueCategories" [ngValue]="cat">{{ cat }}</option>
+      </select>
+    </div>
+
+    <div class="min-w-[150px]">
+      <select id="status" name="status" [(ngModel)]="statusFilter" (ngModelChange)="applyFilters()"
+              class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+        <option value="all">Todos los Estados</option>
+        <option value="ACTIVE">Activo</option>
+        <option value="LOW_STOCK">Poco Stock</option>
+        <option value="DISCONTINUED">Descontinuado</option>
+      </select>
+    </div>
+    
+  </div>
+
+  <div *ngIf="isLoading" class="text-center py-12 text-gray-500">
+    <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+    <p>Cargando productos...</p>
+  </div>
+
+  <div *ngIf="!isLoading" class="bg-white shadow-lg rounded-xl overflow-hidden">
+    
+    <div *ngIf="filteredProducts.length === 0" class="p-6 text-center text-gray-500">
+      <i class="fas fa-box-open text-5xl mb-3"></i>
+      <p>No se encontraron productos que coincidan con los criterios de búsqueda.</p>
+    </div>
+
+    <table *ngIf="filteredProducts.length > 0" class="min-w-full divide-y divide-gray-200">
+      
+      <colgroup>
+        <col style="width: 35%;"> <col style="width: 15%;"> <col style="width: 15%;"> <col style="width: 15%;"> <col style="width: 10%;"> <col style="width: 10%;"> </colgroup>
+      
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SKU / Nombre</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
+          <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Venta</th>
+          <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+          <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200">
+        <tr *ngFor="let product of filteredProducts" class="hover:bg-gray-50 transition duration-100">
+          
+          <td class="px-6 py-4 max-w-sm">
+            <p class="text-sm text-center font-semibold text-gray-900 block truncate">{{ product.name }}</p>
+            <p class="text-xs text-center text-gray-500">SKU: {{ product.sku }}</p>
+          </td>
+
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+            PRODUCTOS
+          </td>
+          
+          <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-center text-gray-900">
+            {{ product.price | currency:'USD':'symbol':'1.2-2' }}
+          </td>
+          
+          <td class="px-6 py-4 text-sm text-center">
+            <span [ngClass]="{
+              'text-red-600 font-bold': product.stock <= 15,
+              'text-orange-500 font-semibold': product.stock > 15 && product.stock < 45,
+              'text-green-700': product.stock >= 45
+            }" class="text-base">
+              {{ product.stock }}
+            </span>
+            <p *ngIf="product.stock <= 45" class="text-xs text-red-500 mt-0.5 whitespace-nowrap">⚠️ Reordenar </p>
+          </td>
+
+          <td class="px-6 py-4">
+            <span [ngClass]="{
+              'bg-green-100 text-green-800': product.status === 'ACTIVE',
+              'bg-yellow-100 text-yellow-800': product.status === 'LOW_STOCK',
+              'bg-red-100 text-red-800': product.status === 'DISCONTINUED'
+            }" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap">
+              {{ product.status === 'LOW_STOCK' ? 'Poco Stock' : (product.status === 'ACTIVE' ? 'Activo' : 'Desc.') }}
+            </span>
+          </td>
+          
+          <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+            <button (click)="editProduct(product)" 
+                    class="text-indigo-600 hover:text-blue-900 p-2 rounded-full hover:bg-gray-200 transition" title="Editar Producto">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button (click)="deleteProduct(product.id, product.name)" 
+                    class="text-red-600 hover:text-red-900 p-2 rounded-full hover:bg-gray-200 transition ml-2" title="Eliminar Producto">
+              <i class="fas fa-trash-alt"></i>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
