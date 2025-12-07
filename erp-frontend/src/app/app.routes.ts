@@ -14,6 +14,11 @@ export const routes: Routes = [
     canActivate: [roleGuard(['OWNER', 'ADMIN', 'MANAGER', 'SELLER', 'CASHIER', 'HHRR', 'COUNTER', 'STORE', 'SECURITY', 'CLEANING'])],
     children: [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+      {
+        path: 'settings',
+        loadComponent: () => import('./features/settings/settings').then(m => m.Settings),
+        canActivate: [roleGuard(['OWNER'])]
+      },
       { 
         path: 'dashboard', 
         loadComponent: () => import('./features/dashboard/dashboard').then(m => m.DashboardComponent),

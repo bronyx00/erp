@@ -1,0 +1,344 @@
+<p>settings works!</p>
+<div class="p-6 bg-slate-50 min-h-full">
+  
+  <div class="flex justify-between items-center mb-6 sticky top-0 bg-slate-50 z-10 py-2">
+    <div>
+      <h2 class="text-3xl font-bold text-slate-800">Configuración</h2>
+      <p class="text-slate-500 text-sm">Gestiona los datos de tu empresa y preferencias del sistema</p>
+    </div>
+    <button (click)="save()" [disabled]="isSaving()" 
+            class="px-6 py-2.5 bg-slate-900 text-white font-bold rounded-lg shadow-lg hover:bg-slate-800 transition flex items-center disabled:opacity-70">
+      <i class="fas fa-save mr-2"></i> {{ isSaving() ? 'Guardando...' : 'Guardar Cambios' }}
+    </button>
+  </div>
+
+  @if (isLoading()) {
+    <div class="p-10 text-center text-slate-400">Cargando configuraciones...</div>
+  } @else {
+    
+    <div class="flex border-b border-slate-200 mb-6 bg-white rounded-t-xl px-4 pt-2">
+      <button (click)="activeTab = 'company'" 
+        class="px-6 py-3 border-b-2 font-medium text-sm transition-colors"
+        [ngClass]="activeTab === 'company' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'">
+        <i class="fas fa-building mr-2"></i> Datos Empresa
+      </button>
+      <button (click)="activeTab = 'fiscal'" 
+        class="px-6 py-3 border-b-2 font-medium text-sm transition-colors"
+        [ngClass]="activeTab === 'fiscal' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'">
+        <i class="fas fa-file-invoice-dollar mr-2"></i> Fiscalidad
+      </button>
+      <button (click)="activeTab = 'invoice'" 
+        class="px-6 py-3 border-b-2 font-medium text-sm transition-colors"
+        [ngClass]="activeTab === 'invoice' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'">
+        <i class="fas fa-paint-brush mr-2"></i> Diseño de Factura
+      </button>
+    </div>
+
+    <div class="bg-white rounded-b-xl shadow-sm border border-slate-200 p-6 min-h-[600px]">
+      
+      <div *ngIf="activeTab === 'company'" class="max-w-4xl mx-auto animate-fade-in">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          
+          <div class="col-span-1 flex flex-col items-center">
+            <div class="w-48 h-48 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center bg-slate-50 overflow-hidden relative group cursor-pointer mb-4">
+              <img *ngIf="settings().logo_url" [src]="settings().logo_url" class="w-full h-full object-contain p-2">
+              <div *ngIf="!settings().logo_url" class="text-slate-400 text-center p-4">
+                <i class="fas fa-image text-3xl mb-2"></i><br>Subir Logo
+              </div>
+              <div class="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-white font-medium"
+                   (click)="fileInput.click()">
+                Cambiar
+              </div>
+              <input #fileInput type="file" class="hidden" (change)="onLogoSelected($event)" accept="image/*">
+            </div>
+            <p class="text-xs text-slate-500 text-center">Formato recomendado: PNG transparente. Max 2MB.</p>
+          </div>
+
+          <div class="col-span-2 space-y-5">
+            <div class="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+              
+              <div>
+                <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Razón Social</label>
+                <input type="text" [value]="settings().legal_name" readonly 
+                       class="w-full bg-slate-100 border-slate-300 text-slate-500 cursor-not-allowed rounded-md px-3 py-2 text-sm font-medium">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">RIF / Tax ID</label>
+                <input type="text" [value]="settings().tax_id" readonly 
+                       class="w-full bg-slate-100 border-slate-300 text-slate-500 cursor-not-allowed rounded-md px-3 py-2 text-sm font-medium">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Nombre Comercial</label>
+              <input type="text" [(ngModel)]="settings().commercial_name" class="input-base w-full border-slate-300 rounded-md py-2 px-3 focus:ring-blue-500 focus:border-blue-500">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Teléfono</label>
+                <input type="text" [(ngModel)]="settings().phone" class="input-base w-full border-slate-300 rounded-md py-2 px-3">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                <input type="email" [(ngModel)]="settings().email" class="input-base w-full border-slate-300 rounded-md py-2 px-3">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Dirección</label>
+              <textarea [(ngModel)]="settings().address" rows="3" class="input-base w-full border-slate-300 rounded-md py-2 px-3"></textarea>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Categoría de Negocio</label>
+              <select [(ngModel)]="settings().category" class="input-base w-full border-slate-300 rounded-md py-2 px-3">
+                <option>Retail / Tecnología</option>
+                <option>Alimentos / Restaurante</option>
+                <option>Servicios Profesionales</option>
+                <option>Salud / Farmacia</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="activeTab === 'fiscal'" class="max-w-3xl mx-auto animate-fade-in">
+        <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Configuración de Impuestos</h3>
+        
+        <div class="space-y-6">
+          <div class="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <div>
+              <h4 class="font-semibold text-slate-800">Cobrar Impuestos (IVA)</h4>
+              <p class="text-sm text-slate-500">Habilita o deshabilita el cálculo automático de impuestos en ventas.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" [(ngModel)]="settings().tax_active" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          <div *ngIf="settings().tax_active" class="grid grid-cols-2 gap-6 p-4 border border-slate-200 rounded-lg">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">Tasa General (%)</label>
+              <input type="number" [(ngModel)]="settings().tax_rate" class="w-full text-right font-mono text-lg border-slate-300 rounded-md p-2">
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">Cálculo de Precios</label>
+              <div class="flex flex-col gap-2">
+                <label class="flex items-center p-2 border rounded hover:bg-slate-50 cursor-pointer" 
+                       [class.border-blue-500]="settings().tax_type === 'EXCLUSIVE'">
+                  <input type="radio" name="tax_type" value="EXCLUSIVE" [(ngModel)]="settings().tax_type" class="text-blue-600 focus:ring-blue-500">
+                  <span class="ml-2 text-sm">Precios + IVA (Excluido)</span>
+                </label>
+                <label class="flex items-center p-2 border rounded hover:bg-slate-50 cursor-pointer"
+                       [class.border-blue-500]="settings().tax_type === 'INCLUSIVE'">
+                  <input type="radio" name="tax_type" value="INCLUSIVE" [(ngModel)]="settings().tax_type" class="text-blue-600 focus:ring-blue-500">
+                  <span class="ml-2 text-sm">Precios incluyen IVA (Incluido)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start">
+            <i class="fas fa-exclamation-triangle text-yellow-600 mt-1 mr-3"></i>
+            <p class="text-sm text-yellow-800">
+              Cambiar la configuración fiscal puede afectar cómo se calculan los totales en el POS y reportes. Asegúrese de consultar con su contador antes de modificar estos valores.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="activeTab === 'invoice'" class="flex flex-col lg:flex-row gap-8 h-full animate-fade-in">
+        
+        <div class="w-full lg:w-1/3 space-y-6 overflow-y-auto pr-2">
+          
+          <div class="space-y-4">
+            <h4 class="font-bold text-slate-800">Estilos Visuales</h4>
+            
+            <div>
+              <label class="block text-sm text-slate-600 mb-1">Color de Acento</label>
+              <div class="flex gap-2">
+                <input type="color" [(ngModel)]="settings().invoice_color" class="h-10 w-14 rounded cursor-pointer border border-slate-300 p-1">
+                <input type="text" [(ngModel)]="settings().invoice_color" class="flex-1 border-slate-300 rounded-md text-sm uppercase">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm text-slate-600 mb-1">Nota al Pie / Términos</label>
+              <textarea [(ngModel)]="settings().invoice_notes" rows="4" class="w-full border-slate-300 rounded-md text-sm p-2" placeholder="Ej: Gracias por su compra..."></textarea>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-200">
+            <h4 class="font-bold text-slate-800 mb-3">Modo de Previsualización</h4>
+            <div class="flex bg-slate-100 p-1 rounded-lg">
+              <button (click)="previewMode = 'A4'" 
+                      [class.bg-white]="previewMode === 'A4'" [class.shadow]="previewMode === 'A4'"
+                      class="flex-1 py-2 text-sm font-medium rounded-md transition text-slate-700">
+                <i class="far fa-file-pdf mr-2"></i> Hoja Carta (PDF)
+              </button>
+              <button (click)="previewMode = 'TICKET'"
+                      [class.bg-white]="previewMode === 'TICKET'" [class.shadow]="previewMode === 'TICKET'"
+                      class="flex-1 py-2 text-sm font-medium rounded-md transition text-slate-700">
+                <i class="fas fa-receipt mr-2"></i> Ticket (80mm)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="w-full lg:w-2/3 bg-slate-200 rounded-xl p-8 flex justify-center overflow-auto shadow-inner min-h-[600px] relative">
+            <span class="absolute top-4 right-4 bg-black/50 text-white px-2 py-1 rounded text-xs font-mono">LIVE PREVIEW</span>
+
+            <div *ngIf="previewMode === 'A4'" 
+                 class="bg-white w-[210mm] min-h-[297mm] shadow-2xl p-10 flex flex-col text-slate-800 text-sm transition-all origin-top scale-[0.7] lg:scale-[0.85]">
+              
+              <div class="flex justify-between items-start mb-10">
+                <div class="flex items-center gap-4">
+                  <img *ngIf="settings().logo_url" [src]="settings().logo_url" class="h-16 w-auto object-contain">
+                  <div *ngIf="!settings().logo_url" class="h-16 w-16 bg-slate-100 rounded flex items-center justify-center text-slate-300">LOGO</div>
+                  
+                  <div class="border-l pl-4 ml-2 border-slate-300">
+                    <h1 class="font-bold text-xl uppercase tracking-widest" [style.color]="settings().invoice_color">Factura</h1>
+                    <p class="text-slate-500"># 000123</p>
+                  </div>
+                </div>
+                
+                <div class="text-right">
+                  <h3 class="font-bold text-lg">{{ settings().commercial_name }}</h3>
+                  <p class="text-slate-500">{{ settings().tax_id }}</p>
+                  <p class="text-slate-500 text-xs mt-1 w-48 ml-auto">{{ settings().address }}</p>
+                </div>
+              </div>
+
+              <div class="flex justify-between mb-8 pb-8 border-b border-slate-100">
+                <div>
+                  <p class="text-xs uppercase text-slate-400 font-bold mb-1">Facturado A:</p>
+                  <p class="font-bold">Cliente Ejemplo C.A.</p>
+                  <p class="text-slate-500">J-99999999-0</p>
+                  <p class="text-slate-500">Av. Libertador, Torre Exa</p>
+                </div>
+                <div class="text-right">
+                  <p class="text-xs uppercase text-slate-400 font-bold mb-1">Fecha de Emisión</p>
+                  <p class="font-medium mb-4">06 Dic, 2025</p>
+                  
+                  <p class="text-xs uppercase text-slate-400 font-bold mb-1">Total a Pagar</p>
+                  <p class="text-2xl font-bold" [style.color]="settings().invoice_color">${{ totalPreview | number:'1.2-2' }}</p>
+                </div>
+              </div>
+
+              <table class="w-full mb-8">
+                <thead>
+                  <tr class="text-left text-xs uppercase" [style.background-color]="settings().invoice_color + '10'"> <th class="py-3 px-4 font-bold" [style.color]="settings().invoice_color">Descripción</th>
+                    <th class="py-3 px-4 text-right font-bold" [style.color]="settings().invoice_color">Cant</th>
+                    <th class="py-3 px-4 text-right font-bold" [style.color]="settings().invoice_color">Precio</th>
+                    <th class="py-3 px-4 text-right font-bold" [style.color]="settings().invoice_color">Total</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  <tr *ngFor="let item of mockInvoiceItems">
+                    <td class="py-3 px-4 font-medium">{{ item.desc }}</td>
+                    <td class="py-3 px-4 text-right text-slate-500">{{ item.qty }}</td>
+                    <td class="py-3 px-4 text-right text-slate-500">${{ item.price | number:'1.2-2' }}</td>
+                    <td class="py-3 px-4 text-right font-bold">${{ item.total | number:'1.2-2' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="flex justify-end mb-12">
+                <div class="w-1/2 space-y-2">
+                  <div class="flex justify-between text-slate-500">
+                    <span>Subtotal</span>
+                    <span>${{ subtotalPreview | number:'1.2-2' }}</span>
+                  </div>
+                  <div class="flex justify-between text-slate-500">
+                    <span>Impuesto ({{ settings().tax_rate }}%)</span>
+                    <span>${{ taxPreview | number:'1.2-2' }}</span>
+                  </div>
+                  <div class="flex justify-between border-t border-slate-200 pt-2 text-lg font-bold text-slate-800">
+                    <span>Total</span>
+                    <span>${{ totalPreview | number:'1.2-2' }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-auto pt-8 border-t border-slate-100 text-center text-xs text-slate-400">
+                <p class="font-medium text-slate-600 mb-1">Notas:</p>
+                <p>{{ settings().invoice_notes }}</p>
+                <p class="mt-4">&bull; {{ settings().email }}</p>
+              </div>
+            </div>
+
+            <div *ngIf="previewMode === 'TICKET'" 
+                 class="bg-white w-[80mm] min-h-[400px] shadow-xl p-4 flex flex-col text-slate-900 font-mono text-xs transition-all">
+              
+              <div class="text-center border-b border-dashed border-slate-300 pb-4 mb-4">
+                <img *ngIf="settings().logo_url" [src]="settings().logo_url" class="h-10 mx-auto mb-2 grayscale opacity-80">
+                <h3 class="font-bold text-sm uppercase">{{ settings().commercial_name }}</h3>
+                <p>{{ settings().tax_id }}</p>
+                <p class="leading-tight mt-1 text-[10px]">{{ settings().address }}</p>
+                <p class="mt-1">Tel: {{ settings().phone }}</p>
+              </div>
+
+              <div class="flex justify-between mb-2">
+                <span>Fecha: 06/12/2025</span>
+                <span>Hora: 14:30</span>
+              </div>
+              <div class="mb-4">
+                <p>Factura: #000123</p>
+                <p>Cliente: Cliente Casual</p>
+              </div>
+
+              <div class="border-b border-dashed border-slate-300 mb-2"></div>
+
+              <table class="w-full mb-4">
+                <thead>
+                  <tr class="text-left">
+                    <th class="pb-1">Cant</th>
+                    <th class="pb-1">Desc</th>
+                    <th class="pb-1 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let item of mockInvoiceItems">
+                    <td class="align-top pt-1">{{ item.qty }}</td>
+                    <td class="align-top pt-1 pr-1 leading-tight">{{ item.desc }}</td>
+                    <td class="align-top pt-1 text-right">${{ item.total | number:'1.2-2' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="border-b border-dashed border-slate-300 mb-2"></div>
+
+              <div class="space-y-1 text-right mb-4">
+                <div class="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span>${{ subtotalPreview | number:'1.2-2' }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span>IVA:</span>
+                  <span>${{ taxPreview | number:'1.2-2' }}</span>
+                </div>
+                <div class="flex justify-between font-bold text-sm mt-2">
+                  <span>TOTAL:</span>
+                  <span>${{ totalPreview | number:'1.2-2' }}</span>
+                </div>
+              </div>
+
+              <div class="text-center mt-auto pt-4 border-t border-dashed border-slate-300">
+                <p class="mb-2">{{ settings().invoice_notes }}</p>
+                <p>*** GRACIAS POR SU COMPRA ***</p>
+                
+                <div class="h-8 bg-slate-800 w-3/4 mx-auto mt-4"></div>
+                <p class="text-[9px] mt-1">1234567890</p>
+              </div>
+
+            </div>
+
+        </div>
+      </div>
+
+    </div>
+  }
+</div>
