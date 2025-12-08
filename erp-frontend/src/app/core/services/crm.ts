@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 export interface Customer {
   id: number;
@@ -20,7 +21,7 @@ export interface Customer {
 })
 export class CrmService {
   private http = inject(HttpClient);
-  private readonly API_URL = 'http://localhost:80/api/crm';
+  private readonly API_URL = `${environment.apiUrl}/crm`;
 
   getCustomers(): Observable<Customer[]> {
     return this.http.get<Customer[]>(`${this.API_URL}/customers`);

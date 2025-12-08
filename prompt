@@ -1,0 +1,195 @@
+Rol: Actúa como un Principal Frontend Architect & UX/UI Lead especializado en productos SaaS B2B de alto nivel (como Stripe, Linear o NetSuite). Tu enfoque es el rendimiento extremo, la escalabilidad y el diseño minimalista funcional.
+
+Contexto del Proyecto:
+
+Estoy construyendo un ERP Cloud-Native para Latinoamérica.
+
+
+
+Backend: Python (Microservicios, probablemente FastAPI/Django).
+
+Frontend: Angular (Última versión estable).
+
+Objetivo: Crear una interfaz "Tier 1": rápida, limpia, con alta densidad de datos pero fácil de leer, y preparada para escalar a miles de usuarios.
+
+Tu Tarea Principal:
+
+Voy a proporcionarte la estructura y código de mi Backend en Python. Quiero que lo analices y diseñes el Frontend en Angular que lo consumirá.
+
+Entradas:
+
+Aquí está mi código/estructura de Backend actual:
+
+``
+
+Instrucciones Paso a Paso para tu Respuesta:
+
+Paso 1: Auditoría de "Consumibilidad" del Backend (CRÍTICO)
+
+Antes de escribir una sola línea de código Angular, analiza mi backend Python desde la perspectiva del Frontend.
+
+
+
+¿Ves endpoints que serán difíciles de consumir?
+
+¿Falta paginación, filtrado o metadatos en las respuestas JSON?
+
+¿Estamos exponiendo IDs internos que deberían estar ocultos?
+
+Acción: Dame una lista de "Mejoras Sugeridas para el Backend Python" para que la integración con Angular sea perfecta (ej. "Modificar el endpoint X para que devuelva un objeto paginado estándar en lugar de una lista plana").
+
+Paso 2: Definición del Stack Visual y UX
+
+Quiero un diseño Minimalista Industrial. Que parezca una herramienta profesional, no una red social.
+
+
+
+Framework CSS: Recomiéndame (y usa en el código) Tailwind CSS para la estructura y Angular Material (o PrimeNG) para componentes complejos (tablas de datos, datepickers), pero "reseteados" para que no parezcan genéricos.
+
+Paleta: Define una paleta de colores corporativa sobria (Azules profundos, Grises neutros, acentos sutiles para alertas).
+
+Layout: Diseña un Shell de aplicación moderno (Sidebar colapsable, Header con búsqueda global, Área de contenido con Breadcrumbs).
+
+Paso 3: Arquitectura del Frontend (Angular Moderno)
+
+Genera la estructura del proyecto usando las últimas Best Practices de Angular:
+
+
+
+Standalone Components: Nada de NgModules innecesarios.
+
+Signals: Usa Signals para la gestión de estado reactivo (reemplazando el uso excesivo de BehaviorSubjects donde sea posible).
+
+Patrón Facade: Quiero que los componentes nunca llamen a la API directamente. Crea una capa de Services y Facades que manejen la lógica de negocio y el estado.
+
+Interceptor: Configura un interceptor robusto para manejar los Tokens JWT del backend Python y los errores HTTP (401, 403, 500).
+
+Paso 4: Generación de Código (Showcase)
+
+Dame el código para:
+
+
+
+Estructura de Carpetas: Árbol de directorios detallado.
+
+Servicio de API Base: Un servicio genérico en Angular fuertemente tipado que se comunique con mi backend Python.
+
+Pantalla de Dashboard: Un componente que consuma datos reales (simulados basados en mi backend) y muestre KPIs clave.
+
+Pantalla de Facturación (Complex Grid): Una tabla avanzada para el módulo de facturación que permita ver, filtrar y acciones rápidas.
+
+Nota Final:
+
+No te limites a copiar; mejora. Si ves que mi backend Python tiene un modelo de datos pobre para una tabla de frontend, dímelo y sugiera el cambio en el JSON. Quiero que el frontend sea robusto y guíe la calidad del backend.
+
+
+
+
+
+
+
+Rol: Actúa como un Principal Software Architect y Tech Lead con experiencia en la construcción de sistemas ERP Cloud-Native a gran escala, seguros y multiregión.
+
+Objetivo del Proyecto: Desarrollar la arquitectura fundacional y el código boilerplate para un sistema ERP de próxima generación, diseñado para "pequeñas, medianas y grandes empresas" en América Latina. El sistema debe ser robusto, altamente escalable, estar bien documentado y seguir las mejores prácticas modernas de ingeniería de software.
+
+Restricciones Tecnológicas Clave:
+
+Backend: Python.   
+
+Frontend: Angular (última versión estable).   
+
+Principios Arquitectónicos Fundamentales (No negociables):
+
+Arquitectura de Microservicios: El monolito está prohibido. El sistema debe descomponerse en servicios independientes basados en los principios de Domain-Driven Design (DDD).   
+
+API-First y Headless: El backend debe estar 100% desacoplado del frontend. Toda la funcionalidad (sin excepción) debe exponerse a través de APIs seguras. Esto permite que múltiples frontends (la app web de Angular, apps móviles, integraciones de clientes) consuman el mismo backend.   
+
+Composable: El diseño debe permitir que los clientes (o partners) integren y compongan servicios de "la mejor clase" (best-of-breed). Esto se logra mediante un diseño de API abierto y modular.   
+
+Cloud-Native: La aplicación debe estar diseñada para ejecutarse en contenedores (Docker/Kubernetes) y ser desplegable en cualquier proveedor de nube (AWS, Azure, GCP).   
+
+Persistencia Políglota: No usar una sola base de datos para todo. Cada microservicio debe poseer su propia base de datos, utilizando la tecnología más adecuada para su dominio (p. ej., PostgreSQL para finanzas, MongoDB para catálogos).   
+
+Entregables Solicitados:
+
+Te pido que generes la siguiente estructura y código base, con explicaciones detalladas para cada decisión de diseño.
+
+1. Stack Tecnológico del Backend (Python)
+Por favor, define y justifica el stack de Python recomendado.
+
+Frameworks: ¿Usaremos FastAPI (por su rendimiento, escritura asíncrona y generación automática de OpenAPI) o Django REST Framework (por su madurez empresarial, ORM y admin)? Proporciona boilerplate para el framework elegido.   
+
+Comunicación entre Servicios:
+
+Síncrona: Configura la comunicación vía API REST.
+
+Asíncrona (Event-Driven): Configura un boilerplate para la comunicación basada en eventos usando RabbitMQ o Kafka (para implementar patrones como Saga y Outbox para consistencia transaccional).   
+
+API Gateway: Configura un gateway (como Traefik, Kong o usando FastAPI) para que actúe como el único punto de entrada para todas las solicitudes del frontend, manejando la autenticación (JWT), el enrutamiento a los microservicios y la limitación de tasa.
+
+Contenerización: Proporciona un Dockerfile y un docker-compose.yml base para orquestar los servicios principales.
+
+2. Estructura de Microservicios del MVP
+Genera la estructura de directorios y el código boilerplate para los siguientes servicios del MVP (Service-Centric ):   
+
+a) auth-service (Servicio de Autenticación y Usuarios)
+
+Responsabilidad: Manejo de usuarios, roles, permisos (RBAC) y emisión/validación de tokens JWT.
+
+Base de Datos: PostgreSQL (para datos relacionales de usuarios/roles).   
+
+Entregables: Modelos (usando SQLAlchemy o Django ORM), endpoints (/login, /register, /validate_token).
+
+b) finance-service (Núcleo Financiero)
+
+Responsabilidad: El corazón del ERP. Manejo del libro mayor, cuentas por cobrar, cuentas por pagar. Debe ser multimoneda desde el diseño inicial.
+
+Base de Datos: PostgreSQL (requiere transacciones ACID fuertes).   
+
+Entregables: Modelos de datos para ChartOfAccounts, JournalEntry, Invoice. Endpoints API para crear una factura y registrar un pago.
+
+c) compliance-service (Servicio de Cumplimiento Fiscal Modular)
+
+Responsabilidad: Esta es la killer feature. Debe diseñarse como un gateway o adaptador que se conecta a diferentes módulos de cumplimiento fiscal regionales.
+
+Entregables:
+
+Una interfaz/clase base FiscalComplianceAdapter.
+
+Un módulo stub (simulado): compliance_ve.py (para SENIAT, Providencia 000102).   
+
+Un módulo stub: compliance_mx.py (para CFDI 4.0).   
+
+Un endpoint /api/v1/compliance/issue-invoice que internamente llame al adaptador correcto basado en el país del inquilino.
+
+3. Stack Tecnológico del Frontend (Angular)
+Genera la configuración inicial para la aplicación frontend en Angular, diseñada para consumir el backend headless.
+
+Proyecto: ng new erp-frontend --standalone --routing --style=scss
+
+Mejores Prácticas:
+
+Estructura de módulos (o componentes standalone) optimizada para carga diferida (lazy loading).
+
+Servicio Core API: Un servicio (api.service.ts) que maneje todas las solicitudes HTTP al API Gateway, incluyendo la interceptación de JWT para la autenticación.
+
+Gestión de Estado: Recomendación de uso (p. ej., NgRx o Signals) para manejar el estado global de la aplicación.
+
+Entregables:
+
+dockerfile para la app de Angular (para servir con Nginx).
+
+Boilerplate para un Módulo de Finanzas (finance.module.ts) con un componente para "Ver Facturas" que llame al finance-service del backend.
+
+Un guard de autenticación (auth.guard.ts) que verifique el token con el auth-service.
+
+4. Documentación y Próximos Pasos
+Genera un archivo README.md detallado para el repositorio del proyecto que incluya:
+
+Justificación de la Arquitectura: Una explicación de por qué se eligió esta arquitectura (Microservicios, Headless, Políglota).   
+
+Justificación del Stack: Por qué se eligió FastAPI/Django  y Angular  para este caso de uso empresarial.   
+
+Guía de Inicio Rápido: Cómo levantar el entorno de desarrollo local usando docker-compose up.
+
+Hoja de Ruta de Pruebas: Estrategia recomendada (pruebas unitarias, pruebas de integración y E2E).

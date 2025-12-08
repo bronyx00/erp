@@ -42,6 +42,10 @@ class Invoice(Base):
     is_synced_compliance = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    # --- AUDITORIA ---
+    created_by_email = Column(String, nullable=True)                # Email del cajero/usuario
+    created_by_role = Column(String, nullable=True)                 # Rol al momento de crear
+    
     # Relaciones
     items = relationship("InvoiceItem", back_populates="invoice")
     payments = relationship("Payment", back_populates="invoice")

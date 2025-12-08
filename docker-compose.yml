@@ -1,45 +1,86 @@
 version: '3.8'
 
+# --- REDES ---
+networks:
+  erp-network:
+    driver: bridge
+
+# --- VOLUMENES (Persistencia) ---
+volumes:
+  auth_db_data:
+  finance_db_data:
+  inventory_db_data:
+  crm_db_data:
+  hhrr_db_data:
+  accounting_db_data:
+  rabbitmq_data:
+
 services:
-  # --- Gateway ---
+  # =========================================
+  # INFRAESTRUCTURA CORE
+  # =========================================
+  
+  # API Gateway (Traefik) - La única puerta de entrada
   traefik:
     image: traefik:v2.10
     command: --api.insecure=true --providers.docker
     ports:
-      - "80:80"
-      - "8080:8080"
+      - "80:80"      # Puerto principal HTTP
+      - "8080:8080"  # Dashboard de Traefik
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - erp-network
 
-  # --- RabbitMQ ---
+  # Message Broker (RabbitMQ)
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
-      - "15672:15672"
-      - "5672:5672"
+      - "15672:15672" # Dashboard RabbitMQ
+      - "5672:5672"   # Puerto AMQP (Interno mayormente)
     environment:
       - RABBITMQ_ERLANG_COOKIE=secret_cookie_erp_system
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - erp-network
     healthcheck:
         test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
         interval: 10s
         timeout: 10s
-        retries: 10
+        retries: 5
 
   # =========================================
-  # SERVICIO: AUTH
+  # SERVICIO: FRONTEND (Angular)
   # =========================================
-  auth_db: 
+  frontend:
+    build: 
+      context: ./erp-frontend
+      dockerfile: Dockerfile
+    restart: always
+    networks:
+      - erp-network
+    labels:
+      - "traefik.enable=true"
+      # Enruta todo lo que NO sea /api al frontend
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+
+  # =========================================
+  # SERVICIO: AUTH (Autenticación)
+  # =========================================
+  auth_db:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: auth_db
-    ports:
-      - "5432:5432"
     volumes:
       - auth_db_data:/var/lib/postgresql/data
+    networks:
+      - erp-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d auth_db"]
       interval: 5s
@@ -47,15 +88,16 @@ services:
       retries: 5
 
   auth-service:
-    build: 
-      context: ./services/auth-service
-    volumes:
-      - ./services/auth-service/app:/app/app
+    build: ./services/auth-service
+    restart: always
     environment:
       - DATABASE_URL=postgresql+asyncpg://admin:admin@auth_db:5432/auth_db
+      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
     depends_on:
       auth_db:
         condition: service_healthy
+    networks:
+      - erp-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.auth.rule=PathPrefix(`/api/auth`)"
@@ -64,7 +106,7 @@ services:
       - "traefik.http.routers.auth.middlewares=auth-strip"
 
   # =========================================
-  # SERVICIO: FINANCE 
+  # SERVICIO: FINANCE (Finanzas)
   # =========================================
   finance_db:
     image: postgres:15-alpine
@@ -72,10 +114,10 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: finance_db
-    ports:
-      - "5433:5432" # Nota: Puerto externo 5433 para no chocar con auth_db
     volumes:
       - finance_db_data:/var/lib/postgresql/data
+    networks:
+      - erp-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d finance_db"]
       interval: 5s
@@ -83,18 +125,19 @@ services:
       retries: 5
 
   finance-service:
-    build:
-      context: ./services/finance-service
-    volumes:
-      - ./services/finance-service/app:/app/app
+    build: ./services/finance-service
+    restart: always
     environment:
       - FINANCE_DATABASE_URL=postgresql+asyncpg://admin:admin@finance_db:5432/finance_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
     depends_on:
       finance_db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    networks:
+      - erp-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.finance.rule=PathPrefix(`/api/finance`)"
@@ -103,24 +146,7 @@ services:
       - "traefik.http.routers.finance.middlewares=finance-strip"
 
   # =========================================
-  # SERVICIO: COMPLIANCE (WORKER)
-  # =========================================
-  compliance-worker:
-    build:
-      context: ./services/compliance-service
-    volumes:
-      - ./services/compliance-service/app:/app/app
-    command: python -u app/worker.py
-    environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    # Reiniciar automáticamente si pierde conexión con Rabbit
-    restart: always
-
-  # =========================================
-  # SERVICIO: INVENTORY
+  # SERVICIO: INVENTORY (Inventario)
   # =========================================
   inventory_db:
     image: postgres:15-alpine
@@ -128,10 +154,10 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: inventory_db
-    ports:
-      - "5434:5432" # Puerto 5434 para no chocar
     volumes:
       - inventory_db_data:/var/lib/postgresql/data
+    networks:
+      - erp-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d inventory_db"]
       interval: 5s
@@ -139,16 +165,16 @@ services:
       retries: 5
 
   inventory-service:
-    build:
-      context: /services/inventory-service
-    volumes:
-      - ./services/inventory-service/app:/app/app
+    build: ./services/inventory-service
+    restart: always
     environment:
       - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
     depends_on:
       inventory_db:
         condition: service_healthy
+    networks:
+      - erp-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.inventory.rule=PathPrefix(`/api/inventory`)"
@@ -157,22 +183,22 @@ services:
       - "traefik.http.routers.inventory.middlewares=inventory-strip"
 
   inventory-worker:
-    build:
-      context: ./services/inventory-service
-    volumes:
-      - ./services/inventory-service/app:/app/app
+    build: ./services/inventory-service
     command: python -u app/worker.py
+    restart: always
     environment:
       - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
     depends_on:
       inventory_db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    restart: always
+    networks:
+      - erp-network
 
   # =========================================
-  # SERVICIO: CRM
+  # SERVICIO: CRM (Clientes)
   # =========================================
   crm_db:
     image: postgres:15-alpine
@@ -180,35 +206,36 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: crm_db
-    ports:
-      - "5435:5432"
     volumes:
       - crm_db_data:/var/lib/postgresql/data
+    networks:
+      - erp-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d crm_db"]
       interval: 5s
       timeout: 5s
       retries: 5
-      
+
   crm-service:
-    build:
-      context: ./services/crm-service
-    volumes:
-      - ./services/crm-service/app:/app/app
+    build: ./services/crm-service
+    restart: always
     environment:
       - CRM_DATABASE_URL=postgresql+asyncpg://admin:admin@crm_db:5432/crm_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
     depends_on:
       crm_db:
         condition: service_healthy
+    networks:
+      - erp-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.crm.rule=PathPrefix(`/api/crm`)"
       - "traefik.http.services.crm.loadbalancer.server.port=8000"
       - "traefik.http.middlewares.crm-strip.stripprefix.prefixes=/api/crm"
       - "traefik.http.routers.crm.middlewares=crm-strip"
+
   # =========================================
-  # SERVICIO: HHRR (RECURSOS HUMANOS)
+  # SERVICIO: HHRR (Recursos Humanos)
   # =========================================
   hhrr_db:
     image: postgres:15-alpine
@@ -216,10 +243,10 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: hhrr_db
-    ports:
-      - "5436:5432"
     volumes:
       - hhrr_db_data:/var/lib/postgresql/data
+    networks:
+      - erp-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d hhrr_db"]
       interval: 5s
@@ -227,24 +254,28 @@ services:
       retries: 5
 
   hhrr-service:
-    build:
-      context: ./services/hhrr-service
-    volumes:
-      - ./services/hhrr-service/app:/app/app
+    build: ./services/hhrr-service
+    restart: always
     environment:
       - HHRR_DATABASE_URL=postgresql+asyncpg://admin:admin@hhrr_db:5432/hhrr_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
     depends_on:
       hhrr_db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - erp-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.hhrr.rule=PathPrefix(`/api/hhrr`)"
       - "traefik.http.services.hhrr.loadbalancer.server.port=8000"
       - "traefik.http.middlewares.hhrr-strip.stripprefix.prefixes=/api/hhrr"
       - "traefik.http.routers.hhrr.middlewares=hhrr-strip"
+
   # =========================================
-  # SERVICIO: ACCOUNTING (CONTABILIDAD) 
+  # SERVICIO: ACCOUNTING (Contabilidad)
   # =========================================
   accounting_db:
     image: postgres:15-alpine
@@ -252,27 +283,27 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: accounting_db
-    ports:
-      - "5437:5432"
     volumes:
       - accounting_db_data:/var/lib/postgresql/data
+    networks:
+      - erp-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d accounting_db"]
       interval: 5s
       timeout: 5s
       retries: 5
-    
+
   accounting-service:
-    build:
-      context: ./services/accounting-service
-    volumes:
-      - ./services/accounting-service/app:/app/app
+    build: ./services/accounting-service
+    restart: always
     environment:
       - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
     depends_on:
       accounting_db:
         condition: service_healthy
+    networks:
+      - erp-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.accounting.rule=PathPrefix(`/api/accounting`)"
@@ -281,11 +312,9 @@ services:
       - "traefik.http.routers.accounting.middlewares=accounting-strip"
 
   accounting-worker:
-    build:
-      context: ./services/accounting-service
-    volumes:
-      - ./services/accounting-service/app:/app/app
+    build: ./services/accounting-service
     command: python -u app/worker.py
+    restart: always
     environment:
       - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
@@ -294,14 +323,20 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    networks:
+      - erp-network
+
+  # =========================================
+  # SERVICIO: COMPLIANCE (Fiscal Worker)
+  # =========================================
+  compliance-worker:
+    build: ./services/compliance-service
+    command: python -u app/worker.py
     restart: always
-    
-# --- Declaración de Volúmenes ---
-volumes:
-  auth_db_data:
-  finance_db_data:
-  rabbitmq_data:
-  inventory_db_data:
-  crm_db_data:
-  hhrr_db_data:
-  accounting_db_data:
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - erp-network

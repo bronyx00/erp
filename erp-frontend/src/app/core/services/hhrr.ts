@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 export interface Employee {
   id?: number;
@@ -11,27 +12,19 @@ export interface Employee {
   phone?: string;
   position?: string;
   salary: number;
-  bonus_scheme?: string;
-  hired_at: string | undefined;
+  hired_at?: string;
   is_active?: boolean;
+  address?: string;
+
+  bonus_scheme?: string;
   birth_date?: string;
   performace_reviews?: Array<{
     date: string;
     rating: number;
     summary: string;
   }>;
-  emergency_contact: {
-    name: string;
-    phone: string;
-    relationship: string;
-  }
-  address?: string;
-  documents: Array<{
-    name: string;
-    type: 'PDF' | 'JPG' | 'DOCX';
-    uploaded_date: string;
-    url: string;
-  }>;
+  emergency_contact?: any;
+  documents: any[];
   manager_name?: string;
   status: 'Active' | 'On Leave' | 'Terminated';
 }
@@ -73,23 +66,21 @@ const MOCK_EMPLOYEE: Employee = {
 })
 export class HhrrService {
   private http = inject(HttpClient);
-  private readonly API_URL = 'http://localhost:80/api/hhrr';
+  private readonly API_URL = `${environment.apiUrl}/hhrr`;
 
   getEmployees(): Observable<Employee[]> {
     return this.http.get<Employee[]>(`${this.API_URL}/employees`);
   }
 
+  getEmployeeById(id: number): Observable<Employee> {
+    return this.http.get<Employee>(`${this.API_URL}/employees/${id}`);
+  }
+
   getEmployeeDetail(id: number): Observable<Employee | undefined> {
-    console.log(`MOCK: Obteniendo detalle del empleado #${id}.`);
-    // Simula la obtención de datos para el ID 101
-    return of(id === MOCK_EMPLOYEE.id ? MOCK_EMPLOYEE : undefined);
+    return this.getEmployeeById(id);
   }
 
   createEmployee(employee: Employee): Observable<Employee> {
     return this.http.post<Employee>(`${this.API_URL}/employees`, employee);
-  }
-
-  getEmployeeById(id: number): Observable<Employee> {
-    return this.http.get<Employee>(`${this.API_URL}/employees/${id}`);
   }
 }

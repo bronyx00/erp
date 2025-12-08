@@ -3,11 +3,12 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, Session
-from sqlalchemy import func, String, extract, and_
+from sqlalchemy import func, String, extract
 from typing import Optional
 from datetime import datetime, date
 from decimal import Decimal
 from . import models, schemas
+from jose import jwt
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,14 @@ CRM_URL = "http://crm-service:8000"
 # Función auxiliar para redondear dinero
 def round_money(amount: Decimal) -> Decimal:
     return amount.quantize(Decimal("0.01"))
+
+# Helper para decodificar usuario
+def get_user_from_token(token: str):
+    try:
+        payload = jwt.decode(token, "SECRET_SUPER_SECRETO_CAMBIAME", algorithms=["HS256"])
+        return payload.get("sub"), payload.get("role")
+    except:
+        return None, None
 
 # ---- HELPERS PARA DATOS EXTERNOS ----
 async def get_product_details(product_id: int, token: str):
@@ -85,6 +94,8 @@ async def get_next_invoice_number(db: AsyncSession, tenant_id: int) -> int:
     return (max_enum or 0) + 1
 
 async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int, token: str):
+    # Obtiene datos del usuario
+    user_email, user_role = get_user_from_token(token)
     
     # Obtiene Datos Fiscales de la Empresa
     tenant_data = await get_tenant_data(token)
@@ -169,6 +180,10 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         currency=invoice.currency,
         exchange_rate=rate_val,
         amount_ves=total_final * rate_val,
+        
+        # Firmas
+        created_by_email=user_email,
+        created_by_role=user_role,
         
         status="ISSUED",
         items=db_items
@@ -392,37 +407,41 @@ async def get_sales_report_by_method(db: AsyncSession, tenant_id: int):
         
     return report_data
 
-def get_sales_over_time(db: Session):
-    """
-    Calcula la suma de ventas (total_usd) por mes para el último año.
-    """
-    # Establecer la fecha de inicio (hace 12 meses)
+async def get_sales_compatison(db: AsyncSession, tenant_id: int):
     today = date.today()
-    one_year_ago = today.replace(year=today.year - 1)
+    current_year = today.year
+    last_year = current_year - 1
     
-    sales_data = db.query(
-        extract('month', models.Invoice.created_at).label('month_num'),
-        func.sum(models.Invoice.total_usd).label('sales_usd')
-    ).filter(
-        models.Invoice.created_at >= one_year_ago,
-        models.Invoice.status != 'VOID' 
-    ).group_by(
-        'month_num'
-    ).order_by(
-        'month_num'
-    ).all()
+    # Función auxiliar para consultar un año específico
+    async def get_year_data(year_val):
+        query = (
+            select(
+                extract('month', models.Invoice.created_at).label('month'),
+                func.sum(models.Invoice.total_usd).label('total')
+            )
+            .filter(
+                models.Invoice.tenant_id == tenant_id,
+                models.Invoice.status != 'VOID',
+                extract('year', models.Invoice.created_at) == year_val
+            )
+            .group_by('month')
+            .order_by('month')
+        )
+        result = await db.execute(query)
+        return {int(row.month): float(row.total) for row in result.all()}
     
-    # Mapeo de número a nombre corto del mes
-    month_map = {
-        1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 
-        7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'
-    }
-
-    result = []
-    for month_num, sales_usd in sales_data:
-        result.append({
-            'month': month_map.get(int(month_num), str(int(month_num))),
-            'sales_usd': float(sales_usd) if sales_usd else 0.0 # Asegura que sea flotante
+    current_data = await get_year_data(current_year)
+    last_year_data = await get_year_data(last_year)
+    
+    # Formatear respuesta cominada para Chart.js
+    combined_data = []
+    month_names = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    
+    for i in range (1, 13):
+        combined_data.append({
+            "month": month_names[i-1],
+            "current_year": current_data.get(i, 0.0),
+            "last_year": last_year_data.get(i, 0.0)
         })
         
-    return result
+    return combined_data

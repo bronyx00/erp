@@ -1,8 +1,10 @@
 import { Injectable, inject, Inject } from '@angular/core';
 import { HttpClient } from "@angular/common/http";
 import { Observable, of } from "rxjs";
+import { environment } from '../../../environments/environment';
 import { ApiService } from '../api/api.service';
 import type { PaymentMethodType } from '../../features/pos/pos';
+
 
 // --- Interfaces de Contabilidad ---
 
@@ -204,18 +206,29 @@ const MOCK_REPORT: DailySalesReport = {
   providedIn: 'root'
 })
 export class FinanceService {
-  private api = Inject(ApiService);
   private http = inject(HttpClient);
-  private readonly API_URL = 'http://localhost:80/api/finance';
+  private readonly API_URL = `${environment.apiUrl}/finance`;
 
-  // Obtener todas las facturas
-  getInvoices(): Observable<Invoice[]> {
-    return this.http.get<Invoice[]>(`${this.API_URL}/invoices`);
+  // --- FACTURACIÓN ---
+  getInvoices(limit: number = 50, page: number = 1): Observable<any> {
+    return this.http.get<any>(`${this.API_URL}/invoices`, { params: { limit, page }});
   }
 
-  // Obtener las metricas
+  getInvoiceByID(id: number): Observable<Invoice> {
+    return this.http.get<Invoice>(`${this.API_URL}/invoices/${id}`);
+  }
+
+  createInvoice(invoice: InvoiceCreate): Observable<Invoice> {
+    return this.http.post<Invoice>(`${this.API_URL}/invoices`, invoice);
+  }
+
+  // --- REPORTES Y DASHBOARD ---
   getMetrics(): Observable<DashboardMetrics> {
-    return this.http.get<DashboardMetrics>(`${this.API_URL}/reports/dashboard`);
+    return this.http.get<DashboardMetrics>(`${this.API_URL}/sales-over-time`);
+  }
+
+  getCurrentRate(): Observable<ExchangeRate> {
+    return this.http.get<ExchangeRate>(`${this.API_URL}/exchange-rate`);
   }
 
   getSalesReport(): Observable<SalesReportItem[]> {
@@ -247,10 +260,6 @@ export class FinanceService {
     ]);
   }
 
-  // Crear una factura nueva
-  createInvoice(invoice: InvoiceCreate): Observable<Invoice> {
-    return this.http.post<Invoice>(`${this.API_URL}/invoices`, invoice);
-  }
 
   createPayment(payment: PaymentCreate): Observable<any> {
     return this.http.post(`${this.API_URL}/payments`, payment);
@@ -275,11 +284,6 @@ export class FinanceService {
     // return this.http.get<DailySalesReport>(`${this.API_URL}/reports/daily-sales?date=${date}`); // Real
     console.log(`Mock: Solicitando reporte para la fecha ${date}`);
     return of(MOCK_REPORT);
-  }
-
-  // Obtener la tada del día
-  getCurrentRate(): Observable<ExchangeRate> {
-    return this.http.get<ExchangeRate>(`${this.API_URL}/exchange-rate`);
   }
 
   // Registro Contable (Asiento)
