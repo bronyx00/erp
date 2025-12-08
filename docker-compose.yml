@@ -5,7 +5,7 @@ networks:
   erp-network:
     driver: bridge
 
-# --- VOLUMENES (Persistencia) ---
+# --- VOLUMENES (Persistencia de Datos) ---
 volumes:
   auth_db_data:
   finance_db_data:
@@ -20,24 +20,22 @@ services:
   # INFRAESTRUCTURA CORE
   # =========================================
   
-  # API Gateway (Traefik) - La única puerta de entrada
   traefik:
     image: traefik:v2.10
     command: --api.insecure=true --providers.docker
     ports:
-      - "80:80"      # Puerto principal HTTP
-      - "8080:8080"  # Dashboard de Traefik
+      - "80:80"
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - erp-network
 
-  # Message Broker (RabbitMQ)
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
-      - "15672:15672" # Dashboard RabbitMQ
-      - "5672:5672"   # Puerto AMQP (Interno mayormente)
+      - "15672:15672"
+      - "5672:5672"
     environment:
       - RABBITMQ_ERLANG_COOKIE=secret_cookie_erp_system
       - RABBITMQ_DEFAULT_USER=guest
@@ -64,7 +62,6 @@ services:
       - erp-network
     labels:
       - "traefik.enable=true"
-      # Enruta todo lo que NO sea /api al frontend
       - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
 
@@ -90,6 +87,13 @@ services:
   auth-service:
     build: ./services/auth-service
     restart: always
+    # Sincroniza la carpeta local con el contenedor
+    volumes:
+      - ./services/auth-service:/app
+    # Intenta migrar DB al iniciar, luego arranca la app
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       - DATABASE_URL=postgresql+asyncpg://admin:admin@auth_db:5432/auth_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
@@ -127,8 +131,15 @@ services:
   finance-service:
     build: ./services/finance-service
     restart: always
+    volumes:
+      - ./services/finance-service:/app
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       - FINANCE_DATABASE_URL=postgresql+asyncpg://admin:admin@finance_db:5432/finance_db
+      # Variable genérica para Alembic
+      - DATABASE_URL=postgresql+asyncpg://admin:admin@finance_db:5432/finance_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
     depends_on:
@@ -167,8 +178,14 @@ services:
   inventory-service:
     build: ./services/inventory-service
     restart: always
+    volumes:
+      - ./services/inventory-service:/app
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
+      - DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
     depends_on:
       inventory_db:
@@ -184,10 +201,14 @@ services:
 
   inventory-worker:
     build: ./services/inventory-service
+    # Worker no necesita migrar, solo el servicio principal
     command: python -u app/worker.py
     restart: always
+    volumes:
+      - ./services/inventory-service:/app
     environment:
       - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
+      - DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
     depends_on:
       inventory_db:
@@ -219,8 +240,14 @@ services:
   crm-service:
     build: ./services/crm-service
     restart: always
+    volumes:
+      - ./services/crm-service:/app
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       - CRM_DATABASE_URL=postgresql+asyncpg://admin:admin@crm_db:5432/crm_db
+      - DATABASE_URL=postgresql+asyncpg://admin:admin@crm_db:5432/crm_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
     depends_on:
       crm_db:
@@ -256,8 +283,14 @@ services:
   hhrr-service:
     build: ./services/hhrr-service
     restart: always
+    volumes:
+      - ./services/hhrr-service:/app
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       - HHRR_DATABASE_URL=postgresql+asyncpg://admin:admin@hhrr_db:5432/hhrr_db
+      - DATABASE_URL=postgresql+asyncpg://admin:admin@hhrr_db:5432/hhrr_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
     depends_on:
@@ -296,8 +329,14 @@ services:
   accounting-service:
     build: ./services/accounting-service
     restart: always
+    volumes:
+      - ./services/accounting-service:/app
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
+      - DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
     depends_on:
       accounting_db:
@@ -315,8 +354,11 @@ services:
     build: ./services/accounting-service
     command: python -u app/worker.py
     restart: always
+    volumes:
+      - ./services/accounting-service:/app
     environment:
       - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
+      - DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
     depends_on:
       accounting_db:
@@ -333,6 +375,8 @@ services:
     build: ./services/compliance-service
     command: python -u app/worker.py
     restart: always
+    volumes:
+      - ./services/compliance-service:/app
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
     depends_on:
