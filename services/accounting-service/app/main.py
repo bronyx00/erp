@@ -1,6 +1,6 @@
 from datetime import date
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.future import select
 from sqlalchemy import func, insert
 import pandas as pd
@@ -110,9 +110,8 @@ async def get_journal_book(
     """Libro Diario: Lita cronológicamente de todos los asientos"""
     query = (
         select(models.LedgerEntry)
-        .options(selectinload(models.LedgerEntry.lines).selectinload(models.LedgerLine.account))
+        .options(selectinload(models.LedgerEntry.lines).joinedload(models.LedgerLine.account))
         .filter(
-            models.LedgerEntry.tenant_id == tenant_id,
             models.LedgerEntry.transaction_date >= start_date,
             models.LedgerEntry.transaction_date <= end_date
         )

@@ -28,10 +28,16 @@ class ImportResult(BaseModel):
     message: str
     
 # --- LEDGER SCHEMAS ---
+
+# Sub-esquema para la cuenta anidada
+class AccountSimpleResponse(BaseModel):
+    name: Optional[str] = "Desconocida"
+    code: Optional[str] = "000"
+    model_config = ConfigDict(from_attributes=True)
+
 class LedgerLineResponse(BaseModel):
     account_id: int
-    account_name: str = Field(validation_alias="account.name") 
-    code: str = Field(validation_alias="account.code")
+    account: Optional[AccountSimpleResponse] = None
     debit: Decimal
     credit: Decimal
     model_config = ConfigDict(from_attributes=True)
