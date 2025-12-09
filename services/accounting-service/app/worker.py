@@ -18,12 +18,13 @@ async def get_account_id_by_code(db, code: str, tenant_id: int):
 
 async def process_invoice_issued(data: dict):
     """Crea el asiento contable de una venta"""
-    print(f"Procesando Factura #{data.get('id')} - Monto: {data.get('total_amount')}")
+    print(f"Procesando Factura #{data.get('id')} - Monto: {data.get('total_usd')}")
     
     db = AsyncSessionLocal()
     try:
         tenant_id = data.get("tenant_id", 1)
-        amount = Decimal(str(data.get("total_amount")))
+        
+        amount = Decimal(str(data.get("total_usd")))
         
         # 1. Buscar Cuentas en el PUC (Códigos Estándar VE)
         # 1.01.03.001 = Cuentas por Cobrar Clientes Nacionales

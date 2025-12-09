@@ -30,11 +30,12 @@ class Account(Base):
     # ¿Acepta Transacciones? (Las cuentas de nivel superior como "1. ACTIVO" no aceptan, solo sus hijas)
     is_transactional = Column(Boolean, default=True)
     
-    parent_id = Column(Integer, ForeignKey("account.id"), nullable=True)
+    parent_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
     parent = relationship(
         "Account",
         remote_side=[id],
-        back_populates="children"
+        back_populates="children",
+        foreign_keys=[parent_id]
     )
     
     # Saldo actual
