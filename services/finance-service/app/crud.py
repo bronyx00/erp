@@ -207,8 +207,8 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         "id": db_invoice.id,
         "tenant_id": tenant_id,
         "total_amount": float(db_invoice.total_usd),
-        "currency": "USD",
-        "status": "ISSUED",
+        "currency": db_invoice.currency,
+        "status": db_invoice.status,
         "date": str(db_invoice.created_at)
     }
     

@@ -3,6 +3,7 @@ import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { InventoryService, Product } from '../../core/services/inventory';
 import { CartService, CartItem } from '../../core/services/cart';
+import { FinanceService, InvoiceCreate } from "../../core/services/finance";
 import { HotkeysService } from "../../core/services/hotkeys";
 import { finalize } from "rxjs";
 
@@ -19,6 +20,7 @@ export class PosComponent {
   private inventoryService = inject(InventoryService);
   public cartService = inject(CartService);
   private hotkeysService = inject(HotkeysService);
+  private financeService = inject(FinanceService);
 
   // Estado Local de la UI
   searchQuery = signal('');
@@ -90,18 +92,26 @@ export class PosComponent {
       return;
     }
 
-    try {
-      const transaction = this.cartService.finalizeTransaction(
-        this.paymentMethod(),
-        received
-      );
-
-      this.closePaymentModal();
-      
-    } catch (error) {
-      console.error('Error al procesar el pago (Mock):', error);
-      alert('Ocurrió un error al procesar el pago.');
+    const invoiceData: InvoiceCreate = {
+      // Datos del cliente
+      customer_tax_id: 'V-000000',
+      currency: 'USD',
+      items: this.cartItems().map(item => ({
+        product_id: item.id,
+        quantity: item.quantity
+      }))
     }
+
+    this.financeService.createInvoice(invoiceData).subscribe({
+      next: (invoice) => {
+        console.log('Factura Creada', invoice);
+        this.closePaymentModal();
+      },
+      error: (err) => {
+        console.error('Error al facturar:', err);
+        alert('Error al conectar con el servidor.');
+      }
+    });
   }
 
   setPaymentMethod(method: string): void {

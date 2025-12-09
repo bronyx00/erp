@@ -1,6 +1,7 @@
 import asyncio
 from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.models import Account
 from app.database import AsyncSessionLocal
 
@@ -154,6 +155,14 @@ async def seed_puc(tenant_id: int):
                 
             insert_data = []
             for item in current_level_accounts:
+                
+                if insert_data:
+                    stmt = pg_insert(Account).values(insert_data)
+                    # Si el codigo ya existe para este tenant, no hacer nada
+                    stmt = stmt.on_conflict_do_nothing(
+                        index_elements=['tenant_id', 'code']
+                    )
+                
                 parent_id = None
                 if item['parent_code']:
                     parent_id = code_to_id_map.get(item['parent_code'])

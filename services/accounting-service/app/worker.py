@@ -16,64 +16,76 @@ async def get_account_id_by_code(db, code: str, tenant_id: int):
     account = result.scalar_one_or_none()
     return account.id if account else None
 
-async def process_invoice_issued(data: dict):
-    """Crea el asiento contable de una venta"""
-    print(f"Procesando Factura #{data.get('id')} - Monto: {data.get('total_usd')}")
+async def process_invoice_created(data: dict):
+    status = data.get("status", "ISSUED") 
+    inv_id = data.get("id")
+    
+    print(f" [x] Procesando Factura #{inv_id} - Estado: {status}")
     
     db = AsyncSessionLocal()
     try:
         tenant_id = data.get("tenant_id", 1)
         
-        amount = Decimal(str(data.get("total_usd")))
-        
-        # 1. Buscar Cuentas en el PUC (Códigos Estándar VE)
-        # 1.01.03.001 = Cuentas por Cobrar Clientes Nacionales
-        ar_account_id = await get_account_id_by_code(db, "1.01.03.001", tenant_id)
-        
-        # 4.01.01 = Ventas Brutas
-        sales_account_id = await get_account_id_by_code(db, "4.01.01", tenant_id)
-        
-        if not ar_account_id or not sales_account_id:
-            print("Error: No se encontraron las cuentas contables (1.01.03.001 o 4.01.01). ¿Corriste el seed?")
+        raw_amount = data.get("total_amount")
+        if raw_amount is None:
+            print(" [!] Error: Factura sin monto. Se omite.")
             return
+        amount = Decimal(str(raw_amount))
 
-        # 2. Crear Cabecera del Asiento
+        # 1. Definir Cuenta DEBE (A donde entra el dinero)
+        debit_account_code = "1.01.03.001" # Por defecto: CxC (Crédito)
+        
+        if status == "PAID":
+            # Si el POS la marca pagada, va a CAJA
+            debit_account_code = "1.01.01.001" 
+            print("   -> Venta de Contado (Caja)")
+        else:
+            # Si es ISSUED, va a CUENTAS POR COBRAR
+            print("   -> Venta a Crédito (CxC)")
+
+        # 2. Definir Cuenta HABER (Ventas)
+        credit_account_code = "4.01.01" # Ventas Brutas
+
+        # 3. Buscar IDs
+        debit_acc_id = await get_account_id_by_code(db, debit_account_code, tenant_id)
+        credit_acc_id = await get_account_id_by_code(db, credit_account_code, tenant_id)
+
+        if not debit_acc_id or not credit_acc_id:
+            print(f" [!] Error: No se encontraron las cuentas {debit_account_code} o {credit_account_code} en el PUC.")
+            return
+        
+        str_status = ''
+        if status == 'PAID':
+            str_status = 'CONTADO'
+        elif status == 'PARTIALLY_PAID':
+            str_status = 'Parcialmente pagado'
+        elif status == 'ISSUED':
+            str_status = 'CREDITO'
+        else:
+            str_status = 'CANCELADA'
+
+        # 4. Crear Asiento
         entry = LedgerEntry(
             tenant_id=tenant_id,
             transaction_date=datetime.now().date(),
-            description=f"Venta Factura #{data.get('id')}",
-            reference=f"INV-{data.get('id')}",
+            description=f"Venta Factura #{inv_id} ({str_status})",
+            reference=f"INV-{inv_id}",
             total_amount=amount
         )
         db.add(entry)
-        await db.flush() # Para obtener ID del asiento
+        await db.flush()
 
-        # 3. Crear Líneas (Partida Doble)
-        
-        # DÉBITO: Cuentas por Cobrar (Entra derecho de cobro)
-        line_debit = LedgerLine(
-            entry_id=entry.id,
-            account_id=ar_account_id,
-            debit=amount,
-            credit=0
-        )
-        
-        # CRÉDITO: Ingresos por Ventas (Sale el servicio/bien -> Ingreso)
-        line_credit = LedgerLine(
-            entry_id=entry.id,
-            account_id=sales_account_id,
-            debit=0,
-            credit=amount
-        )
-        
-        db.add(line_debit)
-        db.add(line_credit)
+        # 5. Líneas
+        # Debe
+        db.add(LedgerLine(entry_id=entry.id, account_id=debit_acc_id, debit=amount, credit=0))
+        # Haber
+        db.add(LedgerLine(entry_id=entry.id, account_id=credit_acc_id, debit=0, credit=amount))
         
         await db.commit()
-        print(f"Asiento Contable ID {entry.id} creado exitosamente.")
+        print(f" [v] Asiento ID {entry.id} creado exitosamente.")
         
     except Exception as e:
-        print(f"Error procesando contabilidad: {e}")
+        print(f" [!] Error procesando contabilidad: {e}")
         await db.rollback()
     finally:
         await db.close()
