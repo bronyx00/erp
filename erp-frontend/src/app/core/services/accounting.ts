@@ -33,4 +33,20 @@ export class AccountingService {
   getBalance(): Observable<Balance> {
     return this.http.get<Balance>(`${this.API_URL}/balance`);
   }
+
+  seedVenezuelanPUC(): Observable<any> {
+    return this.http.post(`${this.API_URL}/accounts/seed-puc-ve`, {});
+  }
+
+  importAccounts(file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post(`${this.API_URL}/accounts/import`, formData);
+  }
+
+  getJournalBook(start: string, end: string): Observable<any[]> {
+    return this.http.get<any>(`${this.API_URL}/books/journal`, {
+      params: { start_date: start, end_date: end }
+    });
+  }
 }

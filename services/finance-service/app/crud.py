@@ -335,15 +335,21 @@ async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):
     
     # Ventas de Hoy
     query_today = select(
-        func.sum(models.Invoice.total_usd),
-        func.count(models.Invoice.id)
-    ).filter(
+        func.sum(models.Invoice.total_usd)).filter(
         models.Invoice.tenant_id == tenant_id,
         models.Invoice.status != "VOID", # Ignorar anuladas
         func.date(models.Invoice.created_at) == today
     )
     result_today = await db.execute(query_today)
-    today_amount, today_count = result_today.first()
+    today_sales = result_today.scalar() or 0
+    
+    # Conteo Facturas Hoy
+    query_count = select(func.count(models.Invoice.id)).filter(
+        models.Invoice.tenant_id == tenant_id,
+        func.date(models.Invoice.created_at) == today
+    )
+    result_count = await db.execute(query_count)
+    count_today = result_count.scalar() or 0
     
     # Ventas del Mes
     query_month = select(func.sum(models.Invoice.total_usd)).filter(
@@ -352,7 +358,7 @@ async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):
         models.Invoice.created_at >= start_of_month
     )
     result_month = await db.execute(query_month)
-    month_amount = result_month.scalar()
+    month_sales = result_month.scalar() or 0
     
     # Por Cobrar (Facturas ISSUED o PARTIALLY_PAID)
     # Nota: es aproximado. Sumaremos el total de facturas no pagadas completamente
@@ -361,13 +367,13 @@ async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):
         models.Invoice.status.in_(["ISSUED", "PARTIALLY_PAID"])
     )
     result_pending = await db.execute(query_pending)
-    pending_amount = result_pending.scalar()
+    pending_balance = result_pending.scalar() or 0
     
     return {
-        "today_sales": today_amount or 0,
-        "total_invoices_today": today_count or 0,
-        "month_sales": month_amount or 0,
-        "pending_balance": pending_amount or 0
+        "today_sales": today_sales,
+        "total_invoices_today": count_today,
+        "month_sales": month_sales,
+        "pending_balance": pending_balance
     }
 
 async def get_sales_report_by_method(db: AsyncSession, tenant_id: int):

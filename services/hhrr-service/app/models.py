@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Date, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Date, Text, JSON
 from sqlalchemy.sql import func
 from .database import Base
 
@@ -20,17 +20,25 @@ class Employee(Base):
     # --- DATOS LABORALES ---
     position = Column(String) 
     departament = Column(String, nullable=True)     # Ej: Ventas, Almacén
-    manager_id = Column(Integer, nullable=True)     # ID de otro empleado (Supervisor)
-    salary = Column(Numeric(10, 2), default=0)      # Sueldo Mensual
-    bonus_scheme = Column(String, nullable=True)    # Ej: "3% Comisión"
+    manager_name = Column(Integer, nullable=True)     # ID de otro empleado (Supervisor)
     hired_at = Column(Date, nullable=True)
     contract_type = Column(String, default="UNDEFINED") # Indefinido, Determinado
+    
+    # --- COMPENSACIÓN ---
+    salary = Column(Numeric(10, 2), default=0)
+    bonus_scheme = Column(String, nullable=True)    # Ej: "3% Comisión"
     
     # --- DATOS EMERGENCIA ---
     emergency_contract = Column(JSON, nullable=True)
     
+    # --- DOCUMENTOS ---
+    documents = Column(JSON, default=list)
+    
+    # --- REVIEWS ---
+    performance_reviews = Column(JSON, default=list)
+    
     # --- ESTADO ---
-    status = Column(String, default="ACTIVE")       # ACTIVE, ON LEAVE, TERMINATED
+    status = Column(String, default="Active")       # ACTIVE, ON LEAVE, TERMINATED
     is_active = Column(Boolean, default=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())

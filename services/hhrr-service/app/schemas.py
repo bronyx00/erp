@@ -1,17 +1,46 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
-from typing import Optional
+from typing import Optional, List, Any
 from decimal import Decimal
 from datetime import date, datetime
+
+class EmergencyContact(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    relationship = Optional[str] = None
+
+class Document(BaseModel):
+    name: str
+    type: str
+    url: str
+    uploaded_date: Optional[datetime] = None
+    
+class PerformanceReview(BaseModel):
+    date: date
+    rating: int
+    summary: str
 
 class EmployeeBase(BaseModel):
     first_name: str
     last_name: str
-    identification: Optional[str] = None
+    identification: str
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
-    position: Optional[str] = None
-    salary: Decimal = Decimal(0)
+    address: Optional[str] = None
+    birth_date: Optional[date] = None
+    
+    position: str
+    manager_name: Optional[str] = None
     hired_at: Optional[date] = None
+    salary: Decimal = Decimal(0)
+    bonus_scheme: Optional[str] = None
+    
+    # Campos JSON complejos
+    emergency_Contact: Optional[EmergencyContact] = None
+    documents: List[Document] = []
+    performance_reviews: List[PerformanceReview] = []
+    
+    status: str = 'Active'
+    
     
 class EmployeeCreate(EmployeeBase):
     pass
