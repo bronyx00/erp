@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import Optional
-from .database import get_db, engine, SyncSessionLocal
+from .database import engine, SyncSessionLocal
 from contextlib import asynccontextmanager
 import logging
 import pika

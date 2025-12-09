@@ -88,7 +88,7 @@ async def import_chart_of_accounts(
         raise HTTPException(500, f"Error procesando archivo: {str(e)}")
             
     
-@app.post("/aacounts/seed-puc-ve")
+@app.post("/accounts/seed-puc-ve")
 async def trigger_seed_puc(
     db: AsyncSession = Depends(database.get_db),
     tenant_id: int = Depends(get_current_tenant_id)

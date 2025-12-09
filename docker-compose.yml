@@ -352,7 +352,7 @@ services:
 
   accounting-worker:
     build: ./services/accounting-service
-    command: python -u app/worker.py
+    command: python -m app.worker
     restart: always
     volumes:
       - ./services/accounting-service:/app

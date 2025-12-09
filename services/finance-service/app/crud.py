@@ -7,7 +7,7 @@ from sqlalchemy import func, String, extract
 from typing import Optional
 from datetime import datetime, date
 from decimal import Decimal
-from . import models, schemas
+from . import models, schemas, main
 from jose import jwt
 
 logger = logging.getLogger(__name__)
@@ -202,6 +202,18 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         .filter(models.Invoice.id == db_invoice.id)
     )
     result = await db.execute(query)
+    
+    event_data = {
+        "id": db_invoice.id,
+        "tenant_id": tenant_id,
+        "total_amount": float(db_invoice.total_usd),
+        "currency": "USD",
+        "status": "ISSUED",
+        "date": str(db_invoice.created_at)
+    }
+    
+    main.publish_event("invoice.created", event_data)
+    
     return result.scalars().first()
 
 

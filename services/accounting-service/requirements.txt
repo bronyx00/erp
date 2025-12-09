@@ -12,3 +12,4 @@ alembic>=1.13.1
 python-multipart
 pandas
 openpyxl
+aio-pika

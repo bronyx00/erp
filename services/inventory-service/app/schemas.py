@@ -6,7 +6,7 @@ class ProductBase(BaseModel):
     sku: str
     name: str
     description: Optional[str] = None
-    category: str
+    category: str = "General"
     price: Decimal
     stock: int = 0
     

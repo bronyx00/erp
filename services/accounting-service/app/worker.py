@@ -1,130 +1,111 @@
-import pika
+import asyncio
 import json
 import os
-import time
-import sys
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-# Evita errores de path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app.models import Transaction
-from app.database import DATABASE_URL
+import aio_pika
+from sqlalchemy.future import select
+from app.database import AsyncSessionLocal
+from app.models import LedgerEntry, LedgerLine, Account
+from decimal import Decimal
+from datetime import datetime
 
-# Configuración
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/%2F")
-SYNC_DATABASE_URL = DATABASE_URL.replace("+asyncpg", "")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 
-engine = create_engine(SYNC_DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
+async def get_account_id_by_code(db, code: str, tenant_id: int):
+    """Busca el ID de una cuenta por su código PUC"""
+    result = await db.execute(select(Account).where(Account.code == code, Account.tenant_id == tenant_id))
+    account = result.scalar_one_or_none()
+    return account.id if account else None
 
-def register_income_from_invoice(data):
-    db = SessionLocal()
+async def process_invoice_issued(data: dict):
+    """Crea el asiento contable de una venta"""
+    print(f"Procesando Factura #{data.get('id')} - Monto: {data.get('total_amount')}")
+    
+    db = AsyncSessionLocal()
     try:
-        tenant_id = data.get("tenant_id")
-        if not tenant_id:
-            print("⚠️ Evento sin tenant_id, ignorando.")
+        tenant_id = data.get("tenant_id", 1)
+        amount = Decimal(str(data.get("total_amount")))
+        
+        # 1. Buscar Cuentas en el PUC (Códigos Estándar VE)
+        # 1.01.03.001 = Cuentas por Cobrar Clientes Nacionales
+        ar_account_id = await get_account_id_by_code(db, "1.01.03.001", tenant_id)
+        
+        # 4.01.01 = Ventas Brutas
+        sales_account_id = await get_account_id_by_code(db, "4.01.01", tenant_id)
+        
+        if not ar_account_id or not sales_account_id:
+            print("Error: No se encontraron las cuentas contables (1.01.03.001 o 4.01.01). ¿Corriste el seed?")
             return
-        
-        # Calcular total pagado sumando los items 
-        amount = data.get("total_amount", 0)
-        invoice_id = data.get("invoice_id")
-        
-        trans = Transaction(
+
+        # 2. Crear Cabecera del Asiento
+        entry = LedgerEntry(
             tenant_id=tenant_id,
-            transaction_type="INCOME",
-            category="Ventas",
-            amount=amount,
-            currency="USD",
-            description=f"Cobro Factura #${invoice_id}",
-            reference_id=str(invoice_id)
+            transaction_date=datetime.now().date(),
+            description=f"Venta Factura #{data.get('id')}",
+            reference=f"INV-{data.get('id')}",
+            total_amount=amount
         )
-        db.add(trans)
-        db.commit()
-        print(f"💰 Ingreso registrado: ${amount} (Factura #{invoice_id})")
+        db.add(entry)
+        await db.flush() # Para obtener ID del asiento
+
+        # 3. Crear Líneas (Partida Doble)
         
-    except Exception as e:
-        print(f"❌ Error registrando ingreso: {e}")
-        db.rollback()
-    finally:
-        db.close()
-        
-def register_transaction(data, trans_type):
-    db = SessionLocal()
-    try:
-        tenant_id = data.get("tenant_id")
-        if not tenant_id: return
-        
-        # Adaptamos los campos según el evento
-        amount = data.get("amount") or data.get("total_amount", 0)
-        category = data.get("category", "Ventas")
-        desc = data.get("description", "")
-        ref_id = data.get("reference_id") or str(data.get("invoice_id", ""))
-        
-        trans = Transaction(
-            tenant_id=tenant_id,
-            transaction_type=trans_type, # INCOME o EXPENSE
-            category=category,
-            amount=amount,
-            currency="USD",
-            description=desc,
-            reference_id=ref_id
+        # DÉBITO: Cuentas por Cobrar (Entra derecho de cobro)
+        line_debit = LedgerLine(
+            entry_id=entry.id,
+            account_id=ar_account_id,
+            debit=amount,
+            credit=0
         )
-        db.add(trans)
-        db.commit()
-        print(f"📝 {trans_type} registrado: ${amount} - {category}")
-    
+        
+        # CRÉDITO: Ingresos por Ventas (Sale el servicio/bien -> Ingreso)
+        line_credit = LedgerLine(
+            entry_id=entry.id,
+            account_id=sales_account_id,
+            debit=0,
+            credit=amount
+        )
+        
+        db.add(line_debit)
+        db.add(line_credit)
+        
+        await db.commit()
+        print(f"Asiento Contable ID {entry.id} creado exitosamente.")
+        
     except Exception as e:
-        print(f"❌ Error DB: {e}")
-        db.rollback()
+        print(f"Error procesando contabilidad: {e}")
+        await db.rollback()
     finally:
-        db.close()
-    
-def callback(ch, method, properties, body):
-    print(f"📥 [Accounting] Evento: {method.routing_key}")
-    try:
-        message = json.loads(body)
-        # A veces el payload viene directo o dentro de 'data'
-        payload = message if "tenant_id" in message else message.get("data", {})
+        await db.close()
+
+async def main():
+    connection = await aio_pika.connect_robust(RABBITMQ_URL)
+    async with connection:
+        channel = await connection.channel()
         
-        if method.routing_key == "invoice.paid":
-            # Venta -> Ingreso
-            register_transaction(payload, "INCOME")
-        elif method.routing_key == "payroll.paid":
-            # Nómina -> Gasto
-            register_transaction(payload, "EXPENSE")
-            
-        ch.basic_ack(delivery_tag=method.delivery_tag)
-    except Exception as e:
-        print(f"Error: {e}")
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+        # Declarar Exchange y Queue
+        exchange = await channel.declare_exchange(
+            "erp_events", 
+            aio_pika.ExchangeType.TOPIC,
+            durable=True
+        )
+        queue = await channel.declare_queue("accounting_queue", durable=True)
         
-def start_worker():
-    print("⏳ [Accounting Worker] Conectando...")
-    connection = None
-    
-    # --- LÓGICA DE REINTENTO ---
-    while True:
-        try:
-            connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
-            break
-        except pika.connections.AMQPConnectionError:
-            print("     Reintentando conexión en 5s...")
-            time.sleep(5)
-    
-    
-    
-    channel = connection.channel()
-    channel.exchange_declare(exchange='erp_events', exchange_type='topic', durable=True)
-    
-    result = channel.queue_declare(queue='accounting_ledger', durable=True)
-    queue_name = result.method.queue
-    
-    channel.queue_bind(exchange='erp_events', queue=queue_name, routing_key='invoice.paid')
-    channel.queue_bind(exchange='erp_events', queue=queue_name, routing_key='payroll.paid')
-    
-    channel.basic_consume(queue=queue_name, on_message_callback=callback)
-    print("🎧 [Accounting Worker] Escuchando dinero...")
-    channel.start_consuming()
+        # Bind: Escuchar eventos de facturas
+        await queue.bind(exchange, routing_key="invoice.created")
+        
+        print("Accounting Worker esperando eventos...")
+        
+        async with queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                async with message.process():
+                    data = json.loads(message.body.decode())
+                    routing_key = message.routing_key
+                    
+                    if routing_key == "invoice.created":
+                        await process_invoice_issued(data)
 
 if __name__ == "__main__":
-    start_worker()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Worker detenido.")

@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Numeric, DateTime, Boolean, Date, ForeignKey, Text
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from sqlalchemy.sql import func
 from .database import Base
 import enum
@@ -31,13 +31,23 @@ class Account(Base):
     is_transactional = Column(Boolean, default=True)
     
     parent_id = Column(Integer, ForeignKey("account.id"), nullable=True)
+    parent = relationship(
+        "Account",
+        remote_side=[id],
+        back_populates="children"
+    )
     
     # Saldo actual
     balance = Column(Numeric(12, 2), default=0)
     is_active = Column(Boolean, default=True)
     
+    
     # Relaciones
-    children = relationship("Account", backref="parent", remote_side=[id])
+    children = relationship(
+        "Account", 
+        back_populates="parent",
+        cascade="all, delete-orphan"
+    )
     
 
 class LedgerEntry(Base):
