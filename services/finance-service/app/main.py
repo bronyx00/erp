@@ -19,7 +19,6 @@ from .schemas import PaginatedResponse, InvoiceSummary
 from .utils.pdf_generator import generate_invoice_pdf
 from jose import jwt, JWTError
 
-
 # --- Configuración de Logging ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("finance-service")
@@ -29,9 +28,7 @@ def run_exchange_rate_job():
     """
     Ejecuta la actualización de la tasa usando una conexión síncrona.
     """
-    logger.info("⏰ [SCHEDULER] Iniciando trea de tasa cambiaria...")
-    
-    # Creamos una sesión síncrona nueva solo para esta tarea
+    logger.info("⏰ [SCHEDULER] Iniciando tarea de tasa cambiaria...")
     try:
         with SyncSessionLocal() as db:
             exchange.fetch_and_store_rate(db)
@@ -40,40 +37,28 @@ def run_exchange_rate_job():
         logger.error(f"❌ [SCHEDULER] Falló la tarea: {e}")
     
 # --- Ciclo de Vida de la App (Startup/Shutdown) ---
-rabbitmq_connection = None
-rabbitmq_channel = None
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global rabbitmq_connection, rabbitmq_channel
     logger.info("🚀 Iniciando Finance Service...")
     
-    # Inicia Base de Datos
+    # 1. Crear tablas (Si no existen, como respaldo)
     async with engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
         
-    # Inicia RabbitMQ 
-    try:
-        url = os.getenv("RABBITMQ_URL", 'amqp://guest:guest@rabbitmq:5672/%2F')
-        params = pika.URLParameters(url)
-        rabbitmq_connection = pika.BlockingConnection(params)
-        rabbitmq_channel = rabbitmq_connection.channel()
-        rabbitmq_channel.exchange_declare(exchange='erp_events', exchange_type='topic', durable=True)
-        logger.info("🐰 Conectado a RabbitMQ")
-    except Exception as e:
-        logger.error(f"❌ Error conectando a RabbitMQ: {e}")
-
-    # Inicia Scheduler
+    # 2. Iniciar el Scheduler
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_exchange_rate_job, 'interval', hours=6)
+    scheduler.add_job(run_exchange_rate_job) # Ejecutar ya al inicio
     scheduler.start()
+    logger.info("⏰ Scheduler iniciado.")
     
-    # Apagado
+    # --- ¡ESTA LÍNEA ES CRÍTICA! ---
+    yield 
+    # -------------------------------
+    
+    # 3. Apagado
     scheduler.shutdown()
-    if rabbitmq_connection and not rabbitmq_connection.is_closed:
-        rabbitmq_connection.close()
     logger.info("🛑 Finance Service detenido.")
-    
 
 # --- Configuración de FastAPI ---
 app = FastAPI(title="Finance Service", root_path="/api/finance", lifespan=lifespan)
@@ -86,27 +71,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Configuración de RAbbitMQ --- 
+# --- Configuración de RabbitMQ --- 
 def publish_event(routing_key: str, data: dict):
-    """
-    Publica reutilizando el canal global.
-    """
-    global rabbitmq_channel
     try:
-        if rabbitmq_channel and rabbitmq_channel.is_open:
-            rabbitmq_channel.basic_publish(
-                exchange='erp-events',
-                routing_key=routing_key,
-                body=json.dumps(data),
-                properties=pika.BasicProperties(delivery_mode=2)
-            )
-            logger.info(f"📢 Evento publicado: {routing_key}")
-        else:
-            logger.error("❌ RabbitMQ canal cerrado, no se pudo enviar evento.")
+        url = os.getenv("RABBITMQ_URL", 'amqp://guest:guest@rabbitmq:5672/%2F')
+        connection = pika.BlockingConnection(pika.URLParameters(url))
+        channel = connection.channel()
+        channel.exchange_declare(exchange='erp_events', exchange_type='topic', durable=True)
+        channel.basic_publish(
+            exchange='erp_events',
+            routing_key=routing_key,
+            body=json.dumps(data),
+            properties=pika.BasicProperties(delivery_mode=2)
+        )
+        connection.close()
+        logger.info(f"📢 Evento publicado: {routing_key}")
     except Exception as e:
         logger.error(f"❌ Error publicando evento {routing_key}: {e}")
-        
-        
+
+# --- Endpoints ---
+
 @app.post("/payments", response_model=schemas.PaymentResponse)
 async def create_payment(
     payment: schemas.PaymentCreate, 
@@ -122,24 +106,14 @@ async def create_payment(
                 "tenant_id": tenant_id,
                 "total_amount": float(invoice.total_usd),
                 "paid_at": str(new_payment.created_at),
-                "items": [
-                    {"product_id": item.product_id, "quantity": item.quantity}
-                    for item in invoice.items
-                ]
+                "items": [{"product_id": item.product_id, "quantity": item.quantity} for item in invoice.items]
             }
             publish_event("invoice.paid", event_data)
         
         return new_payment
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-        
-# --- Eventos de Inicio ---
-@app.on_event("startup")
-async def startup():
-    async with database.engine.begin() as conn:
-        await conn.run_sync(models.Base.metadata.create_all)
-        
-# --- Endpoints ---
+
 @app.post("/invoices", response_model=schemas.InvoiceResponse)
 async def create_invoice(
     invoice: schemas.InvoiceCreate, 
@@ -147,10 +121,8 @@ async def create_invoice(
     tenant_id: int = Depends(get_current_tenant_id),
     token: str = Depends(oauth2_scheme)
 ):
-    # Guardar en DB
     new_invoice = await crud.create_invoice(db, invoice, tenant_id=tenant_id, token=token)
     
-    # Convertir a diccionario para enviar
     invoice_dict = {
         "id": new_invoice.id,
         "amount": str(new_invoice.total_usd),
@@ -159,12 +131,9 @@ async def create_invoice(
         "customer_rif": new_invoice.customer_rif,
         "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in new_invoice.items]
     }
-    
-    # Enviar evento a RabbitMQ
     publish_event("invoice.created", invoice_dict)
     
     return new_invoice
-
     
 @app.get("/invoices", response_model=PaginatedResponse[InvoiceSummary])
 async def read_invoices(
@@ -175,24 +144,16 @@ async def read_invoices(
     db: AsyncSession = Depends(database.get_db), 
     tenant_id: int = Depends(get_current_tenant_id)
 ):
-    return await crud.get_invoices(
-        db, tenant_id=tenant_id, page=page, limit=limit, status=status, search=search
-    )
+    return await crud.get_invoices(db, tenant_id=tenant_id, page=page, limit=limit, status=status, search=search)
 
-# --- Consultar Tasa ---
 @app.get("/exchange-rate")
 async def get_current_rate(db: AsyncSession = Depends(database.get_db)):
-    """Devuelve la última tasa conocida registrada en la Base de Datos."""
-    # Consultamos la tabla ExchangeRate, ordenamos por fecha descendente y tomamos la primera
     query = select(models.ExchangeRate).order_by(models.ExchangeRate.acquired_at.desc()).limit(1)
     result = await db.execute(query)
     rate = result.scalars().first()
     
     if not rate:
-        return {
-            "status": "No data",
-            "message": "Aún no hay tasas registradas. Espera que el Scheduler ejecute la tarea."
-        }
+        return {"status": "No data", "message": "Aún no hay tasas registradas."}
         
     return {
         "currency_from": rate.currency_from,
@@ -201,29 +162,23 @@ async def get_current_rate(db: AsyncSession = Depends(database.get_db)):
         "source": rate.source,
         "acquired_at": rate.acquired_at
     }
-    
-# --- Función auxiliar para validar token de supervisor ---
+
+# Validar Token Supervisor
 def validate_supervisor_token(token: str, required_tenant_id: int):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         role = payload.get("role")
-        
         supervisor_tenant_id = payload.get("tenant_id")
         
-        # El ID de la empresa del supervisor DEBE coincidir con el ID de la empresa actual
         if supervisor_tenant_id != required_tenant_id:
-            raise HTTPException(
-                status_code=403,
-                detail="ACCESO DENEGADO: El supervisor pertenece a otra empresa."
-            )
+            raise HTTPException(status_code=403, detail="ACCESO DENEGADO: El supervisor pertenece a otra empresa.")
         
         if role not in ["OWNER", "ADMIN"]:
             raise HTTPException(status_code=403, detail="Se requiere autorización de Supervisor.")
         return True
     except JWTError:
         raise HTTPException(status_code=403, detail="Credenciales de supervisor inválidas.")
-    
-# --- ENDPOINT ANULAR FACTURA ---
+
 @app.post("/invoices/{invoice_id}/void", response_model=schemas.InvoiceResponse)
 async def void_invoice(
     invoice_id: int,
@@ -231,24 +186,16 @@ async def void_invoice(
     tenant_id: int = Depends(get_current_tenant_id),
     x_supervisor_token: Optional[str] = Header(None, alias="X-Supervisor-Token")
 ):
-    # Buscar primero la factura
     invoice = await crud.get_invoice_by_id(db, invoice_id, tenant_id)
-    
     if not invoice:
-        raise HTTPException(status_code=404, detail="Factura no encontrada o acceso denegado.")
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
     
     if invoice.status == "VOID":
         raise HTTPException(status_code=400, detail="La factura ya está anulada")
     
-    # Validar antes de escribir
-    # Si está pagada o tiene pagos, exige supervisor
     if invoice.status in ["PAID", "PARTIALLY_PAID"]:
         if not x_supervisor_token:
-            raise HTTPException(
-                status_code=403,
-                detail="Factura con pagos. Se requiere aprobación del Supervisor."
-            )
-        
+            raise HTTPException(status_code=403, detail="Factura con pagos. Se requiere aprobación del Supervisor.")
         validate_supervisor_token(x_supervisor_token, tenant_id)
         
     invoice = await crud.set_invoice_void(db, invoice)
@@ -258,10 +205,8 @@ async def void_invoice(
         "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in invoice.items]
     }
     publish_event("invoice.voided", event_data)
-    
     return invoice
 
-# --- REPORTES ----
 @app.get("/reports/sales-by-method", response_model=list[schemas.SalesReportItem])
 async def get_sales_report_by_method(
     db: AsyncSession = Depends(database.get_db),
@@ -277,34 +222,21 @@ async def get_dashboard_metrics(
     return await crud.get_dashboard_metrics(db, tenant_id)
 
 @app.get("/sales-over-time", response_model=list[schemas.SalesDataPoint])
-def read_sales_over_time(db: AsyncSession = Depends(database.get_db), tenant_id: int = Depends(get_current_tenant_id)):
-    """
-    Retorna la suma de ventas en USD por mes para la gráfica.
-    """
-    # Asume que get_current_active_user ya extrae el tenant_id implícitamente
-    sales_data = crud.get_sales_over_time(db)
-    
-    return sales_data
+async def read_sales_over_time(db: AsyncSession = Depends(database.get_db), tenant_id: int = Depends(get_current_tenant_id)):
+    return await crud.get_sales_compatison(db, tenant_id)
 
-# --- ENDPOINT PDF ---
 @app.get("/invoices/{invoice_id}/pdf")
 async def get_invoice_pdf(
     invoice_id: int,
     db: AsyncSession = Depends(database.get_db),
     tenant_id: int = Depends(get_current_tenant_id)
 ):
-    # Buscar factura completa 
     invoice = await crud.get_invoice_by_id(db, invoice_id, tenant_id)
     if not invoice:
-        raise HTTPException(status_Code=404, detail="Factura no encontrada")
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
     
-    # Generar PDF en memoria
-    pdf_buffer = generate_invoice_pdf(
-        invoice_data=invoice,
-        items=invoice.items
-    )
+    pdf_buffer = generate_invoice_pdf(invoice_data=invoice, items=invoice.items)
     
-    # Deolver como archivo descargable
     return StreamingResponse(
         pdf_buffer,
         media_type="application/pdf",

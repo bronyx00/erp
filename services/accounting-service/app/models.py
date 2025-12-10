@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, Numeric, DateTime, Boolean, Date, ForeignKey, Text
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, Boolean, Date, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
 import enum
@@ -48,6 +48,10 @@ class Account(Base):
         "Account", 
         back_populates="parent",
         cascade="all, delete-orphan"
+    )
+    
+    __table_args__ = (
+        UniqueConstraint('code', 'tenant_id', name='uq_account_code_tenant'),
     )
     
 
