@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
+from .schemas import PaginatedResponse
 from .security import get_current_tenant_id
 import pika
 import json
@@ -46,12 +47,14 @@ def publish_event(routing_key: str, data: dict):
         logger.error(f"❌ Error RabbitMQ: {e}")
         
 
-@app.get("/employees", response_model=list[schemas.EmployeeResponse])
+@app.get("/employees", response_model=PaginatedResponse[schemas.EmployeeResponse])
 async def read_employees(
+    page: int = 1,
+    limit: int = 50,
     db: AsyncSession = Depends(database.get_db),
     tenant_id: int = Depends(get_current_tenant_id)
 ):
-    return await crud.get_employees(db, tenant_id=tenant_id)
+    return await crud.get_employees(db, tenant_id=tenant_id, page=page, limit=limit)
 
 @app.post("/employees", response_model=schemas.EmployeeResponse)
 async def create_employee(

@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
 from .security import get_current_tenant_id
+from .schemas import PaginatedResponse
 
 # Inicialización de DB
 async def lifespan(app: FastAPI):
@@ -21,12 +22,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/products", response_model=list[schemas.ProductResponse])
+@app.get("/products", response_model=PaginatedResponse[schemas.ProductResponse])
 async def read_products(
+    page: int = 1,
+    limit: int = 50,
     db: AsyncSession = Depends(database.get_db),
     tenant_id: int = Depends(get_current_tenant_id)    
 ):
-    return await crud.get_products(db, tenant_id=tenant_id)
+    return await crud.get_products(db, tenant_id=tenant_id, page=page, limit=limit)
 
 @app.post("/products", response_model=schemas.ProductResponse)
 async def create_product(

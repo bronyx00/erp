@@ -3,13 +3,33 @@ from sqlalchemy import func
 from sqlalchemy.future import select
 from . import models, schemas
 
-async def get_employees(db: AsyncSession, tenant_id: int):
+async def get_employees(db: AsyncSession, tenant_id: int, page: int = 1, limit: int = 50):
+    offset = (page - 1) * limit
+    
     query = select(models.Employee).filter(
         models.Employee.tenant_id == tenant_id,
         models.Employee.is_active == True
     )
+    
+    # Contar Total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+    
+    # Obtiene Datos Paginados
+    query = query.offset(offset).limit(limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    data = result.scalars().all()
+    
+    return {
+        "data": data,
+        "meta": {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total + limit - 1) // limit
+        }
+    }
 
 async def create_employee(db: AsyncSession, employee: schemas.EmployeeCreate, tenant_id: int):
     db_employee = models.Employee(

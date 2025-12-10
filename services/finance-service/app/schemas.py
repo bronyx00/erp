@@ -33,6 +33,13 @@ class InvoiceItemCreate(BaseModel):
     product_id: int
     quantity: int
     
+class InvoicePaymentCreate(BaseModel):
+    amount: Decimal
+    payment_method: str
+    reference: Optional[str] = None
+    notes: Optional[str] = None
+
+    
 class InvoiceItemResponse(BaseModel):
     product_name: str
     quantity: int
@@ -44,6 +51,7 @@ class InvoiceCreate(BaseModel):
     customer_tax_id: str
     currency: str = "USD"
     items: List[InvoiceItemCreate] # Recibe una lista de items
+    payment: Optional[InvoicePaymentCreate] = None
 
 class PaymentCreate(BaseModel):
     invoice_id: int

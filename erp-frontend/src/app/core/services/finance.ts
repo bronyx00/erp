@@ -28,7 +28,6 @@ export interface LedgerEntry {
   reference: string; // Ej: Factura # 1234
 }
 
-
 // Modelo de un Item de Pago Individual
 export interface PaymentDetail {
   method: PaymentMethodType;
@@ -50,10 +49,18 @@ export interface InvoiceItemCreate {
   quantity: number;
 }
 
+export interface InvoicePaymentCreate {
+  amount: number;
+  payment_method: string;
+  reference?: string;
+  notes?: string;
+}
+
 export interface InvoiceCreate {
   customer_tax_id: string;
   currency: string;
   items: InvoiceItemCreate[];
+  payment?: InvoicePaymentCreate;
 }
 
 export interface Invoice {

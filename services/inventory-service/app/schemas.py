@@ -1,6 +1,19 @@
 from pydantic import BaseModel, ConfigDict
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List, Generic, TypeVar
+
+T = TypeVar("T")
+
+# GENERIC PAGINATION
+class MetaData(BaseModel):
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+    
+class PaginatedResponse(BaseModel, Generic[T]):
+    data: List[T]
+    meta: MetaData
 
 class ProductBase(BaseModel):
     sku: str

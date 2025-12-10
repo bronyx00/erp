@@ -1,5 +1,6 @@
 import httpx
 import logging
+import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, Session
@@ -9,6 +10,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from . import models, schemas, main
 from jose import jwt
+from .security import SECRET_KEY, ALGORITHM
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +26,10 @@ def round_money(amount: Decimal) -> Decimal:
 # Helper para decodificar usuario
 def get_user_from_token(token: str):
     try:
-        payload = jwt.decode(token, "SECRET_SUPER_SECRETO_CAMBIAME", algorithms=["HS256"])
+        payload = jwt.decode(token, SECRET_KEY, ALGORITHM)
         return payload.get("sub"), payload.get("role")
-    except:
+    except Exception as e:
+        logger.error(f"Error decodificando token: {e}")
         return None, None
 
 # ---- HELPERS PARA DATOS EXTERNOS ----
@@ -94,11 +97,16 @@ async def get_next_invoice_number(db: AsyncSession, tenant_id: int) -> int:
     return (max_enum or 0) + 1
 
 async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int, token: str):
+    """
+    Crea una factura y opcionalmente procesa su pago inmediato.
+    Optimizado para consultar productos en paralelo.
+    """
     # Obtiene datos del usuario
     user_email, user_role = get_user_from_token(token)
     
     # Obtiene Datos Fiscales de la Empresa
     tenant_data = await get_tenant_data(token)
+    
     if not tenant_data:
         raise ValueError("No se pudieron obtener los datos fiscales de la empresa")
     
@@ -106,6 +114,14 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
     customer_data = {}
     if invoice.customer_tax_id:
         customer_data = await get_customer_by_tax_id(invoice.customer_tax_id, token) or {}
+        
+    product_tasks = [get_product_details(item.product_id, token) for item in invoice.items]
+    products_results = await asyncio.gather(*product_tasks)
+    
+    # Mapa para acceso rápido
+    products_map = {
+        p['id']: p for p in products_results if p is not None
+    }
 
     # Cálculos (Subtotales e IVA)
     total_base = Decimal(0)
@@ -115,7 +131,9 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
     tax_rate = Decimal(tenant_data.get('tax_rate', 16)) / 100 if tenant_data.get('tax_active') else Decimal(0)
         
     for item in invoice.items:
-        product = await get_product_details(item.product_id, token)
+        # Recupera del mapa en memoria
+        product = products_map.get(item.product_id)
+        
         if not product:
             raise ValueError(f"Producto ID {item.product_id} no encontrado")
         
@@ -143,6 +161,29 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         ))
     
     total_final = round_money(total_base + total_tax)
+    
+    # Determinar Estado y Pagos
+    # Si viene un pago dede el POS que cubre el total, la factura nace PAGADA
+    initial_status = "ISSUED"
+    db_payments = []
+    
+    if invoice.payment:
+        # Valida que el monto sea suficiente
+        if invoice.payment.amount >= total_final:
+            initial_status = "PAID"
+        elif invoice.payment.amount > 0:
+            inicial_status = "PARTIALLY_PAID"
+            
+        # Crea el objeto de pago en memoria para guardalo junto con la factura
+        payment_entry = models.Payment(
+            amount=invoice.payment.amount,
+            currency=invoice.currency,
+            payment_method=invoice.payment.payment_method,
+            reference=invoice.payment.reference,
+            notes=invoice.payment.notes
+        )
+        
+        db_payments.append(payment_entry)
     
     # Obtener Consecutivo Fiscal
     next_number = await get_next_invoice_number(db, tenant_id)
@@ -185,8 +226,9 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         created_by_email=user_email,
         created_by_role=user_role,
         
-        status="ISSUED",
-        items=db_items
+        status=initial_status,
+        items=db_items,
+        payments=db_payments
     )
     
     # Guardar
@@ -202,19 +244,30 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         .filter(models.Invoice.id == db_invoice.id)
     )
     result = await db.execute(query)
+    final_invoice = result.scalars().first()
     
     event_data = {
-        "id": db_invoice.id,
+        "id": final_invoice.id,
         "tenant_id": tenant_id,
-        "total_amount": float(db_invoice.total_usd),
-        "currency": db_invoice.currency,
-        "status": db_invoice.status,
-        "date": str(db_invoice.created_at)
+        "total_amount": float(final_invoice.total_usd),
+        "currency": final_invoice.currency,
+        "status": final_invoice.status,
+        "date": str(final_invoice.created_at)
     }
     
     main.publish_event("invoice.created", event_data)
     
-    return result.scalars().first()
+    if initial_status == "PAID":
+        paid_event = {
+            "invoice_id": final_invoice.id,
+            "tenant_id": tenant_id,
+            "total_amount": float(final_invoice.total_usd),
+            "paid_at": str(datetime.utcnow()),
+            "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in final_invoice.items]
+        }
+        main.publish_event("invoice.paid", paid_event)
+    
+    return final_invoice
 
 
 async def get_invoices(
@@ -275,7 +328,9 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
             selectinload(models.Invoice.payments),
             selectinload(models.Invoice.items)
         )
+        .with_for_update()
     )
+    
     result = await db.execute(query)
     invoice = result.scalars().first()
     
@@ -287,11 +342,9 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     balance_due = invoice.total_usd - total_paid
     
     payment_amount_rounded = round_money(payment.amount)
-    balance_due_rounded = round_money(balance_due)
     
-    if payment_amount_rounded > balance_due_rounded:
-        # Se puede cambiar cuando queramos hacer el estado de 'crédito a favor', por ahora solo emite error
-        raise ValueError(f"El monto excede la deuda. Saldo pendiente: {balance_due_rounded}")
+    if payment_amount_rounded > balance_due + Decimal("0.01"):
+        raise ValueError(f"El monto excede la deuda. Saldo pendiente: {balance_due}")
     
     # Crear Pago
     db_payment = models.Payment(

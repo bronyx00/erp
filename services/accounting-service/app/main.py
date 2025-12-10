@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
 from .security import get_current_tenant_id
+from .schemas import PaginatedResponse
 
 async def lifespan(app: FastAPI):
     async with database.engine.begin() as conn:
@@ -100,26 +101,53 @@ async def trigger_seed_puc(
 
 # --- ENDPOINTS DE LIBROS CONTABLES ---
 
-@app.get("/books/journal", response_model=List[schemas.LedgerEntryResponse])
-async def get_journal_book(
+@app.get("/books/journal", response_model=PaginatedResponse[schemas.LedgerEntryResponse])
+async def get_journal_book(   
     start_date: date,
     end_date: date,
-    db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    page: int = 1,
+    limit: int = 100,
+    db: AsyncSession = Depends(database.get_db)
 ):
-    """Libro Diario: Lita cronológicamente de todos los asientos"""
-    query = (
+    """Libro Diario: Lista cronológicamente de todos los asientos"""
+    offset = (page - 1) * limit
+    
+    base_query = (
         select(models.LedgerEntry)
-        .options(selectinload(models.LedgerEntry.lines).joinedload(models.LedgerLine.account))
         .filter(
             models.LedgerEntry.transaction_date >= start_date,
             models.LedgerEntry.transaction_date <= end_date
         )
-        .order_by(models.LedgerEntry.transaction_date, models.LedgerEntry.id)
     )
+    
+    # Total Count
+    count_query = select(func.count()).select_from(base_query.subquery())
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+    
+    # Fetch Data 
+    query = (
+        base_query
+        .options(selectinload(models.LedgerEntry.lines).joinedload(models.LedgerLine.account))
+        .order_by(models.LedgerEntry.transaction_date, models.LedgerEntry.id)
+        .offset(offset)
+        .limit(limit)
+    )
+    
     result = await db.execute(query)
     entries = result.scalars().all()
-    return entries
+    
+    total_pages = (total + limit - 1) // limit
+    
+    return {
+        "data": entries,
+        "meta": {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages
+        }
+    }
 
 @app.get("/books/ledger")
 async def get_generatl_ledger(

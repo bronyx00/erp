@@ -1,6 +1,18 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
-from typing import Optional
+from typing import Optional, List, Generic, TypeVar
 from datetime import datetime
+
+T = TypeVar("T")
+
+class MetaData(BaseModel):
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    data: List[T]
+    meta: MetaData
 
 class CustomerBase(BaseModel):
     name: str

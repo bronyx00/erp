@@ -88,31 +88,41 @@ export class PosComponent {
     const total = this.cartTotal();
 
     if (received < total) {
-      alert('Error: El monto recibido es menor al total.');
+      alert('Error: El monto recibino es menor al total.')
       return;
     }
 
     const invoiceData: InvoiceCreate = {
-      // Datos del cliente
       customer_tax_id: 'V-000000',
-      currency: 'USD',
+      currency: 'VES',
       items: this.cartItems().map(item => ({
         product_id: item.id,
         quantity: item.quantity
-      }))
-    }
+      })),
+      // Envia el pago directamente al crear la factura
+      payment: {
+        amount: received,
+        payment_method: this.paymentMethod(),
+        notes: 'Venta desde POS'
+        }
+    };
 
     this.financeService.createInvoice(invoiceData).subscribe({
       next: (invoice) => {
-        console.log('Factura Creada', invoice);
+        console.log('Factura Creada y Pagada', invoice);
+
+        // Agregar luego la impresión del ticket acá
+        // this.printService.printTicket(invoice)
+        this.cartService.clearCart();
         this.closePaymentModal();
       },
       error: (err) => {
-        console.error('Error al facturar:', err);
+        console.error('Error al facturar', err);
         alert('Error al conectar con el servidor.');
       }
     });
   }
+  
 
   setPaymentMethod(method: string): void {
     this.paymentMethod.set(method as PaymentMethodType)

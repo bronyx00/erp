@@ -40,31 +40,40 @@ def run_exchange_rate_job():
         logger.error(f"❌ [SCHEDULER] Falló la tarea: {e}")
     
 # --- Ciclo de Vida de la App (Startup/Shutdown) ---
+rabbitmq_connection = None
+rabbitmq_channel = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global rabbitmq_connection, rabbitmq_channel
     logger.info("🚀 Iniciando Finance Service...")
     
-    # Crear tablas (Async)
+    # Inicia Base de Datos
     async with engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
         
-    # Iniciar el Scheduler (Reloj)
+    # Inicia RabbitMQ 
+    try:
+        url = os.getenv("RABBITMQ_URL", 'amqp://guest:guest@rabbitmq:5672/%2F')
+        params = pika.URLParameters(url)
+        rabbitmq_connection = pika.BlockingConnection(params)
+        rabbitmq_channel = rabbitmq_connection.channel()
+        rabbitmq_channel.exchange_declare(exchange='erp_events', exchange_type='topic', durable=True)
+        logger.info("🐰 Conectado a RabbitMQ")
+    except Exception as e:
+        logger.error(f"❌ Error conectando a RabbitMQ: {e}")
+
+    # Inicia Scheduler
     scheduler = BackgroundScheduler()
-    
-    # Ejecutar cada 6 horas.
     scheduler.add_job(run_exchange_rate_job, 'interval', hours=6)
-    
-    # Se ejecuta inmediatamente al arrancar para tener datos ya
-    scheduler.add_job(run_exchange_rate_job)
-    
     scheduler.start()
-    logger.info("⏰ Scheduler iniciado.")
-    
-    yield # Corre la aplicación
     
     # Apagado
     scheduler.shutdown()
+    if rabbitmq_connection and not rabbitmq_connection.is_closed:
+        rabbitmq_connection.close()
     logger.info("🛑 Finance Service detenido.")
+    
 
 # --- Configuración de FastAPI ---
 app = FastAPI(title="Finance Service", root_path="/api/finance", lifespan=lifespan)
@@ -80,27 +89,20 @@ app.add_middleware(
 # --- Configuración de RAbbitMQ --- 
 def publish_event(routing_key: str, data: dict):
     """
-    Publica cualquier evento en el bus de mensajes 'erp_events'.
-    routing_key: El 'asunto' del mensaje (ej. 'invoice.created', 'invoice.paid')
+    Publica reutilizando el canal global.
     """
+    global rabbitmq_channel
     try:
-        # Conexión
-        url = os.getenv("RABBITMQ_URL", 'amqp://guest:guest@rabbitmq:5672/%2F')
-        connection = pika.BlockingConnection(pika.URLParameters(url))
-        channel = connection.channel()
-        
-        # Declaramos un 'Topic Exchange' (El centro de distribución)
-        channel.exchange_declare(exchange='erp_events', exchange_type='topic', durable=True)
-        
-        # Publicamos el mensaje al Exchange
-        channel.basic_publish(
-            exchange='erp_events', # ¡Ahora usamos un exchange!
-            routing_key=routing_key,
-            body=json.dumps(data),
-            properties=pika.BasicProperties(delivery_mode=2)
-        )
-        connection.close()
-        logger.info(f"📢 Evento publicado: {routing_key}")
+        if rabbitmq_channel and rabbitmq_channel.is_open:
+            rabbitmq_channel.basic_publish(
+                exchange='erp-events',
+                routing_key=routing_key,
+                body=json.dumps(data),
+                properties=pika.BasicProperties(delivery_mode=2)
+            )
+            logger.info(f"📢 Evento publicado: {routing_key}")
+        else:
+            logger.error("❌ RabbitMQ canal cerrado, no se pudo enviar evento.")
     except Exception as e:
         logger.error(f"❌ Error publicando evento {routing_key}: {e}")
         

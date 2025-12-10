@@ -1,7 +1,19 @@
 from pydantic import BaseModel, ConfigDict, Field
 from decimal import Decimal
 from datetime import datetime, date
-from typing import Optional, List
+from typing import Optional, List, Generic, TypeVar
+
+T = TypeVar("T")
+
+class MetaData(BaseModel):
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    data: List[T]
+    meta: MetaData
 
 class AccountBase(BaseModel):
     code: str

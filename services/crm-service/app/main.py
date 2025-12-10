@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
 from .security import get_current_tenant_id
+from .schemas import PaginatedResponse
 
 async def lifespan(app: FastAPI):
     async with database.engine.begin() as conn:
@@ -19,12 +20,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/customers", response_model=list[schemas.CustomerResponse])
+@app.get("/customers", response_model=PaginatedResponse[schemas.CustomerResponse])
 async def read_customers(
+    page: int = 1,
+    limit: int = 50,
     db: AsyncSession = Depends(database.get_db),
     tenant_id: int = Depends(get_current_tenant_id)
 ):
-    return await crud.get_customers(db, tenant_id=tenant_id)
+    return await crud.get_customers(db, tenant_id=tenant_id, page=page, limit=limit)
 
 @app.post("/customers", response_model=schemas.CustomerResponse)
 async def create_customer(

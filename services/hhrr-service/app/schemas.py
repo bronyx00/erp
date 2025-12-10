@@ -1,7 +1,19 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Generic, TypeVar
 from decimal import Decimal
 from datetime import date, datetime
+
+T = TypeVar("T")
+
+class MetaData(BaseModel):
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    data: List[T]
+    meta: MetaData
 
 class EmergencyContact(BaseModel):
     name: Optional[str] = None
