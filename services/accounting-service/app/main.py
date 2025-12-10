@@ -11,7 +11,7 @@ from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
-from .security import get_current_tenant_id
+from .security import get_current_tenant_id, oauth2_scheme
 from .schemas import PaginatedResponse
 from .utils.financial_pdf import FinancialReportGenerator
 
@@ -190,12 +190,19 @@ async def get_general_ledger(
 
 @app.get("/reports/download")
 async def download_financial_report(
-    report_type: str, # 'balance_sheet', 'income_statement'
+    report_type: str, # 'balance_sheet', 'income_statement', 'equity_changes', 'clear'
     period: str,        # 'Q1', 'Q2', 'Q3', 'Q4', 'S1', 'S2', 'YEAR'
     year: int,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    tenant_id: int = Depends(get_current_tenant_id),
+    token: str = Depends(oauth2_scheme)
 ):
+    # Obtener Datos de Empresa
+    tenant_info = await crud.get_tenant_data(token)
+    company_name = tenant_info.get("business_name") if tenant_info else "EMPRESA DEMO"
+    rif = tenant_info.get("rif") if tenant_info else "J.12345678-9"
+    
+    
     # Denifir Fechas segun periodo
     start_date = date(year, 1, 1)
     end_date = date(year, 12, 31)
@@ -216,18 +223,30 @@ async def download_financial_report(
     # Obtener Datos
     data = await crud.get_account_balances(db, tenant_id, start_date, end_date)
     
-    # Obtener nombre de la empresa
-    company_name = "EMPRESA C.A"
-    rif = "J-12345678-9"
-    
     generator = FinancialReportGenerator(company_name, rif)
+    filename = f"{tenant_info.get("name")}_{report_type}_{period}_{year}.pdf"
     
     if report_type == 'balance_sheet':
+        # Para Balance: Saldos Acumulados a la fecha de fin
+        data = await crud.get_account_balances_at_date(db, tenant_id, end_date)
         pdf = generator.generate_balance_sheet(data, end_date)
-        filename = f"situacion_financiera_{period}_{year}.pdf"
+        
     elif report_type == 'income_statement':
+        # Para Resultados: Movimientos del periodo
+        data = await crud.get_period_movements(db, tenant_id, start_date, end_date)
         pdf = generator.generate_income_statement(data, start_date, end_date)
-        filename = f"estado_resultados_{period}_{year}.pdf"
+        
+    elif report_type == 'equity_changes':
+        # Para Patrimonio: Saldos acumulados
+        data = await crud.get_account_balances_at_date(db, tenant_id, end_date)
+        pdf = generator.generate_equity_changes(data, start_date, end_date)
+        
+    elif report_type == 'cash_flow':
+        # Para Flujo de Efectivo: Necesitamos AMBOS (Saldos para Activos/Pasivos y Movimientos para Utilidad)
+        balance_data = await crud.get_account_balances_at_date(db, tenant_id, end_date)
+        income_data = await crud.get_period_movements(db, tenant_id, start_date, end_date)
+        pdf = generator.generate_cash_flow(balance_data, income_data, start_date, end_date)
+        
     else:
         raise HTTPException(400, "Tipo de reporte no válido")
     
