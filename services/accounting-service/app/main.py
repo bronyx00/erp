@@ -1,7 +1,9 @@
-from datetime import date
+from datetime import date, timedelta
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
-from sqlalchemy.orm import selectinload, joinedload
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
+from contextlib import asynccontextmanager
 from sqlalchemy import func, insert
 import pandas as pd
 import io
@@ -11,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
 from .security import get_current_tenant_id
 from .schemas import PaginatedResponse
+from .utils.financial_pdf import FinancialReportGenerator
 
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     async with database.engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
@@ -150,7 +154,7 @@ async def get_journal_book(
     }
 
 @app.get("/books/ledger")
-async def get_generatl_ledger(
+async def get_general_ledger(
     db: AsyncSession = Depends(database.get_db),
     tenant_id: int = Depends(get_current_tenant_id)
 ):
@@ -183,3 +187,52 @@ async def get_generatl_ledger(
         })
     
     return ledger
+
+@app.get("/reports/download")
+async def download_financial_report(
+    report_type: str, # 'balance_sheet', 'income_statement'
+    period: str,        # 'Q1', 'Q2', 'Q3', 'Q4', 'S1', 'S2', 'YEAR'
+    year: int,
+    db: AsyncSession = Depends(database.get_db),
+    tenant_id: int = Depends(get_current_tenant_id)
+):
+    # Denifir Fechas segun periodo
+    start_date = date(year, 1, 1)
+    end_date = date(year, 12, 31)
+    
+    if period == 'Q1':
+        end_date = date(year, 3, 31)
+    elif period == 'Q2':
+        start_date = date(year, 4, 1); end_date = date(year, 6, 30)
+    elif period == 'Q3':
+        start_date = date(year, 7, 1); end_date = date(year, 9, 30)
+    elif period == 'Q4':
+        start_date = date(year, 10, 1); end_date = date(year, 12, 31)
+    elif period == 'S1':
+        end_date = date(year, 6, 30)
+    elif period == 'S2':
+        start_date = date(year, 7, 1); end_date = date(year, 12, 31)
+        
+    # Obtener Datos
+    data = await crud.get_account_balances(db, tenant_id, start_date, end_date)
+    
+    # Obtener nombre de la empresa
+    company_name = "EMPRESA C.A"
+    rif = "J-12345678-9"
+    
+    generator = FinancialReportGenerator(company_name, rif)
+    
+    if report_type == 'balance_sheet':
+        pdf = generator.generate_balance_sheet(data, end_date)
+        filename = f"situacion_financiera_{period}_{year}.pdf"
+    elif report_type == 'income_statement':
+        pdf = generator.generate_income_statement(data, start_date, end_date)
+        filename = f"estado_resultados_{period}_{year}.pdf"
+    else:
+        raise HTTPException(400, "Tipo de reporte no válido")
+    
+    return StreamingResponse(
+        pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

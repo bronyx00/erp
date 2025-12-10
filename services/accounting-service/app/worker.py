@@ -14,9 +14,7 @@ RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 async def get_account_id_by_code(db, code: str, tenant_id: int):
     """Busca el ID de una cuenta por su código PUC"""
     result = await db.execute(select(Account).where(Account.code == code, Account.tenant_id == tenant_id))
-    
-    # --- CORRECCIÓN AQUÍ ---
-    # Usamos .first() en lugar de .one_or_none() para tolerar duplicados si la BD está sucia
+    # Usamos .first() para tolerar duplicados si la BD está sucia
     account = result.scalars().first() 
     return account.id if account else None
 
@@ -26,27 +24,27 @@ async def process_invoice_created(data: dict):
     inv_id = data.get("id")
     tenant_id = data.get("tenant_id", 1)
     
-    print(f" [x] 📥 Procesando Factura #{inv_id} (Tenant: {tenant_id}) - Estado: {status}")
+    print(f" [x] 📥 Procesando Factura #{inv_id} (Tenant: {tenant_id}) - Estado: {status}", flush=True)
     
     db = AsyncSessionLocal()
     try:
         raw_amount = data.get("total_amount") or data.get("amount")
         if raw_amount is None:
-            print(" [!] ⚠️ Error: Factura sin monto. Se omite.")
+            print(" [!] ⚠️ Error: Factura sin monto. Se omite.", flush=True)
             return
             
         amount = Decimal(str(raw_amount))
 
         # 1. Definir Cuentas (PUC VENEZUELA)
         if status == "PAID":
-            # Contado: Entra a CAJA, Sale de VENTAS
+            # Contado: Entra a CAJA (1.01.01.001) vs VENTAS (4.01.01.001)
             debit_code = "1.01.01.001" 
-            credit_code = "4.01.01.001"
+            credit_code = "4.01.01.001" 
             desc_status = "CONTADO"
         else:
-            # Crédito: Entra a CxC CLIENTES, Sale de VENTAS
+            # Crédito: Entra a CxC CLIENTES (1.01.03.001) vs VENTAS A CRÉDITO (4.01.01.002)
             debit_code = "1.01.03.001"
-            credit_code = "4.01.01.002" 
+            credit_code = "4.01.01.002"
             desc_status = "CRÉDITO"
 
         # 2. Buscar IDs en la BD
@@ -54,10 +52,10 @@ async def process_invoice_created(data: dict):
         credit_acc_id = await get_account_id_by_code(db, credit_code, tenant_id)
 
         if not debit_acc_id:
-            print(f" [!] ❌ Error: No existe la cuenta DEBITO {debit_code}. ¡Ejecuta el seed!")
+            print(f" [!] ❌ Error: No existe la cuenta DEBITO {debit_code}. ¡Ejecuta el seed!", flush=True)
             return
         if not credit_acc_id:
-            print(f" [!] ❌ Error: No existe la cuenta CREDITO {credit_code}. ¡Ejecuta el seed!")
+            print(f" [!] ❌ Error: No existe la cuenta CREDITO {credit_code}. ¡Ejecuta el seed!", flush=True)
             return
         
         # 3. Crear Asiento (Cabecera)
@@ -69,7 +67,7 @@ async def process_invoice_created(data: dict):
             total_amount=amount
         )
         db.add(entry)
-        await db.flush()
+        await db.flush() 
 
         # 4. Crear Líneas (Detalle)
         # DEBE
@@ -78,24 +76,30 @@ async def process_invoice_created(data: dict):
         db.add(LedgerLine(entry_id=entry.id, account_id=credit_acc_id, debit=0, credit=amount))
         
         await db.commit()
-        print(f" [v] ✅ Asiento Contable #{entry.id} registrado exitosamente.")
+        print(f" [v] ✅ Asiento Contable #{entry.id} registrado exitosamente.", flush=True)
         
     except Exception as e:
-        print(f" [!] 💥 Error procesando contabilidad: {e}")
+        print(f" [!] 💥 Error procesando contabilidad: {e}", flush=True)
         await db.rollback()
     finally:
         await db.close()
 
 async def main():
-    print("⏳ [Accounting Worker] Conectando a RabbitMQ...")
-    # Bucle de reintento simple para conexión inicial
+    print("⏳ [Accounting Worker] Iniciando...", flush=True)
+    connection = None
+    
+    # --- BUCLE DE ESPERA INTELIGENTE ---
     while True:
         try:
+            # connect_robust ya maneja reconexiones, pero necesitamos manejar el fallo inicial de DNS/TCP
             connection = await aio_pika.connect_robust(RABBITMQ_URL)
+            print("✅ [Accounting Worker] Conectado a RabbitMQ", flush=True)
             break
-        except Exception:
-            print(" [!] RabbitMQ no listo, reintentando en 5s...")
+        except (aio_pika.exceptions.AMQPConnectionError, OSError) as e:
+             # OSError captura el socket.gaierror (DNS error)
+            print(f"⚠️ RabbitMQ no listo. Reintentando en 5s... ({e})", flush=True)
             await asyncio.sleep(5)
+    # -----------------------------------
 
     async with connection:
         channel = await connection.channel()
@@ -105,7 +109,7 @@ async def main():
         await queue.bind(exchange, routing_key="invoice.created")
         await queue.bind(exchange, routing_key="invoice.paid")
         
-        print("🎧 [Accounting Worker] Esperando eventos...")
+        print("🎧 [Accounting Worker] Esperando eventos...", flush=True)
         
         async with queue.iterator() as queue_iter:
             async for message in queue_iter:
@@ -117,9 +121,9 @@ async def main():
                         if routing_key == "invoice.created":
                             await process_invoice_created(data)
                         elif routing_key == "invoice.paid":
-                            print(f" [i] Pago recibido para factura {data.get('invoice_id')}")
+                            print(f" [i] Pago recibido para factura {data.get('invoice_id')}", flush=True)
                     except Exception as e:
-                        print(f" [!] Error en mensaje: {e}")
+                        print(f" [!] Error en mensaje: {e}", flush=True)
 
 if __name__ == "__main__":
     try:

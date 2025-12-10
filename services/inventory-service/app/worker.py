@@ -1,100 +1,76 @@
 import pika
 import json
-import os
 import time
+import os
 import sys
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
 
+# Para que Python encuentre los módulos hermanos
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app.database import DATABASE_URL
 
-# Configuración de RabbitMQ
+from app.adapters.compliance_ve import VEAdapter
+
+# Configuración
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/%2F")
+QUEUE_NAME = "invoice_events"
 
-# Configuración DB Síncrona
-SYNC_DATABASE_URL = DATABASE_URL.replace("+asyncpg", "")
+def get_adapter(country_code="VE"):
+    if country_code == "VE":
+        return VEAdapter()
+    return VEAdapter() # Default
 
-engine = create_engine(SYNC_DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
-
-def update_stock(items, action="decrease"):
-    """
-    Descuenta el stock de los productos vendidos.
-    action: 'decrease' (venta) o 'increase' (devolucion)
-    """
-    db = SessionLocal()
-    try:
-        print(f"📦 Actualizando stock ({action})...")
-        for item in items:
-            product_id = item['product_id']
-            qty = item['quantity']
-            
-            if action == "decrease":
-                stmt = text("UPDATE products SET stock = stock - :qty WHERE id = :pid")
-            else: # increase
-                stmt = text("UPDATE products SET stock = stock + :qty WHERE id = :pid")
-                
-            db.execute(stmt, {"qty": qty, "pid": product_id})
-            print(f"   Product {product_id}: {action} {qty}")
-        db.commit()
-    except Exception as e:
-        print(f"❌ Error stock: {e}")
-        db.rollback()
-    finally:
-        db.close()
-        
 def callback(ch, method, properties, body):
-    """Procesa el evento recibido de RabbitMQ"""
-    print(f"📥 [Inventory] Evento recibido: {method.routing_key}")
+    """Esta función se ejecuta cada vez que llega un mensaje."""
+    print(f"[Compliance] Mensaje recibido!", flush=True)
+    
     try:
-        message = json.loads(body)
-        items = message.get("items") or message.get("data", {}).get("items")
+        data = json.loads(body)
         
-        if items:
-            if method.routing_key == "invoice.paid":
-                update_stock(items, action="decrease")
-            elif method.routing_key == "invoice.voided":
-                update_stock(items, action="increase")
-            else:
-                print(f"⚠️ Evento desconocido: {method.routing_key}")
-        else:
-            print("⚠️ El evento no contenía items.")
-            
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+        # Selecciona el adaptador
+        adapter = get_adapter("VE")
+        
+        # Procesa el cumplimiento fiscal
+        result = adapter.process_invoice(data)
+        
+        print(f"✅ [Compliance] Éxito: {result}", flush=True)
+        
     except Exception as e:
-        print(f"❌ Error: {e}")
-        ch.basic_ack(delivery_tag=method.delivery_tag)
-        
+        print(f"❌ [Compliance] Error procesando: {e}", flush=True)
+    
+    # Confirmar a RabbitMQ que el mensaje se procesó (ACK)
+    ch.basic_ack(delivery_tag=method.delivery_tag)
+    
 def start_worker():
-    print("⏳ [Inventory Worker] Conectando a RabbitMQ...")
+    print("⏳ [Compliance] Iniciando...", flush=True)
     connection = None
     
-    # Lógica de reintento
+    # --- BUCLE DE ESPERA INTELIGENTE ---
     while True:
         try:
-            connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
+            parameters = pika.URLParameters(RABBITMQ_URL)
+            connection = pika.BlockingConnection(parameters)
+            print("✅ [Compliance] Conectado a RabbitMQ", flush=True)
             break
-        except pika.exceptions.AMQPConnectionError:
-            print("     Reintentando conexión en 5s...")
+        except (pika.exceptions.AMQPConnectionError, OSError) as e:
+            # Captura errores de conexión y de DNS/Socket
+            print(f"⚠️ RabbitMQ no listo. Reintentando en 5s... ({e})", flush=True)
             time.sleep(5)
+    # -----------------------------------
             
     channel = connection.channel()
 
     channel.exchange_declare(exchange='erp_events', exchange_type='topic', durable=True)
-    
-    # Cola exclusiva para inventario
-    result = channel.queue_declare(queue='inventory_stock_updates', durable=True)
-    queue_name = result.method.queue
-    
-    # Escucha específicamente "invoice.paid"
-    channel.queue_bind(exchange='erp_events', queue=queue_name, routing_key='invoice.paid')
-    channel.queue_bind(exchange="erp_events", queue=queue_name, routing_key='invoice.voided')
-    
+
+    # Declarar la cola
+    queue_name = "invoice_events"
+    channel.queue_declare(queue=queue_name, durable=True)
+
+    # Esto dice: "Mándame a esta cola todo lo que tenga la etiqueta 'invoice.created'"
+    channel.queue_bind(exchange='erp_events', queue=queue_name, routing_key='invoice.created')
+
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(queue=queue_name, on_message_callback=callback)
-    
-    print("🎧 [Inventory Worker] Escuchando eventos de ventas (invoice.paid)...")
+
+    print("🎧 [Compliance] Escuchando eventos 'invoice.created'...", flush=True)
     channel.start_consuming()
     
 if __name__ == "__main__":
