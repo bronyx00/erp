@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional, List, Any, Generic, TypeVar
 from decimal import Decimal
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 T = TypeVar("T")
 
@@ -14,11 +14,36 @@ class MetaData(BaseModel):
 class PaginatedResponse(BaseModel, Generic[T]):
     data: List[T]
     meta: MetaData
+    
+class WorkScheduleBase(BaseModel):
+    name: str
+    monday_start: Optional[time] = None
+    monday_end: Optional[time] = None
+    tuesday_start: Optional[time] = None
+    tuesday_end: Optional[time] = None
+    wednesday_start: Optional[time] = None
+    wednesday_end: Optional[time] = None
+    thursday_start: Optional[time] = None
+    thursday_end: Optional[time] = None
+    friday_start: Optional[time] = None
+    friday_end: Optional[time] = None
+    saturday_start: Optional[time] = None
+    saturday_end: Optional[time] = None
+    sunday_start: Optional[time] = None
+    sunday_end: Optional[time] = None
+
+class WorkScheduleCreate(WorkScheduleBase):
+    pass
+
+class WorkScheduleResponse(WorkScheduleBase):
+    id: int
+    is_active: bool
+    model_config = ConfigDict(from_attributes=True)
 
 class EmergencyContact(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
-    relationship = Optional[str] = None
+    relationship: Optional[str] = None
 
 class Document(BaseModel):
     name: str
@@ -41,13 +66,16 @@ class EmployeeBase(BaseModel):
     birth_date: Optional[date] = None
     
     position: str
+    departament: Optional[str] = None
     manager_name: Optional[str] = None
     hired_at: Optional[date] = None
+    schedule_id: Optional[int] = None
+    
     salary: Decimal = Decimal(0)
     bonus_scheme: Optional[str] = None
     
     # Campos JSON complejos
-    emergency_Contact: Optional[EmergencyContact] = None
+    emergency_contract: Optional[EmergencyContact] = None
     documents: List[Document] = []
     performance_reviews: List[PerformanceReview] = []
     
@@ -61,6 +89,7 @@ class EmployeeResponse(EmployeeBase):
     id: int
     is_active: bool
     created_at: datetime
+    schedule: Optional[WorkScheduleResponse] = None
     
     model_config = ConfigDict(from_attributes=True)
     

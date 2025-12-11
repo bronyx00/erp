@@ -52,9 +52,10 @@ def start_worker():
         try:
             parameters = pika.URLParameters(RABBITMQ_URL)
             connection = pika.BlockingConnection(parameters)
+            print("✅ [Compliance] Conectado a RabbitMQ", flush=True)
             break
-        except pika.exceptions.AMQPConnectionError:
-            print("     Reintentando conexión en 5s...")
+        except (pika.exceptions.AMQPConnectionError, OSError) as e: # <--- AGREGAR OSError AQUÍ
+            print(f"⚠️ RabbitMQ no listo. Reintentando en 5s... ({e})", flush=True)
             time.sleep(5)
             
     channel = connection.channel()
