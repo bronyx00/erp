@@ -146,6 +146,38 @@ async def read_invoices(
 ):
     return await crud.get_invoices(db, tenant_id=tenant_id, page=page, limit=limit, status=status, search=search)
 
+# --- COTIZACIONES ---
+@app.post("/quotes", response_model=schemas.QuoteResponse)
+async def create_quote_endpoint(
+    quote: schemas.QuoteCreate,
+    db: AsyncSession = Depends(database.get_db),
+    tenant_id: int = Depends(get_current_tenant_id),
+    token: str = Depends(oauth2_scheme)
+):
+    return await crud.create_quote(db, quote, tenant_id, token)
+
+@app.get("/quotes", response_model=PaginatedResponse[schemas.QuoteResponse])
+async def list_quotes(
+    page: int = 1,
+    limit: int = 20,
+    db: AsyncSession = Depends(database.get_db),
+    tenant_id: int = Depends(get_current_tenant_id)
+):
+    return await crud.get_quotes(db, tenant_id=tenant_id, page=page, limit=limit)
+
+@app.post("/quotes/{quote_id}/convert", response_model=schemas.InvoiceResponse)
+async def convert_quote(
+    quote_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    tenant_id: int = Depends(get_current_tenant_id),
+    token: int = Depends(oauth2_scheme)
+):
+    try:
+        invoice = await crud.convert_quote_to_invoice(db, quote_id, tenant_id, token)
+        return invoice
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/exchange-rate")
 async def get_current_rate(db: AsyncSession = Depends(database.get_db)):
     query = select(models.ExchangeRate).order_by(models.ExchangeRate.acquired_at.desc()).limit(1)

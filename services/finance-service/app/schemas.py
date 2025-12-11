@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional, Generic, TypeVar
 
 T = TypeVar("T")
@@ -92,6 +92,43 @@ class InvoiceResponse(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
     
+# --- Cotizaciones ---
+class QuoteItemCreate(BaseModel):
+    product_id: int
+    quantity: int = 1
+    # Permite sobreescribir precio o descripción
+    unit_price: Optional[Decimal] = None
+    description: Optional[str] = None
+    
+class QuoteCreate(BaseModel):
+    customer_tax_id: str    # Para buscar en CRM
+    date_expires: date
+    currency: str = "USD"
+    items: List[QuoteItemCreate]
+    notes: Optional[str] = None
+    terms: Optional[str] = None
+    
+class QuoteItemResponse(BaseModel):
+    id: int
+    product_name: str
+    quantity: int
+    unit_price: Decimal
+    total_price: Decimal
+    model_config = ConfigDict(from_attributes=True)
+    
+class QuoteResponse(BaseModel):
+    id: int
+    quote_number: str
+    status: str
+    customer_name: str
+    date_issued: date
+    date_expires: date
+    total: Decimal
+    currency: str
+    items: List[QuoteItemResponse]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
 # --- REPORTES ---
 class DailySales(BaseModel):
     date: datetime

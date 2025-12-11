@@ -4,7 +4,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, Session
-from sqlalchemy import func, String, extract
+from sqlalchemy import func, String, extract, desc
 from typing import Optional
 from datetime import datetime, date
 from decimal import Decimal
@@ -269,6 +269,38 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
     
     return final_invoice
 
+async def get_quotes(
+    db: AsyncSession,
+    tenant_id: int,
+    page: int = 1,
+    limit: int = 20,
+):
+    offset = (page - 1) * limit
+    
+    query = select(models.Quote).filter(
+        models.Quote.tenant_id == tenant_id,
+    ).order_by(models.Quote.id.desc())
+    
+    # Contar Total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+    
+    # Obtiene Datos Paginados
+    query = query.offset(offset).limit(limit)
+    result = await db.execute(query)
+    data = result.scalars().all()
+    
+    return {
+        "data": data,
+        "meta": {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total + limit - 1) // limit
+        }
+    }    
+    
 
 async def get_invoices(
     db: AsyncSession, 
@@ -392,6 +424,128 @@ async def set_invoice_void(db: AsyncSession, invoice: models.Invoice):
     # Recargamos para devolver el objeto actualizado y limpio
     await db.refresh(invoice)
     return invoice
+
+# --- GESTION DE COTIZACIONES ---
+async def get_next_quote_number(db: AsyncSession, tenant_id: int) -> str:
+    """Genera correlativo tipo COT-0001"""
+    query = select(models.Quote.id).filter(models.Quote.tenant_id == tenant_id).order_by(desc(models.Quote.id)).limit(1)
+    result = await db.execute(query)
+    last_id = result.scalar() or 0
+    return f"COT-{last_id + 1:05d}"
+
+async def create_quote(db: AsyncSession, quote_in: schemas.QuoteCreate, tenant_id: int, token: str):
+    # Datos Usuario y Tenant
+    user_email, _ = get_user_from_token(token)
+    tenant_data = await get_tenant_data(token)
+    
+    # Datos Cliente
+    customer = await get_customer_by_tax_id(quote_in.customer_tax_id, token)
+    if not customer:
+        # Fallback si no existe.( Cambiar a la creacion )
+        customer = {"name": "Cliente Nuevo", "rif": quote_in.customer_tax_id, "email": "", "address": "", "phone": ""}
+        
+    # Procesar Items (Precios y Totales)
+    import asyncio
+    product_tasks = [get_product_details(item.product_id, token) for item in quote_in.items]
+    products_results = await asyncio.gather(*product_tasks)
+    product_map = {p['id']: p for p in products_results if p}
+    
+    db_items = []
+    total_base = Decimal(0)
+    tax_rate = Decimal(tenant_data.get('tax_rate', 16)) // 100 if tenant_data.get('tax_active') else Decimal(0)
+    
+    for item in quote_in.items:
+        product = product_map.get(item.product_id)
+        if not product: continue
+        
+        # Usar precio del producto o el personalizado si viene en la cotización
+        price = item.unit_price if item.unit_price is not None else Decimal(product['price'])
+        line_total = price * item.quantity
+        
+        total_base += line_total
+        
+        db_items.append(models.QuoteItem(
+            product_id=product['id'],
+            product_name=product['name'],
+            description=item.description or product.get('description'),
+            quantity=item.quantity,
+            unit_price=price,
+            total_price=line_total
+        ))
+        
+    total_tax = round_money(total_base * tax_rate)
+    total_final = round_money(total_base + total_tax)
+    
+    # Crear Cotización
+    next_num = await get_next_quote_number(db, tenant_id)
+    
+    db_quote = models.Quote(
+        tenant_id=tenant_id,
+        quote_number=next_num,
+        status="SENT",
+        
+        customer_id=customer.get('id'),
+        customer_name=customer.get('name'),
+        customer_rif=customer.get('tax_id') or quote_in.customer_tax_id,
+        customer_email=customer.get('email'),
+        customer_address=customer.get('address'),
+        customer_phone=customer.get('phone'),
+        
+        date_issued=datetime.utcnow().date(),
+        date_expires=quote_in.date_expires,
+        
+        currency=quote_in.currency,
+        subtotal=total_base,
+        tax_amount=total_tax,
+        total=total_final,
+        
+        notes=quote_in.notes,
+        terms=quote_in.terms,
+        created_by_email=user_email,
+        items=db_items
+    )
+    
+    db.add(db_quote)
+    await db.commit()
+    await db.refresh(db_quote)
+    return db_quote
+
+async def convert_quote_to_invoice(db: AsyncSession, quote_in: int, tenant_id: int, token: str):
+    """Convierte una Cotización en Factura Real"""
+    # Buscar Cotización
+    query = select(models.Quote).filter(models.Quote.id == quote_in, models.Quote.tenant_id == tenant_id).options(selectinload(models.Quote.items))
+    result = await db.execute(query)
+    quote = result.scalars().first()
+    
+    if not quote:
+        raise ValueError("Cotización no encontrado")
+    
+    if quote.status == "INVOICED":
+        raise ValueError("Esta cotización ya fue facturada")
+    
+    # Prepara objeto basado en la Cotización
+    invoice_items = [
+        schemas.InvoiceItemCreate(product_id=i.product_id, quantity=i.quantity)
+        for i in quote.items
+    ]
+    
+    invoice_in = schemas.InvoiceCreate(
+        customer_tax_id=quote.customer_rif,
+        currency=quote.currency,
+        items=invoice_items,
+        payment=None
+    )
+    
+    # Crear Factura
+    new_invoice = await create_invoice(db, invoice_in, tenant_id, token)
+    
+    # Actualizar estado de Cotización
+    quote.status = "INVOICED"
+    db.add(quote)
+    await db.commit()
+    
+    return new_invoice
+
 
 # --- REPORTES ---
 async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):

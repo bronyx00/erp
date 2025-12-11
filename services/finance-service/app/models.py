@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, Text, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -50,8 +50,6 @@ class Invoice(Base):
     items = relationship("InvoiceItem", back_populates="invoice")
     payments = relationship("Payment", back_populates="invoice")
     
-    
-    
 class InvoiceItem(Base):
     __tablename__ = "invoice_items"
     
@@ -91,3 +89,56 @@ class ExchangeRate(Base):
     rate = Column(Numeric(20, 6), nullable=False)       # Tasa (ej. 36.543210)
     source = Column(String, default="BCV")              # Fuente (BCV)
     acquired_at = Column(DateTime(timezone=True), server_default=func.now()) # Cuándo la guardamos
+    
+class Quote(Base):
+    __tablename__ = "quotes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, index=True, nullable=False)
+    
+    # Datos de Control
+    quote_number = Column(String, index=True)   # Ej: COT-0001
+    status = Column(String, default="DRAFT")    # DRAFT, SENT, ACCEPTED, REJECTED, INVOICED
+    
+    # Cliente (Snapshot para historial)
+    customer_id = Column(Integer, nullable=True)
+    customer_name = Column(String)
+    customer_rif = Column(String)
+    customer_email = Column(String, nullable=True)
+    customer_address = Column(Text, nullable=True)
+    customer_phone = Column(String, nullable=True)
+    
+    # Fechas
+    date_issued = Column(Date, nullable=False)
+    date_expires = Column(Date, nullable=False)
+    
+    # Montos
+    currency = Column(String, default="USD")
+    subtotal = Column(Numeric(12, 2), default=0)
+    tax_amount = Column(Numeric(12, 2), default=0)
+    total = Column(Numeric(12, 2), default=0)
+    
+    notes = Column(Text, nullable=True)
+    terms = Column(Text, nullable=True) # Términos y condiciones
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by_email = Column(String, nullable=True) # Firma
+    
+    # Relaciones
+    items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
+    
+class QuoteItem(Base):
+    __tablename__ = "quote_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    quote_id = Column(Integer, ForeignKey("quotes.id"))
+    
+    product_id = Column(Integer)
+    product_name = Column(String)
+    description = Column(String, nullable=True)
+    
+    quantity = Column(Integer, default=1)
+    unit_price = Column(Numeric(12, 2))
+    total_price = Column(Numeric(12, 2))
+    
+    quote = relationship("Quote", back_populates="items")

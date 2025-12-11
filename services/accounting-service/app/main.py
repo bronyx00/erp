@@ -199,8 +199,8 @@ async def download_financial_report(
 ):
     # Obtener Datos de Empresa
     tenant_info = await crud.get_tenant_data(token)
-    company_name = tenant_info.get("business_name") if tenant_info else "EMPRESA DEMO"
-    rif = tenant_info.get("rif") if tenant_info else "J.12345678-9"
+    company_name = tenant_info.get('business_name') if tenant_info else "EMPRESA DEMO"
+    rif = tenant_info.get('rif') if tenant_info else "J.12345678-9"
     
     
     # Denifir Fechas segun periodo
@@ -224,7 +224,7 @@ async def download_financial_report(
     data = await crud.get_account_balances(db, tenant_id, start_date, end_date)
     
     generator = FinancialReportGenerator(company_name, rif)
-    filename = f"{tenant_info.get("name")}_{report_type}_{period}_{year}.pdf"
+    filename = f"{tenant_info.get('name')}_{report_type}_{period}_{year}.pdf"
     
     if report_type == 'balance_sheet':
         # Para Balance: Saldos Acumulados a la fecha de fin
