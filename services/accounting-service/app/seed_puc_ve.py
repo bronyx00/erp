@@ -29,7 +29,12 @@ CORE_ACCOUNTS = [
     {"code": "1.01.02.004", "name": "Anticipos a Proveedores", "account_type": "ASSET", "level": 4, "parent": "1.01.02", "tx": True},
     {"code": "1.01.02.005", "name": "Reclamos a Seguros", "account_type": "ASSET", "level": 4, "parent": "1.01.02", "tx": True},
 
-    # Activos Fiscales (Venezuela)
+    {"code": "1.01.03", "name": "Cuentas por Cobrar Comerciales", "account_type": "ASSET", "level": 3, "parent": "1.01"},
+    {"code": "1.01.03.001", "name": "Clientes Nacionales", "account_type": "ASSET", "level": 4, "parent": "1.01.03", "tx": True},
+    {"code": "1.01.03.002", "name": "Clientes Extranjeros", "account_type": "ASSET", "level": 4, "parent": "1.01.03", "tx": True},
+    {"code": "1.01.03.003", "name": "Préstamos a Empleados", "account_type": "ASSET", "level": 4, "parent": "1.01.03", "tx": True},
+
+    # Activos Fiscales 
     {"code": "1.01.05", "name": "Activos Fiscales", "account_type": "ASSET", "level": 3, "parent": "1.01"},
     {"code": "1.01.05.001", "name": "Crédito Fiscal IVA", "account_type": "ASSET", "level": 4, "parent": "1.01.05", "tx": True},
     {"code": "1.01.05.002", "name": "Retenciones de ISLR (Soportadas)", "account_type": "ASSET", "level": 4, "parent": "1.01.05", "tx": True},

@@ -55,13 +55,17 @@ async def get_tenant_data(token: str):
         
 async def get_customer_by_tax_id(tax_id: str, token: str):
     """Busca datos del cliente en CRM usando el tax_id"""
+    search_id = str(tax_id).strip.upper()
+    
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(f"{CRM_URL}/customers", headers={"Authorization": f"Bearer {token}"})
             if resp.status_code == 200:
                 customers = resp.json()
                 for c in customers:
-                    if c.get('tax_id') == tax_id:
+                    db_tax_id = str(c.get('tax_id', '')).strip().upper()
+                    
+                    if db_tax_id == search_id:
                         return c
             return None
         except Exception as e:
@@ -263,7 +267,8 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
             "tenant_id": tenant_id,
             "total_amount": float(final_invoice.total_usd),
             "paid_at": str(datetime.utcnow()),
-            "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in final_invoice.items]
+            "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in final_invoice.items],
+            "origin": "inmediate"
         }
         main.publish_event("invoice.paid", paid_event)
     
@@ -458,8 +463,14 @@ async def create_quote(db: AsyncSession, quote_in: schemas.QuoteCreate, tenant_i
         product = product_map.get(item.product_id)
         if not product: continue
         
-        # Usar precio del producto o el personalizado si viene en la cotización
-        price = item.unit_price if item.unit_price is not None else Decimal(product['price'])
+        if item.unit_price is not None and item.unit_price > 0:
+            # Si viene Null o 0, usa el precio del sistema.
+            # Si viene un número > 0, respeta el precio manual del vendedor.
+            price = item.unit_price
+        else:
+            price = Decimal(product['price'])
+        
+        
         line_total = price * item.quantity
         
         total_base += line_total
@@ -507,8 +518,16 @@ async def create_quote(db: AsyncSession, quote_in: schemas.QuoteCreate, tenant_i
     
     db.add(db_quote)
     await db.commit()
-    await db.refresh(db_quote)
-    return db_quote
+    
+    query = (
+        select(models.Quote)
+        .options(selectinload(models.Quote.items))
+        .filter(models.Quote.id == db_quote.id)
+    )
+    result = await db.execute(query)
+    final_quote = result.scalars().first()
+    
+    return final_quote
 
 async def convert_quote_to_invoice(db: AsyncSession, quote_in: int, tenant_id: int, token: str):
     """Convierte una Cotización en Factura Real"""
