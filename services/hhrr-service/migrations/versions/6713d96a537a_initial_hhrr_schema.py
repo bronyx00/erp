@@ -90,6 +90,22 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_payrolls_id'), 'payrolls', ['id'], unique=False)
     op.create_index(op.f('ix_payrolls_tenant_id'), 'payrolls', ['tenant_id'], unique=False)
+    
+    # 4. Tabla Notas de Supervisor
+    op.create_table('supervisor_notes',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('tenant_id', sa.Integer(), nullable=False),
+        sa.Column('employee_id', sa.Integer(), nullable=False),
+        sa.Column('supervisor_email', sa.String(), nullable=False),
+        sa.Column('category', sa.String(), nullable=True),
+        sa.Column('content', sa.Text(), nullable=False),
+        sa.Column('is_private', sa.Boolean(), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.ForeignKeyConstraint(['employee_id'], ['employees.id'], ),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_supervisor_notes_id'), 'supervisor_notes', ['id'], unique=False)
+    op.create_index(op.f('ix_supervisor_notes_tenant_id'), 'supervisor_notes', ['tenant_id'], unique=False)
 
 def downgrade() -> None:
     op.drop_table('payrolls')

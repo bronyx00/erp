@@ -98,3 +98,26 @@ async def generate_payroll(
     
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+# ---- NOTAS ----
+@app.post("/notes", response_model=schemas.SupervisorNoteResponse)
+async def create_supervisor_note(
+    note: schemas.SupervisorNoteCreate,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_MANAGE))
+):
+    employee = await crud.get_employee_by_id(db, note.employee_id, user.tenant_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    
+    return await crud.create_note(db, note, supervisor_email=user.sub, tenant_id=user.tenant_id)
+
+@app.get("/employees/{employee_id}/notes", response_model=PaginatedResponse[schemas.SupervisorNoteResponse])
+async def read_employee_notes(
+    employee_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_READ)),
+    page: int = 1,
+    limit: int = 10,
+):
+    return await crud.get_employee_notes(db, employee_id=employee_id, tenant_id=user.tenant_id, page=page, limit=limit)

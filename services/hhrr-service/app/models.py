@@ -83,12 +83,20 @@ class Payroll(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-class SupervisorNote(BaseModel):
+class SupervisorNote(Base):
     __tablename__ = "supervisor_notes"
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer)
     
-    target_user_id = Column(Integer)    # ID del empleado
-    supervisor_id = Column(Integer)     # Quién escribe
-    content = Column(Text)
-    created_at = Column(DateTime, default=func.now())
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, index=True, nullable=False)
+    
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
+    supervisor_email = Column(String, nullable=False)
+    
+    category = Column(String, default="GENERAL")
+    content = Column(Text, nullable=False)
+    is_private = Column(Boolean, default=False) # Si es True, el empleado no la ve
+    
+    create_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relación
+    employee = relationship("Employee", backref="notes")

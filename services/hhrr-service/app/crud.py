@@ -93,3 +93,57 @@ async def create_payroll(db: AsyncSession, payroll_data: schemas.PayrollCreate, 
     await db.refresh(db_payroll)
     
     return db_payroll
+
+# --- NOTAS ---
+async def create_note(
+    db: AsyncSession,
+    note: schemas.SupervisorNoteCreate,
+    supervisor_email: str,
+    tenant_id: int
+):
+    db_note = models.SupervisorNote(
+        tenant_id=tenant_id,
+        employee_id=note.employee_id,
+        supervisor_email=supervisor_email,
+        category=note.category,
+        content=note.content,
+        is_private=note.is_private
+    )
+    db.add(db_note)
+    await db.commit()
+    await db.refresh(db_note)
+    return db_note
+
+async def get_employee_notes(
+    db: AsyncSession,
+    employee_id: int,
+    tenant_id: int,
+    page: int = 1,
+    limit: int = 10
+):
+    offset = (page - 1) * limit
+    
+    query = select(models.SupervisorNote).filter(
+        models.SupervisorNote.employee_id == employee_id,
+        models.SupervisorNote.tenant_id == tenant_id
+    ).order_by(models.SupervisorNote.create_at.desc())
+    
+    # Contar total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+    
+    # Obtiene Datos Paginados
+    query = query.offset(offset).limit(limit)
+    result = await db.execute(query)
+    data = result.scalars().all()
+    
+    return {
+        "data": data,
+        "meta": {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total + limit - 1) // limit
+        }
+    }

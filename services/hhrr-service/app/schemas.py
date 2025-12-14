@@ -108,3 +108,19 @@ class PayrollResponse(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
     
+# --- NOTAS ---
+class SupervisorNoteCreate(BaseModel):
+    employee_id: int
+    category: str = "GENERAL" 
+    content: str
+    is_private: bool = False
+    
+class SupervisorNoteResponse(BaseModel):
+    id: int
+    supervisor_email: str
+    category: str
+    content: str
+    is_private: bool
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
