@@ -83,3 +83,12 @@ class Payroll(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+class SupervisorNote(BaseModel):
+    __tablename__ = "supervisor_notes"
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer)
+    
+    target_user_id = Column(Integer)    # ID del empleado
+    supervisor_id = Column(Integer)     # Quién escribe
+    content = Column(Text)
+    created_at = Column(DateTime, default=func.now())

@@ -19,10 +19,19 @@ class CurrencyDisplay(str, enum.Enum):
 
 class UserRole(str, enum.Enum):
     OWNER = "OWNER"             # Dueño absoluto (Empresa)
-    ADMIN = "ADMIN"             # Puede gestionar usuarios 
-    CASHIER = "CASHIER"         # Solo puede facturar
-    RRHH = "RRHH"               # Solo ve módulo de RRHH
-    ACCOUNTANT = "ACCOUNTANT"   # Solo ve reportes
+    ADMIN = "ADMIN"             # Gestión del Sistema
+    
+    # Finanzas / Ventas
+    SALES_AGENT = "SALES_AGENT"             # Cajero / Vendedor (Crea Facturas)
+    SALES_SUPERVISOR = "SALES_SUPERVISOR"   # Revisa cuadres y ventas (Lectura)
+    ACCOUNTANT = "ACCOUNTANT"               # Contador (Libros, Reportes)
+    
+    # Inventario / Almacén
+    WAREHOUSE_CLERK = "WAREHOUSE_CLERK"             # Almacenista (Carga productos)
+    WAREHOUSE_SUPERVISOR = "WAREHOUSE_SUPERVISOR"   # Auditor de Inventario (Lectura)
+    
+    RRHH_MANAGER = "RRHH_MANAGER"           # Gestión nómina y personal
+
 
 class Tenant(Base):
     """

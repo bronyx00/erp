@@ -11,7 +11,7 @@ from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
-from .security import get_current_tenant_id, oauth2_scheme
+from .security import RequirePermission, Permissions, UserPayload, oauth2_scheme, get_current_tenant_id
 from .schemas import PaginatedResponse
 from .utils.financial_pdf import FinancialReportGenerator
 
@@ -111,7 +111,8 @@ async def get_journal_book(
     end_date: date,
     page: int = 1,
     limit: int = 100,
-    db: AsyncSession = Depends(database.get_db)
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.ACCOUNTING_MANAGE)) 
 ):
     """Libro Diario: Lista cronológicamente de todos los asientos"""
     offset = (page - 1) * limit
@@ -119,6 +120,7 @@ async def get_journal_book(
     base_query = (
         select(models.LedgerEntry)
         .filter(
+            models.LedgerEntry.tenant_id == user.tenant_id,
             models.LedgerEntry.transaction_date >= start_date,
             models.LedgerEntry.transaction_date <= end_date
         )
@@ -156,7 +158,7 @@ async def get_journal_book(
 @app.get("/books/ledger")
 async def get_general_ledger(
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    user: UserPayload = Depends(RequirePermission(Permissions.ACCOUNTING_MANAGE))
 ):
     """Libro Mayor: Balance agrupado por cuenta"""
     query = (
@@ -166,7 +168,7 @@ async def get_general_ledger(
             func.sum(models.LedgerLine.debit).label('total_debit'),
             func.sum(models.LedgerLine.credit).label('total_credit')
         )
-        .filter(models.Account.tenant_id == tenant_id)
+        .filter(models.Account.tenant_id == user.tenant_id)
         .join(models.LedgerLine, models.Account.id == models.LedgerLine.account_id)
         .group_by(models.Account.id)
     )

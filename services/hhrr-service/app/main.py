@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
 from .schemas import PaginatedResponse
-from .security import get_current_tenant_id
+from .security import RequirePermission, Permissions, UserPayload
 import pika
 import json
 import logging
@@ -52,25 +52,25 @@ async def read_employees(
     page: int = 1,
     limit: int = 50,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_READ)) 
 ):
-    return await crud.get_employees(db, tenant_id=tenant_id, page=page, limit=limit)
+    return await crud.get_employees(db, tenant_id=user.tenant_id, page=page, limit=limit)
 
 @app.post("/employees", response_model=schemas.EmployeeResponse)
 async def create_employee(
     employee: schemas.EmployeeCreate,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_MANAGE)) 
 ):
-    return await crud.create_employee(db, employee, tenant_id=tenant_id)
+    return await crud.create_employee(db, employee, tenant_id=user.tenant_id)
 
 @app.get("/employees/{employee_id}", response_model=schemas.EmployeeResponse)
 async def read_employee(
     employee_id: int,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_READ)) 
 ):
-    employee = await crud.get_employee_by_id(db, employee_id, tenant_id)
+    employee = await crud.get_employee_by_id(db, employee_id, user.tenant_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Empleado no encontrado")
     return employee
@@ -79,14 +79,14 @@ async def read_employee(
 async def generate_payroll(
     payroll: schemas.PayrollCreate,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    user: UserPayload = Depends(RequirePermission(Permissions.PAYROLL_PROCESS)) 
 ):
     try:
-        new_payroll = await crud.create_payroll(db, payroll, tenant_id)
+        new_payroll = await crud.create_payroll(db, payroll, user.tenant_id)
         
         # Evento para Contabilidad
         event_data = {
-            "tenant_id": tenant_id,
+            "tenant_id": user.tenant_id,
             "amount": float(new_payroll.total_amount),
             "category": "Nómina",
             "description": f"Nómina {payroll.period_start} al {payroll.period_end}",

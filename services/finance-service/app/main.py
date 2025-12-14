@@ -14,7 +14,7 @@ import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from . import crud, schemas, database, models
 from .services import exchange
-from .security import get_current_tenant_id, oauth2_scheme, SECRET_KEY, ALGORITHM
+from .security import get_current_tenant_id, oauth2_scheme, SECRET_KEY, ALGORITHM, RequirePermission, Permissions, UserPayload
 from .schemas import PaginatedResponse, InvoiceSummary
 from .utils.pdf_generator import generate_invoice_pdf
 from jose import jwt, JWTError
@@ -90,38 +90,14 @@ def publish_event(routing_key: str, data: dict):
         logger.error(f"❌ Error publicando evento {routing_key}: {e}")
 
 # --- Endpoints ---
-
-@app.post("/payments", response_model=schemas.PaymentResponse)
-async def create_payment(
-    payment: schemas.PaymentCreate, 
-    db: AsyncSession = Depends(database.get_db), 
-    tenant_id: int = Depends(get_current_tenant_id)
-):
-    try:
-        new_payment, invoice, is_fully_paid = await crud.create_payment(db, payment, tenant_id=tenant_id)
-        
-        if is_fully_paid:
-            event_data = {
-                "invoice_id": invoice.id,
-                "tenant_id": tenant_id,
-                "total_amount": float(invoice.total_usd),
-                "paid_at": str(new_payment.created_at),
-                "items": [{"product_id": item.product_id, "quantity": item.quantity} for item in invoice.items]
-            }
-            publish_event("invoice.paid", event_data)
-        
-        return new_payment
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
 @app.post("/invoices", response_model=schemas.InvoiceResponse)
 async def create_invoice(
     invoice: schemas.InvoiceCreate, 
     db: AsyncSession = Depends(database.get_db), 
-    tenant_id: int = Depends(get_current_tenant_id),
+    user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_CREATE)),
     token: str = Depends(oauth2_scheme)
 ):
-    new_invoice = await crud.create_invoice(db, invoice, tenant_id=tenant_id, token=token)
+    new_invoice = await crud.create_invoice(db, invoice, tenant_id=user.tenant_id, token=token)
     
     invoice_dict = {
         "id": new_invoice.id,
@@ -134,6 +110,29 @@ async def create_invoice(
     publish_event("invoice.created", invoice_dict)
     
     return new_invoice
+
+@app.post("/payments", response_model=schemas.PaymentResponse)
+async def create_payment(
+    payment: schemas.PaymentCreate, 
+    db: AsyncSession = Depends(database.get_db), 
+    user: UserPayload = Depends(RequirePermission(Permissions.PAYMENT_CREATE))
+):
+    try:
+        new_payment, invoice, is_fully_paid = await crud.create_payment(db, payment, tenant_id=user.tenant_id)
+        
+        if is_fully_paid:
+            event_data = {
+                "invoice_id": invoice.id,
+                "tenant_id": user.tenant_id,
+                "total_amount": float(invoice.total_usd),
+                "paid_at": str(new_payment.created_at),
+                "items": [{"product_id": item.product_id, "quantity": item.quantity} for item in invoice.items]
+            }
+            publish_event("invoice.paid", event_data)
+        
+        return new_payment
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     
 @app.get("/invoices", response_model=PaginatedResponse[InvoiceSummary])
 async def read_invoices(
@@ -142,38 +141,38 @@ async def read_invoices(
     status: Optional[str] = None,
     search: Optional[str] = None,
     db: AsyncSession = Depends(database.get_db), 
-    tenant_id: int = Depends(get_current_tenant_id)
+    user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_READ))
 ):
-    return await crud.get_invoices(db, tenant_id=tenant_id, page=page, limit=limit, status=status, search=search)
+    return await crud.get_invoices(db, tenant_id=user.tenant_id, page=page, limit=limit, status=status, search=search)
 
 # --- COTIZACIONES ---
 @app.post("/quotes", response_model=schemas.QuoteResponse)
 async def create_quote_endpoint(
     quote: schemas.QuoteCreate,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id),
+    user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_CREATE)),
     token: str = Depends(oauth2_scheme)
 ):
-    return await crud.create_quote(db, quote, tenant_id, token)
+    return await crud.create_quote(db, quote, user.tenant_id, token)
 
 @app.get("/quotes", response_model=PaginatedResponse[schemas.QuoteResponse])
 async def list_quotes(
     page: int = 1,
     limit: int = 20,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_READ))
 ):
-    return await crud.get_quotes(db, tenant_id=tenant_id, page=page, limit=limit)
+    return await crud.get_quotes(db, tenant_id=user.tenant_id, page=page, limit=limit)
 
 @app.post("/quotes/{quote_id}/convert", response_model=schemas.InvoiceResponse)
 async def convert_quote(
     quote_id: int,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id),
+    user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_CREATE)),
     token: int = Depends(oauth2_scheme)
 ):
     try:
-        invoice = await crud.convert_quote_to_invoice(db, quote_id, tenant_id, token)
+        invoice = await crud.convert_quote_to_invoice(db, quote_id, user.tenant_id, token)
         return invoice
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -195,45 +194,24 @@ async def get_current_rate(db: AsyncSession = Depends(database.get_db)):
         "acquired_at": rate.acquired_at
     }
 
-# Validar Token Supervisor
-def validate_supervisor_token(token: str, required_tenant_id: int):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        role = payload.get("role")
-        supervisor_tenant_id = payload.get("tenant_id")
-        
-        if supervisor_tenant_id != required_tenant_id:
-            raise HTTPException(status_code=403, detail="ACCESO DENEGADO: El supervisor pertenece a otra empresa.")
-        
-        if role not in ["OWNER", "ADMIN"]:
-            raise HTTPException(status_code=403, detail="Se requiere autorización de Supervisor.")
-        return True
-    except JWTError:
-        raise HTTPException(status_code=403, detail="Credenciales de supervisor inválidas.")
-
 @app.post("/invoices/{invoice_id}/void", response_model=schemas.InvoiceResponse)
 async def void_invoice(
     invoice_id: int,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id),
-    x_supervisor_token: Optional[str] = Header(None, alias="X-Supervisor-Token")
+    user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_VOID))
 ):
-    invoice = await crud.get_invoice_by_id(db, invoice_id, tenant_id)
+    invoice = await crud.get_invoice_by_id(db, invoice_id, user.tenant_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Factura no encontrada")
     
     if invoice.status == "VOID":
         raise HTTPException(status_code=400, detail="La factura ya está anulada")
-    
-    if invoice.status in ["PAID", "PARTIALLY_PAID"]:
-        if not x_supervisor_token:
-            raise HTTPException(status_code=403, detail="Factura con pagos. Se requiere aprobación del Supervisor.")
-        validate_supervisor_token(x_supervisor_token, tenant_id)
         
     invoice = await crud.set_invoice_void(db, invoice)
     
     event_data = {
         "invoice_id": invoice.id,
+        "tenant_id": user.tenant_id,
         "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in invoice.items]
     }
     publish_event("invoice.voided", event_data)
@@ -242,28 +220,31 @@ async def void_invoice(
 @app.get("/reports/sales-by-method", response_model=list[schemas.SalesReportItem])
 async def get_sales_report_by_method(
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    user: UserPayload = Depends(RequirePermission(Permissions.REPORTS_VIEW))
 ):
-    return await crud.get_sales_report_by_method(db, tenant_id)
+    return await crud.get_sales_report_by_method(db, user.tenant_id)
 
 @app.get("/reports/dashboard", response_model=schemas.DashboardMetrics)
 async def get_dashboard_metrics(
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id),
+    user: UserPayload = Depends(RequirePermission(Permissions.REPORTS_VIEW))
 ):
-    return await crud.get_dashboard_metrics(db, tenant_id)
+    return await crud.get_dashboard_metrics(db, user.tenant_id)
 
 @app.get("/sales-over-time", response_model=list[schemas.SalesDataPoint])
-async def read_sales_over_time(db: AsyncSession = Depends(database.get_db), tenant_id: int = Depends(get_current_tenant_id)):
-    return await crud.get_sales_compatison(db, tenant_id)
+async def read_sales_over_time(
+    db: AsyncSession = Depends(database.get_db), 
+    user: UserPayload = Depends(RequirePermission(Permissions.REPORTS_VIEW))
+):
+    return await crud.get_sales_compatison(db, user.tenant_id)
 
 @app.get("/invoices/{invoice_id}/pdf")
 async def get_invoice_pdf(
     invoice_id: int,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_READ))
 ):
-    invoice = await crud.get_invoice_by_id(db, invoice_id, tenant_id)
+    invoice = await crud.get_invoice_by_id(db, invoice_id, user.tenant_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Factura no encontrada")
     
