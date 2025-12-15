@@ -42,6 +42,12 @@ class Permissions:
     ACCOUNTING_READ = "accounting:read"   # Libros y Cuentas
     ACCOUNTING_MANAGE = "accounting:manage" # Asientos manuales, Importar PUC
     
+    # PROYECTOS
+    PROJECT_READ = "project:read"
+    PROJECT_CREATE = "project:create"
+    PROJECT_UPDATE = "project:update"
+    TASK_MANAGE = "task:manage" # Crear/Mover tareas
+    
     # SISTEMA
     USER_MANAGE = "user:manage" # Crear usuarios (Auth)
 
@@ -61,7 +67,7 @@ ROLE_PERMISSIONS = {
         Permissions.PAYMENT_CREATE,
         Permissions.PRODUCT_READ,
         Permissions.CUSTOMER_READ,
-        Permissions.CUSTOMER_CREATE # Cajeros suelen registrar clientes nuevos
+        Permissions.CUSTOMER_CREATE, # Cajeros suelen registrar clientes nuevos
     ],
     "SALES_SUPERVISOR": [
         Permissions.INVOICE_READ, 
@@ -69,7 +75,8 @@ ROLE_PERMISSIONS = {
         Permissions.QUOTE_READ,
         Permissions.REPORTS_VIEW,
         Permissions.PRODUCT_READ,
-        Permissions.CUSTOMER_READ
+        Permissions.CUSTOMER_READ,
+        Permissions.PROJECT_READ
     ],
     
     # --- CONTABILIDAD ---
@@ -79,6 +86,7 @@ ROLE_PERMISSIONS = {
         Permissions.REPORTS_VIEW,
         Permissions.ACCOUNTING_READ,
         Permissions.ACCOUNTING_MANAGE,
+        Permissions.PROJECT_READ,
         Permissions.PAYROLL_PROCESS # A veces revisan nómina
     ],
 
@@ -91,7 +99,8 @@ ROLE_PERMISSIONS = {
     ],
     "WAREHOUSE_SUPERVISOR": [
         Permissions.PRODUCT_READ,
-        Permissions.REPORTS_VIEW
+        Permissions.REPORTS_VIEW,
+        Permissions.PROJECT_READ
     ],
 
     # --- RRHH ---
@@ -100,6 +109,14 @@ ROLE_PERMISSIONS = {
         Permissions.EMPLOYEE_MANAGE,
         Permissions.PAYROLL_PROCESS,
         Permissions.SCHEDULE_MANAGE
+    ],
+    
+    # --- PROYECTOS ---
+    "PROJECT_MANAGER": [
+        Permissions.PROJECT_READ, 
+        Permissions.PROJECT_CREATE, 
+        Permissions.PROJECT_UPDATE, 
+        Permissions.TASK_MANAGE
     ]
 }
 

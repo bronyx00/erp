@@ -13,6 +13,7 @@ volumes:
   crm_db_data:
   hhrr_db_data:
   accounting_db_data:
+  project_db_data:
   rabbitmq_data:
 
 services:
@@ -71,9 +72,10 @@ services:
   auth_db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: auth_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=auth_db
+      - TZ=America/Caracas
     volumes:
       - auth_db_data:/var/lib/postgresql/data
     networks:
@@ -97,6 +99,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://admin:admin@auth_db:5432/auth_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
+      - TZ=America/Caracas
     depends_on:
       auth_db:
         condition: service_healthy
@@ -115,9 +118,10 @@ services:
   finance_db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: finance_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=finance_db
+      - TZ=America/Caracas
     volumes:
       - finance_db_data:/var/lib/postgresql/data
     networks:
@@ -138,10 +142,10 @@ services:
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       - FINANCE_DATABASE_URL=postgresql+asyncpg://admin:admin@finance_db:5432/finance_db
-      # Variable genérica para Alembic
       - DATABASE_URL=postgresql+asyncpg://admin:admin@finance_db:5432/finance_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
+      - TZ=America/Caracas
     depends_on:
       finance_db:
         condition: service_healthy
@@ -162,9 +166,10 @@ services:
   inventory_db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: inventory_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=inventory_db
+      - TZ=America/Caracas
     volumes:
       - inventory_db_data:/var/lib/postgresql/data
     networks:
@@ -187,6 +192,7 @@ services:
       - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
       - DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
+      - TZ=America/Caracas
     depends_on:
       inventory_db:
         condition: service_healthy
@@ -210,6 +216,7 @@ services:
       - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
       - DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
+      - TZ=America/Caracas
     depends_on:
       inventory_db:
         condition: service_healthy
@@ -224,9 +231,10 @@ services:
   crm_db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: crm_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=crm_db
+      - TZ=America/Caracas
     volumes:
       - crm_db_data:/var/lib/postgresql/data
     networks:
@@ -249,6 +257,7 @@ services:
       - CRM_DATABASE_URL=postgresql+asyncpg://admin:admin@crm_db:5432/crm_db
       - DATABASE_URL=postgresql+asyncpg://admin:admin@crm_db:5432/crm_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
+      - TZ=America/Caracas
     depends_on:
       crm_db:
         condition: service_healthy
@@ -267,9 +276,10 @@ services:
   hhrr_db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: hhrr_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=hhrr_db
+      - TZ=America/Caracas
     volumes:
       - hhrr_db_data:/var/lib/postgresql/data
     networks:
@@ -293,6 +303,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://admin:admin@hhrr_db:5432/hhrr_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
+      - TZ=America/Caracas
     depends_on:
       hhrr_db:
         condition: service_healthy
@@ -313,9 +324,10 @@ services:
   accounting_db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: accounting_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=accounting_db
+      - TZ=America/Caracas
     volumes:
       - accounting_db_data:/var/lib/postgresql/data
     networks:
@@ -338,6 +350,7 @@ services:
       - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
       - DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
       - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
+      - TZ=America/Caracas
     depends_on:
       accounting_db:
         condition: service_healthy
@@ -360,6 +373,7 @@ services:
       - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
       - DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
+      - TZ=America/Caracas
     depends_on:
       accounting_db:
         condition: service_healthy
@@ -367,6 +381,50 @@ services:
         condition: service_healthy
     networks:
       - erp-network
+
+  # =========================================
+  # SERVICIO: PROJECTS (Gestión de Proyectos)
+  # =========================================
+  project_db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=project_db
+      - TZ=America/Caracas
+    volumes:
+      - project_db_data:/var/lib/postgresql/data
+    networks:
+      - erp-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d project_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  project-service:
+    build: ./services/project-service
+    restart: always
+    volumes:
+      - ./services/project-service:/app
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://admin:admin@project_db:5432/project_db
+      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
+      - TZ=America/Caracas
+    depends_on:
+      project_db:
+        condition: service_healthy
+    networks:
+      - erp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.projects.rule=PathPrefix(`/api/projects`)"
+      - "traefik.http.services.projects.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.projects-strip.stripprefix.prefixes=/api/projects"
+      - "traefik.http.routers.projects.middlewares=projects-strip"
 
   # =========================================
   # SERVICIO: COMPLIANCE (Fiscal Worker)
@@ -379,6 +437,7 @@ services:
       - ./services/compliance-service:/app
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
+      - TZ=America/Caracas
     depends_on:
       rabbitmq:
         condition: service_healthy
