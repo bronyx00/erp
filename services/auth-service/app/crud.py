@@ -69,3 +69,4 @@ async def get_users_by_tenant(db: AsyncSession, tenant_id: int):
     )
     result = await db.execute(query)
     return result.scalars().all()
+

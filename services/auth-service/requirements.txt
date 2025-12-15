@@ -13,11 +13,10 @@ pydantic-settings>=2.2.0
 email-validator>=2.1.1
 
 # Seguridad
-# IMPORTANTE: passlib no es compatible con bcrypt 4.1+.
-# Forzamos la versión 4.0.1 para evitar el error "__about__".
 bcrypt==4.0.1
 passlib[bcrypt]>=1.7.4
 python-jose[cryptography]>=3.3.0
+httpx
 
 # Formularios
 python-multipart>=0.0.9

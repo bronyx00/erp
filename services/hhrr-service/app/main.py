@@ -46,6 +46,14 @@ def publish_event(routing_key: str, data: dict):
     except Exception as e:
         logger.error(f"❌ Error RabbitMQ: {e}")
         
+@app.get("/access-control/check")
+async def check_access(
+    email: str,
+    tenant_id: int,
+    db: AsyncSession = Depends(database.get_db)
+):
+    is_allowed = await crud.check_employee_access(db, email, tenant_id)
+    return {"allowed": is_allowed}
 
 @app.get("/employees", response_model=PaginatedResponse[schemas.EmployeeResponse])
 async def read_employees(

@@ -3,6 +3,52 @@ from sqlalchemy import func
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from . import models, schemas
+from datetime import datetime
+
+async def check_employee_access(db: AsyncSession, email: str, tenant_id: int) -> bool:
+    """Verifica si el empleado puede acceder según su horarioactual"""
+    # Buscar empleado y su horario
+    query = select(models.Employee).options(selectinload(models.Employee.schedule))\
+        .filter(models.Employee.email == email, models.Employee.tenant_id == tenant_id)
+        
+    result = await db.execute(query)
+    employee = result.scalars().first()
+    
+    # Si no existe en nómina o no tiene horario asignado, permitimos acceso
+    # Si no tiene horario restringido, entra libremente.
+    if not employee or not employee.schedule or not employee.schedule.is_active:
+        return True
+    
+    # Determinar día y hora actual
+    now = datetime.now()
+    current_time = now.time()
+    weekday = now.weekday() # 0=Lunes, 1=Martes, ...., 6=Domingo
+    
+    # Mapeo de los campos del modelo WorkSchedule
+    sched = employee.schedule
+    # (inicio, fin) para cada día
+    day_map = {
+        0: (sched.monday_start, sched.monday_end),
+        1: (sched.tuesday_start, sched.tuesday_end),
+        2: (sched.wednesday_start, sched.wednesday_end),
+        3: (sched.thursday_start, sched.thursday_end),
+        4: (sched.friday_start, sched.friday_end),
+        5: (sched.saturday_start, sched.saturday_end),
+        6: (sched.sunday_start, sched.sunday_end),
+    }
+    
+    start, end = day_map.get(weekday, (None, None))
+    
+    # Validar Relas 
+    # Si el dia no tiene horas definidas (None), es dia libre -> ACCESO DENEGADO
+    if start is None or end is None:
+        return False
+    
+    # Si la hora actual está dentro del rango -> ACCESO PERMITIDO
+    if start <= current_time <= end:
+        return True
+    
+    return False
 
 async def get_employees(db: AsyncSession, tenant_id: int, page: int = 1, limit: int = 50):
     offset = (page - 1) * limit

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 from . import crud, schemas, security, database, models
+import httpx
 
 app = FastAPI(title="Auth Service", root_path="/api/auth")
 
@@ -35,11 +36,36 @@ async def register(user: schemas.UserCreate, db: AsyncSession = Depends(database
 @app.post("/login", response_model=schemas.Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(database.get_db)):
     """
-    Endpoint de Login: Devuelve un JWT enriquecido con rol y tenand_id.
+    Endpoint de Login con restriccion de horario.
     """
+    # Validación Credenciales
     user = await crud.get_user_by_email(db, email=form_data.username)
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Credenciales invalidas")
+    
+    # Validación de horario
+    # Dueño siempre entra. Los demas pasan por filtro
+    if user.role != "OWNER":
+        try:
+            async with httpx.AsyncClient() as client:
+                # Llama al servicio HHRR 
+                response = await client.get(
+                    f"http://hhrr-service:8000/api/hhrr/access-control/check",
+                    params={"email": user.email, "tenant_id": user.tenant_id},
+                    timeout=3.0
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("allowed") is False:
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Acceso denegado: Estás fuera de tu horario laboral."
+                        )
+        except httpx.RequestError:
+            # Si HHRR está caído, decidimos: ¿Bloquear o Dejar pasar?
+            # Por seguridad en producción se suele bloquear, pero en dev warn.
+            print("⚠️ Advertencia: No se pudo verificar horario con HHRR Service.")
     
     access_token = security.create_access_token(
         data={
