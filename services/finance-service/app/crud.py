@@ -54,22 +54,34 @@ async def get_tenant_data(token: str):
             return None
         
 async def get_customer_by_tax_id(tax_id: str, token: str):
-    """Busca datos del cliente en CRM usando el tax_id"""
     search_id = str(tax_id).strip().upper()
     
     async with httpx.AsyncClient() as client:
         try:
-            resp = await client.get(f"{CRM_URL}/customers", headers={"Authorization": f"Bearer {token}"})
+            resp = await client.get(f"{CRM_URL}/customers?limit=1000", headers={"Authorization": f"Bearer {token}"})
+            
             if resp.status_code == 200:
-                customers = resp.json()
+                body = resp.json()
+                
+                # --- CORRECCIÓN FINAL ---
+                # Detectar si viene como 'data' (tu formato actual) o 'items' (formato estándar) o lista
+                if isinstance(body, list):
+                    customers = body
+                elif isinstance(body, dict):
+                    # Aquí estaba el error: buscabas "items", pero es "data"
+                    customers = body.get("data", body.get("items", []))
+                else:
+                    customers = []
+                # ------------------------
+
                 for c in customers:
-                    db_tax_id = str(c.get('tax_id', '')).strip().upper()
-                    
-                    if db_tax_id == search_id:
+                    c_tax = c.get('tax_id')
+                    if c_tax and str(c_tax).strip().upper() == search_id:
                         return c
+                        
             return None
         except Exception as e:
-            logger.error(f"Error CRM: {e}")
+            print(f"Error CRM Lookup: {e}")
             return None
         
 async def get_next_invoice_number(db: AsyncSession, tenant_id: int) -> int:

@@ -8,7 +8,12 @@ async def create_project(db: AsyncSession, project: schemas.ProjectCreate, tenan
     db.add(db_project)
     await db.commit()
     await db.refresh(db_project)
-    return db_project
+    
+    project_dict = db_project.__dict__
+    return schemas.ProjectResponse(
+        **project_dict,
+        tasks=[]
+    )
 
 async def get_projects(db: AsyncSession, tenant_id: int):
     # Cargar tareas para el tablero

@@ -46,8 +46,8 @@ class Employee(Base):
     
     # --- DATOS LABORALES ---
     position = Column(String) 
-    departament = Column(String, nullable=True)     # Ej: Ventas, Almacén
-    manager_name = Column(Integer, nullable=True)     # ID de otro empleado (Supervisor)
+    department = Column(String, nullable=True)     # Ej: Ventas, Almacén
+    manager_id = Column(Integer, nullable=True)     # ID de otro empleado (Supervisor)
     hired_at = Column(Date, nullable=True)
     contract_type = Column(String, default="UNDEFINED") # Indefinido, Determinado
     
@@ -60,7 +60,7 @@ class Employee(Base):
     bonus_scheme = Column(String, nullable=True)    # Ej: "3% Comisión"
     
     # --- DATOS COMPLEJOS ---
-    emergency_contract = Column(JSON, nullable=True)
+    emergency_contact = Column(JSON, nullable=True)
     documents = Column(JSON, default=list)
     performance_reviews = Column(JSON, default=list)
     

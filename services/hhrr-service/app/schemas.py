@@ -66,8 +66,8 @@ class EmployeeBase(BaseModel):
     birth_date: Optional[date] = None
     
     position: str
-    departament: Optional[str] = None
-    manager_name: Optional[str] = None
+    department: Optional[str] = None
+    manager_id: Optional[str] = None
     hired_at: Optional[date] = None
     schedule_id: Optional[int] = None
     
@@ -75,7 +75,7 @@ class EmployeeBase(BaseModel):
     bonus_scheme: Optional[str] = None
     
     # Campos JSON complejos
-    emergency_contract: Optional[EmergencyContact] = None
+    emergency_contact: Optional[EmergencyContact] = None
     documents: List[Document] = []
     performance_reviews: List[PerformanceReview] = []
     
