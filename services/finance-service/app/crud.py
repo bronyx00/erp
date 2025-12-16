@@ -55,7 +55,7 @@ async def get_tenant_data(token: str):
         
 async def get_customer_by_tax_id(tax_id: str, token: str):
     """Busca datos del cliente en CRM usando el tax_id"""
-    search_id = str(tax_id).strip.upper()
+    search_id = str(tax_id).strip().upper()
     
     async with httpx.AsyncClient() as client:
         try:
