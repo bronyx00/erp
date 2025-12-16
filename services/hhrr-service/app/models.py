@@ -71,15 +71,48 @@ class Employee(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
 class Payroll(Base):
+    """
+    Representa el recibo de pago individual de un empleado.
+    Actualizado para incluir las deducciones legales venezolanas y las contribuciones patronales.
+    """
     __tablename__ = "payrolls"
     
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, index=True, nullable=False)
     
+    # Relación con el Empleado
+    employee_id = Column(Integer, ForeignKey=("employees.id"), nullable=False)
+    employee = relationship("Employee")
+    
     period_start = Column(Date, nullable=False)
     period_end = Column(Date, nullable=False)
-    total_amount = Column(Numeric(10, 2), nullable=False)
-    status = Column(String, default="PAID")
+    
+    # --- ASIGNACIONES ---
+    base_salary = Column(Numeric(10, 2), default=0)         # Sueldo Base
+    bonuses = Column(Numeric(10, 2), default=0)             # Bono
+    total_earnings = Column(Numeric(10, 2), nullable=False) # Total Asignaciones (Bruto)
+    
+    # --- RETENCIONES AL TRABAJADOR ---
+    # (IVSS - 4%)
+    ivss_employee = Column(Numeric(10, 2), default=0) 
+    # (FAOV - 1%)
+    faov_employee = Column(Numeric(10, 2), default=0)
+    # (ISLR - Variable)
+    islr_retention = Column(Numeric(10, 2), default=0)
+    
+    total_deductions = Column(Numeric(10, 2), default=0)    # Total Deducciones
+    
+    # --- APORTES PATRONALES ---
+    # Estos son costos para la empresa, no se deducen del salario del empleado.
+    # Seguridad Social (IVSS - 9%, 10% o 11%)
+    ivss_employer = Column(Numeric(10, 2), default=0)
+    # Fondo de Vivienda (FAOV - 2%)
+    faov_employer = Column(Numeric(10, 2), default=0)
+    
+    # --- PAGO NETO ---
+    net_pay = Column(Numeric(10, 2), nullable=False)
+    
+    status = Column(String, default="DRAFT")                # DRAFT, CALCULATED, PAID
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

@@ -107,3 +107,42 @@ class Transaction(Base):
     reference_id = Column(String, nullable=True)            # ID de factura o ID de pago de nómina
     
     created_at = Column(DateTime(timezone=True))
+    
+class PayrollAccountingConfig(Base):
+    """
+    Configuración para asignar conceptos de nómina a cuentas contables.
+    Separa los gastos del pasivo (Balance General).
+    """
+    __tablename__ = "payroll_accounting_configs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, index=True, nullable=False)
+    name= Column(String, default="Configuración de defecto")
+    
+    # --- GASTOS (DÉBITO) - Cuentas de pérdidas y ganancias ---
+    # Salarios y sueldos brutos
+    expense_salaries_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    # Contribuciones del empleador (costo para la empresa)
+    expense_ivss_employer_id = Column(Integer, ForeignKey("accounts.id"), nullable=True) # SSO
+    expense_faov_employer_id = Column(Integer, ForeignKey("accounts.id"), nullable=True) # SPF/Housing
+    expense_incest_employer_id = Column(Integer, ForeignKey("accounts.id"), nullable=True) # INCES
+    
+    # --- PASIVOS (CRÉDITO) - Cuentas del balance general ---
+    # Salario neto a pagar a empleados
+    liability_salaries_payable_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    
+    # Retenciones de impuestos a pagar (porción del empleado + porción del empleador generalmente se agrupan para el pago)
+    liability_ivss_payable_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    liability_faov_payable_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    liability_incest_payable_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    liability_islr_payable_id = Column(Integer, ForeignKey("accounts.id"), nullable=True) # Retención del impuesto sobre la renta
+    
+    # Provisiones (Acumulaciones para pagos futuros)
+    liability_vacation_provision_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    liability_profit_sharing_provision_id = Column(Integer, ForeignKey("accounts.id"), nullable=True) # Utilidades
+    
+    # Relaciones
+    expense_salaries = relationship("Account", foreign_keys=[expense_salaries_id])
+    expense_ivss_employer = relationship("Account", foreign_keys=[expense_ivss_employer_id])
+    liability_salaries_payable = relationship("Account", foreign_keys=[liability_salaries_payable_id])
+    liability_ivss_payable = relationship("Account", foreign_keys=[liability_ivss_payable_id])
