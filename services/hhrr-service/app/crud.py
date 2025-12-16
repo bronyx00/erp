@@ -193,3 +193,25 @@ async def get_employee_notes(
             "total_pages": (total + limit - 1) // limit
         }
     }
+    
+async def update_employee (
+    db: AsyncSession,
+    employee_id: int,
+    employee_update: schemas.EmployeeUpdate,
+    tenant_id: int
+):
+    # Busca al empleado existente
+    db_employee = await get_employee_by_id(db, employee_id, tenant_id)
+    if not db_employee:
+        return None
+    
+    # Actualiza solo los campos que vienen en el JSON
+    update_data = employee_update.model_dump(exclude_unset=True)
+    
+    for key, value in update_data.items():
+        setattr(db_employee, key, value)
+        
+    # Guarda los cambios
+    await db.commit()
+    await db.refresh(db_employee)
+    return db_employee

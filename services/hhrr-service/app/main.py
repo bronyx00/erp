@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,6 +84,18 @@ async def read_employee(
         raise HTTPException(status_code=404, detail="Empleado no encontrado")
     return employee
 
+@app.put("/employees/{employee_id}", response_model=schemas.EmployeeResponse)
+async def update_employee(
+    employee_id: int,
+    employee_update: schemas.EmployeeUpdate,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_MANAGE))
+):
+    updated_employee = await crud.update_employee(db, employee_id, employee_update, user.tenant_id)
+    if not update_employee:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return updated_employee
+
 @app.post("/payroll", response_model=schemas.PayrollResponse)
 async def generate_payroll(
     payroll: schemas.PayrollCreate,
@@ -129,3 +142,19 @@ async def read_employee_notes(
     limit: int = 10,
 ):
     return await crud.get_employee_notes(db, employee_id=employee_id, tenant_id=user.tenant_id, page=page, limit=limit)
+
+# --- HORARIOS ---
+@app.post("/work-schedules", response_model=schemas.WorkScheduleResponse)
+async def create_work_schedule(
+    schedule: schemas.WorkScheduleCreate,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_MANAGE))
+):
+    return await crud.create_schedule(db, schedule, user.tenant_id)
+
+@app.get("/work-schedules", response_model=List[schemas.WorkScheduleResponse])
+async def read_work_schedules(
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_READ))
+):
+    return await crud.get_schedule(db, user.tenant_id)

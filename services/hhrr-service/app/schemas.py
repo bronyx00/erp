@@ -67,7 +67,7 @@ class EmployeeBase(BaseModel):
     
     position: str
     department: Optional[str] = None
-    manager_id: Optional[str] = None
+    manager_id: Optional[int] = None
     hired_at: Optional[date] = None
     schedule_id: Optional[int] = None
     
@@ -84,6 +84,25 @@ class EmployeeBase(BaseModel):
     
 class EmployeeCreate(EmployeeBase):
     pass
+
+class EmployeeUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    identification: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    birth_date: Optional[date] = None
+    position: Optional[str] = None
+    department: Optional[str] = None
+    manager_id: Optional[int] = None
+    hired_at: Optional[date] = None
+    schedule_id: Optional[int] = None  
+    salary: Optional[Decimal] = None
+    bonus_scheme: Optional[str] = None
+    emergency_contact: Optional[EmergencyContact] = None
+    status: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class EmployeeResponse(EmployeeBase):
     id: int
