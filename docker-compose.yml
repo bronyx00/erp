@@ -5,7 +5,7 @@ networks:
   erp-network:
     driver: bridge
 
-# --- VOLUMENES (Persistencia de Datos) ---
+# --- VOLUMENES ---
 volumes:
   auth_db_data:
   finance_db_data:
@@ -23,10 +23,10 @@ services:
   
   traefik:
     image: traefik:v2.10
-    command: --api.insecure=true --providers.docker
+    command: --api.insecure=false --providers.docker # api.insecure=false en prod
     ports:
       - "80:80"
-      - "8080:8080"
+      - "443:443" # Comenta el dashboard inseguro en producción
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -34,13 +34,12 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    ports:
-      - "15672:15672"
-      - "5672:5672"
+    expose:
+      - "5672"
     environment:
-      - RABBITMQ_ERLANG_COOKIE=secret_cookie_erp_system
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_ERLANG_COOKIE=${RABBITMQ_ERLANG_COOKIE}
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
@@ -52,7 +51,7 @@ services:
         retries: 5
 
   # =========================================
-  # SERVICIO: FRONTEND (Angular)
+  # SERVICIO: FRONTEND
   # =========================================
   frontend:
     build: 
@@ -67,39 +66,39 @@ services:
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
 
   # =========================================
-  # SERVICIO: AUTH (Autenticación)
+  # SERVICIO: AUTH
   # =========================================
   auth_db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=auth_db
-      - TZ=America/Caracas
+      - TZ=${TZ}
     volumes:
       - auth_db_data:/var/lib/postgresql/data
     networks:
       - erp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d auth_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d auth_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   auth-service:
-    build: ./services/auth-service
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
     restart: always
-    # Sincroniza la carpeta local con el contenedor
     volumes:
       - ./services/auth-service:/app
-    # Intenta migrar DB al iniciar, luego arranca la app
     command: >
       sh -c "alembic upgrade head && 
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+             uvicorn app.main:app --host 0.0.0.0 --port 8000" # Quitamos --reload para prod
     environment:
-      - DATABASE_URL=postgresql+asyncpg://admin:admin@auth_db:5432/auth_db
-      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
-      - TZ=America/Caracas
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@auth_db:5432/auth_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - TZ=${TZ}
     depends_on:
       auth_db:
         condition: service_healthy
@@ -113,39 +112,41 @@ services:
       - "traefik.http.routers.auth.middlewares=auth-strip"
 
   # =========================================
-  # SERVICIO: FINANCE (Finanzas)
+  # SERVICIO: FINANCE
   # =========================================
   finance_db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=finance_db
-      - TZ=America/Caracas
+      - TZ=${TZ}
     volumes:
       - finance_db_data:/var/lib/postgresql/data
     networks:
       - erp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d finance_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d finance_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   finance-service:
-    build: ./services/finance-service
+    build:
+      context: .
+      dockerfile: services/finance-service/Dockerfile
     restart: always
     volumes:
       - ./services/finance-service:/app
     command: >
       sh -c "alembic upgrade head && 
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
-      - FINANCE_DATABASE_URL=postgresql+asyncpg://admin:admin@finance_db:5432/finance_db
-      - DATABASE_URL=postgresql+asyncpg://admin:admin@finance_db:5432/finance_db
-      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
-      - TZ=America/Caracas
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@finance_db:5432/finance_db
+      - FINANCE_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@finance_db:5432/finance_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/%2F
+      - TZ=${TZ}
     depends_on:
       finance_db:
         condition: service_healthy
@@ -161,38 +162,40 @@ services:
       - "traefik.http.routers.finance.middlewares=finance-strip"
 
   # =========================================
-  # SERVICIO: INVENTORY (Inventario)
+  # SERVICIO: INVENTORY
   # =========================================
   inventory_db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=inventory_db
-      - TZ=America/Caracas
+      - TZ=${TZ}
     volumes:
       - inventory_db_data:/var/lib/postgresql/data
     networks:
       - erp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d inventory_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d inventory_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   inventory-service:
-    build: ./services/inventory-service
+    build: 
+      context: .
+      dockerfile: services/inventory-service/Dockerfile
     restart: always
     volumes:
       - ./services/inventory-service:/app
     command: >
       sh -c "alembic upgrade head && 
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
-      - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
-      - DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
-      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
-      - TZ=America/Caracas
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@inventory_db:5432/inventory_db
+      - INVENTORY_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@inventory_db:5432/inventory_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - TZ=${TZ}
     depends_on:
       inventory_db:
         condition: service_healthy
@@ -206,17 +209,18 @@ services:
       - "traefik.http.routers.inventory.middlewares=inventory-strip"
 
   inventory-worker:
-    build: ./services/inventory-service
-    # Worker no necesita migrar, solo el servicio principal
+    build:
+      context: .
+      dockerfile: services/inventory-service/Dockerfile
     command: python -u app/worker.py
     restart: always
     volumes:
       - ./services/inventory-service:/app
     environment:
-      - INVENTORY_DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
-      - DATABASE_URL=postgresql+asyncpg://admin:admin@inventory_db:5432/inventory_db
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
-      - TZ=America/Caracas
+      - INVENTORY_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@inventory_db:5432/inventory_db
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@inventory_db:5432/inventory_db
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/%2F
+      - TZ=${TZ}
     depends_on:
       inventory_db:
         condition: service_healthy
@@ -226,38 +230,40 @@ services:
       - erp-network
 
   # =========================================
-  # SERVICIO: CRM (Clientes)
+  # SERVICIO: CRM
   # =========================================
   crm_db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=crm_db
-      - TZ=America/Caracas
+      - TZ=${TZ}
     volumes:
       - crm_db_data:/var/lib/postgresql/data
     networks:
       - erp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d crm_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d crm_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   crm-service:
-    build: ./services/crm-service
+    build:
+      context: .
+      dockerfile: services/crm-service/Dockerfile
     restart: always
     volumes:
       - ./services/crm-service:/app
     command: >
       sh -c "alembic upgrade head && 
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
-      - CRM_DATABASE_URL=postgresql+asyncpg://admin:admin@crm_db:5432/crm_db
-      - DATABASE_URL=postgresql+asyncpg://admin:admin@crm_db:5432/crm_db
-      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
-      - TZ=America/Caracas
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@crm_db:5432/crm_db
+      - CRM_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@crm_db:5432/crm_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - TZ=${TZ}
     depends_on:
       crm_db:
         condition: service_healthy
@@ -271,39 +277,41 @@ services:
       - "traefik.http.routers.crm.middlewares=crm-strip"
 
   # =========================================
-  # SERVICIO: HHRR (Recursos Humanos)
+  # SERVICIO: HHRR
   # =========================================
   hhrr_db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=hhrr_db
-      - TZ=America/Caracas
+      - TZ=${TZ}
     volumes:
       - hhrr_db_data:/var/lib/postgresql/data
     networks:
       - erp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d hhrr_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d hhrr_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   hhrr-service:
-    build: ./services/hhrr-service
+    build:
+      context: .
+      dockerfile: services/hhrr-service/Dockerfile
     restart: always
     volumes:
       - ./services/hhrr-service:/app
     command: >
       sh -c "alembic upgrade head && 
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
-      - HHRR_DATABASE_URL=postgresql+asyncpg://admin:admin@hhrr_db:5432/hhrr_db
-      - DATABASE_URL=postgresql+asyncpg://admin:admin@hhrr_db:5432/hhrr_db
-      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
-      - TZ=America/Caracas
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@hhrr_db:5432/hhrr_db
+      - HHRR_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@hhrr_db:5432/hhrr_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/%2F
+      - TZ=${TZ}
     depends_on:
       hhrr_db:
         condition: service_healthy
@@ -319,38 +327,40 @@ services:
       - "traefik.http.routers.hhrr.middlewares=hhrr-strip"
 
   # =========================================
-  # SERVICIO: ACCOUNTING (Contabilidad)
+  # SERVICIO: ACCOUNTING
   # =========================================
   accounting_db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=accounting_db
-      - TZ=America/Caracas
+      - TZ=${TZ}
     volumes:
       - accounting_db_data:/var/lib/postgresql/data
     networks:
       - erp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d accounting_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d accounting_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   accounting-service:
-    build: ./services/accounting-service
+    build:
+      context: .
+      dockerfile: services/accounting-service/Dockerfile
     restart: always
     volumes:
       - ./services/accounting-service:/app
     command: >
       sh -c "alembic upgrade head && 
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
-      - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
-      - DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
-      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
-      - TZ=America/Caracas
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@accounting_db:5432/accounting_db
+      - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@accounting_db:5432/accounting_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - TZ=${TZ}
     depends_on:
       accounting_db:
         condition: service_healthy
@@ -364,16 +374,18 @@ services:
       - "traefik.http.routers.accounting.middlewares=accounting-strip"
 
   accounting-worker:
-    build: ./services/accounting-service
+    build:
+      context: .
+      dockerfile: services/accounting-service/Dockerfile
     command: python -m app.worker
     restart: always
     volumes:
       - ./services/accounting-service:/app
     environment:
-      - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
-      - DATABASE_URL=postgresql+asyncpg://admin:admin@accounting_db:5432/accounting_db
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
-      - TZ=America/Caracas
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@accounting_db:5432/accounting_db
+      - ACCOUNTING_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@accounting_db:5432/accounting_db
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/%2F
+      - TZ=${TZ}
     depends_on:
       accounting_db:
         condition: service_healthy
@@ -383,37 +395,39 @@ services:
       - erp-network
 
   # =========================================
-  # SERVICIO: PROJECTS (Gestión de Proyectos)
+  # SERVICIO: PROJECTS
   # =========================================
   project_db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=project_db
-      - TZ=America/Caracas
+      - TZ=${TZ}
     volumes:
       - project_db_data:/var/lib/postgresql/data
     networks:
       - erp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d project_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d project_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   project-service:
-    build: ./services/project-service
+    build: 
+      context: .
+      dockerfile: services/project-service/Dockerfile
     restart: always
     volumes:
       - ./services/project-service:/app
     command: >
       sh -c "alembic upgrade head && 
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://admin:admin@project_db:5432/project_db
-      - JWT_SECRET_KEY=SECRET_SUPER_SECRETO_CAMBIAME
-      - TZ=America/Caracas
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@project_db:5432/project_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - TZ=${TZ}
     depends_on:
       project_db:
         condition: service_healthy
@@ -427,17 +441,19 @@ services:
       - "traefik.http.routers.projects.middlewares=projects-strip"
 
   # =========================================
-  # SERVICIO: COMPLIANCE (Fiscal Worker)
+  # SERVICIO: COMPLIANCE
   # =========================================
   compliance-worker:
-    build: ./services/compliance-service
+    build:
+      context: .
+      dockerfile: services/compliance-service/Dockerfile
     command: python -u app/worker.py
     restart: always
     volumes:
       - ./services/compliance-service:/app
     environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/%2F
-      - TZ=America/Caracas
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/%2F
+      - TZ=${TZ}
     depends_on:
       rabbitmq:
         condition: service_healthy

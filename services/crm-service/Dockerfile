@@ -7,11 +7,16 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# --- Instalamos el paquete común ---
+COPY packages /tmp/packages
+RUN pip install /tmp/packages/erp_common
+# -----------------------------------
+
+COPY services/crm-service/requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./app /app/app
+COPY services/crm-service/app /app/app
 
 EXPOSE 8000
 

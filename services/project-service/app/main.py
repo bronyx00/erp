@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from . import crud, schemas, database, models
-from .security import RequirePermission, Permissions, UserPayload
+from erp_common.security import RequirePermission, Permissions, UserPayload
 
 async def lifespan(app: FastAPI):
     async with database.engine.begin() as conn:

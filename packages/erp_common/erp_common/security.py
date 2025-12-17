@@ -1,18 +1,40 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from passlib.context import CryptContext
+from datetime import datetime, timedelta
 import os
+from typing import Optional
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "SECRET_SUPER_SECRETO_CAMBIAME")
+# Configuración Criptográfica
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30 # 30 minutos
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-# ==============================================================================
-# 🛡️ LISTA MAESTRA DE PERMISOS
-# ==============================================================================
+# --- UTILIDADES ---
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# --- PERMISOS ---
 class Permissions:
-    # FINANZAS (Facturación y Pagos)
+    # FINANZAS
     INVOICE_READ = "invoice:read"
     INVOICE_CREATE = "invoice:create"
     INVOICE_VOID = "invoice:void"
@@ -21,45 +43,43 @@ class Permissions:
     PAYMENT_CREATE = "payment:create"
     REPORTS_VIEW = "reports:view"
     
-    # INVENTARIO (Productos y Stock)
+    # INVENTARIO
     PRODUCT_READ = "product:read"
     PRODUCT_CREATE = "product:create"
     PRODUCT_UPDATE = "product:update"
     STOCK_ADJUST = "stock:adjust"
     
-    # CRM (Clientes)
+    # CRM
     CUSTOMER_READ = "customer:read"
     CUSTOMER_CREATE = "customer:create"
     CUSTOMER_UPDATE = "customer:update"
     
-    # RRHH (Empleados y Nómina)
+    # RRHH
     EMPLOYEE_READ = "employee:read"
     EMPLOYEE_MANAGE = "employee:manage"
+    NOTE_CREATE = "note:create"
+    NOTE_READ_ALL = "note:read_all"
     PAYROLL_PROCESS = "payroll:process"
     SCHEDULE_MANAGE = "schedule:manage"
     
     # CONTABILIDAD
-    ACCOUNTING_READ = "accounting:read"   # Libros y Cuentas
-    ACCOUNTING_MANAGE = "accounting:manage" # Asientos manuales, Importar PUC
+    ACCOUNTING_READ = "accounting:read"
+    ACCOUNTING_MANAGE = "accounting:manage"
     
     # PROYECTOS
     PROJECT_READ = "project:read"
     PROJECT_CREATE = "project:create"
     PROJECT_UPDATE = "project:update"
-    TASK_MANAGE = "task:manage" # Crear/Mover tareas
+    TASK_MANAGE = "task:manage"
     
     # SISTEMA
-    USER_MANAGE = "user:manage" # Crear usuarios (Auth)
+    USER_MANAGE = "user:manage" 
 
-# ==============================================================================
-# 👮 MATRIZ DE ROLES (RBAC)
-# ==============================================================================
 ROLE_PERMISSIONS = {
-    "OWNER": ["*"], # Dios
-    "ADMIN": ["*"], # Semidios
+    "OWNER": ["*"], 
+    "ADMIN": ["*"], 
     
-    # --- VENTAS ---
-    "SALES_AGENT": [ # Cajero
+    "SALES_AGENT": [
         Permissions.INVOICE_READ, 
         Permissions.INVOICE_CREATE, 
         Permissions.QUOTE_READ,
@@ -67,31 +87,29 @@ ROLE_PERMISSIONS = {
         Permissions.PAYMENT_CREATE,
         Permissions.PRODUCT_READ,
         Permissions.CUSTOMER_READ,
-        Permissions.CUSTOMER_CREATE, # Cajeros suelen registrar clientes nuevos
+        Permissions.CUSTOMER_CREATE,
     ],
     "SALES_SUPERVISOR": [
         Permissions.INVOICE_READ, 
-        Permissions.INVOICE_VOID, # Puede anular
+        Permissions.INVOICE_VOID,
         Permissions.QUOTE_READ,
         Permissions.REPORTS_VIEW,
         Permissions.PRODUCT_READ,
         Permissions.CUSTOMER_READ,
-        Permissions.PROJECT_READ
+        Permissions.PROJECT_READ,
+        Permissions.NOTE_CREATE
     ],
     
-    # --- CONTABILIDAD ---
     "ACCOUNTANT": [
         Permissions.INVOICE_READ,
         Permissions.QUOTE_READ,
         Permissions.REPORTS_VIEW,
         Permissions.ACCOUNTING_READ,
         Permissions.ACCOUNTING_MANAGE,
-        Permissions.PROJECT_READ,
-        Permissions.PAYROLL_PROCESS # A veces revisan nómina
+        Permissions.PAYROLL_PROCESS
     ],
 
-    # --- INVENTARIO ---
-    "WAREHOUSE_CLERK": [ # Almacenista
+    "WAREHOUSE_CLERK": [
         Permissions.PRODUCT_READ,
         Permissions.PRODUCT_CREATE,
         Permissions.PRODUCT_UPDATE,
@@ -100,30 +118,28 @@ ROLE_PERMISSIONS = {
     "WAREHOUSE_SUPERVISOR": [
         Permissions.PRODUCT_READ,
         Permissions.REPORTS_VIEW,
-        Permissions.PROJECT_READ
+        Permissions.NOTE_CREATE
     ],
 
-    # --- RRHH ---
     "RRHH_MANAGER": [
         Permissions.EMPLOYEE_READ,
         Permissions.EMPLOYEE_MANAGE,
         Permissions.PAYROLL_PROCESS,
-        Permissions.SCHEDULE_MANAGE
+        Permissions.SCHEDULE_MANAGE,
+        Permissions.NOTE_CREATE,
+        Permissions.NOTE_READ_ALL
     ],
     
-    # --- PROYECTOS ---
     "PROJECT_MANAGER": [
         Permissions.PROJECT_READ, 
         Permissions.PROJECT_CREATE, 
         Permissions.PROJECT_UPDATE, 
-        Permissions.TASK_MANAGE
+        Permissions.TASK_MANAGE,
+        Permissions.REPORTS_VIEW
     ]
 }
 
-# ==============================================================================
-# 🔐 LÓGICA DE VALIDACIÓN
-# ==============================================================================
-
+# --- DEPENDENCIAS FASTAPI ---
 class UserPayload:
     def __init__(self, sub: str, role: str, tenant_id: int):
         self.sub = sub
@@ -154,7 +170,6 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPayload:
     except JWTError:
         raise credentials_exception
 
-# Mantenemos esta para compatibilidad, pero ahora usa get_current_user internamente
 def get_current_tenant_id(user: UserPayload = Depends(get_current_user)) -> int:
     return user.tenant_id
 

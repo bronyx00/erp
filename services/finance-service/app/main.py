@@ -15,7 +15,7 @@ import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from . import crud, schemas, database, models
 from .services import exchange
-from .security import oauth2_scheme, RequirePermission, Permissions, UserPayload
+from erp_common.security import oauth2_scheme, RequirePermission, Permissions, UserPayload
 from .schemas import PaginatedResponse, InvoiceSummary, SalesTotalResponse, FinanceSettingsRead
 from .utils.pdf_generator import generate_invoice_pdf
 

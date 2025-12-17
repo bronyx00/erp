@@ -1,29 +1,48 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
+from typing import Optional
 from . import models, schemas
 
-async def get_products(db: AsyncSession, tenant_id: int, page: int = 1, limit: int = 50):
+async def get_products(
+    db: AsyncSession, 
+    tenant_id: int, 
+    page: int = 1, 
+    limit: int = 50,
+    search: Optional[str] = None
+):
+    
     offset = (page - 1) * limit
     
-    # Select * from products where is_active = true && tenant_id == tenant_id
-    query = select(models.Product).filter(
+    # Define condiciones base para reusarlas en conteo y búsqueda
+    conditions = [
         models.Product.tenant_id == tenant_id,
         models.Product.is_active == True
-    )
+    ]
     
-    # Contar Total
-    count_query = select(func.count()).select_from(query.subquery())
+    # Filtro de búsqueda si existe
+    if search:
+        conditions.append(models.Product.name.ilike(f"%{search}%"))
+        
+    # Conteo optimizado
+    count_query = select(func.count(models.Product.id)).filter(*conditions)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
     
-    # Obtiene Datos Paginados
-    query = query.offset(offset).limit(limit)
+    # Obtener Datos
+    query = (
+        select(models.Product)
+        .filter(*conditions)
+        .order_by(models.Product.id.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     result = await db.execute(query)
     data = result.scalars().all()
     
     # Calcular Páginas
-    total_pages = (total + limit - 1) // limit
+    total_pages = (total + limit - 1) // limit if limit > 0 else 0
+
     
     return {
         "data": data,

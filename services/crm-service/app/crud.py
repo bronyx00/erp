@@ -1,36 +1,37 @@
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
 from . import models, schemas
 
-async def get_customers(db: AsyncSession, tenant_id: int, page: int = 1, limit: int = 50):
+async def get_customers(db: AsyncSession, tenant_id: int, page: int = 1, limit: int = 50, search: Optional[str] = None):
     offset = (page - 1) * limit
+    conditions = [models.Customer.tenant_id == tenant_id, models.Customer.is_active == True]
     
-    # Solo devuelve los clientes de esta EMPRESAkhr
-    query = select(models.Customer).filter(
-        models.Customer.tenant_id == tenant_id,
-        models.Customer.is_active == True
+    if search:
+        conditions.append(models.Customer.name.ilike(f"%{search}%"))
+
+    # Conteo Rápido
+    count_query = select(func.count(models.Customer.id)).filter(*conditions)
+    total = (await db.execute(count_query)).scalar() or 0
+    
+    # Datos
+    query = (
+        select(models.Customer)
+        .filter(*conditions)
+        .order_by(models.Customer.name.asc())
+        .offset(offset)
+        .limit(limit)
     )
-    
-    # Contar
-    count_query = select(func.count()).select_from(query.subquery())
-    total_res = await db.execute(count_query)
-    total = total_res.scalar() or 0
-    
-    # Paginar
-    query = query.offset(offset).limit(limit)
     result = await db.execute(query)
-    data = result.scalars().all()
-    
-    total_pages = (total + limit - 1) // limit
     
     return {
-        "data": data,
+        "data": result.scalars().all(),
         "meta": {
             "total": total,
             "page": page,
             "limit": limit,
-            "total_pages": total_pages
+            "total_pages": (total + limit - 1) // limit if limit > 0 else 0
         }
     }
 

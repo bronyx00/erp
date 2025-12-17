@@ -7,12 +7,17 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# --- Instalamos el paquete común ---
+COPY packages /tmp/packages
+RUN pip install /tmp/packages/erp_common
+# -----------------------------------
+
+COPY services/compliance-service/requirements.txt .
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./app /app/app
+COPY services/compliance-service/app /app/app
 
 EXPOSE 8000
 
-# Por defecto corre la API, pero en docker-compose le diremos que corra el worker
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

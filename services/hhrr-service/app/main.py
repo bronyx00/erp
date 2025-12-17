@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
 from .schemas import PaginatedResponse
-from .security import RequirePermission, Permissions, UserPayload
+from erp_common.security import RequirePermission, Permissions, UserPayload
 from app.routers import payrolls
 import pika
 import json

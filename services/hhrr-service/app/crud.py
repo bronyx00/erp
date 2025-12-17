@@ -52,29 +52,28 @@ async def check_employee_access(db: AsyncSession, email: str, tenant_id: int) ->
 
 async def get_employees(db: AsyncSession, tenant_id: int, page: int = 1, limit: int = 50):
     offset = (page - 1) * limit
+    conditions = [models.Employee.tenant_id == tenant_id]
+
+    # Conteo Rápido
+    count_query = select(func.count(models.Employee.id)).filter(*conditions)
+    total = (await db.execute(count_query)).scalar() or 0
     
-    query = select(models.Employee).filter(
-        models.Employee.tenant_id == tenant_id,
-        models.Employee.is_active == True
-    ).options(selectinload(models.Employee.schedule))
-    
-    # Contar Total
-    count_query = select(func.count()).select_from(query.subquery())
-    total_res = await db.execute(count_query)
-    total = total_res.scalar() or 0
-    
-    # Obtiene Datos Paginados
-    query = query.offset(offset).limit(limit)
+    query = (
+        select(models.Employee)
+        .filter(*conditions)
+        .order_by(models.Employee.last_name.asc())
+        .offset(offset)
+        .limit(limit)
+    )
     result = await db.execute(query)
-    data = result.scalars().all()
     
     return {
-        "data": data,
+        "data": result.scalars().all(),
         "meta": {
             "total": total,
             "page": page,
             "limit": limit,
-            "total_pages": (total + limit - 1) // limit
+            "total_pages": (total + limit - 1) // limit if limit > 0 else 0
         }
     }
 
@@ -169,28 +168,28 @@ async def get_employee_notes(
 ):
     offset = (page - 1) * limit
     
-    query = select(models.SupervisorNote).filter(
-        models.SupervisorNote.employee_id == employee_id,
-        models.SupervisorNote.tenant_id == tenant_id
-    ).order_by(models.SupervisorNote.create_at.desc())
+    conditions = [models.SupervisorNote.employee_id == employee_id, models.SupervisorNote.tenant_id == tenant_id]
     
     # Contar total
-    count_query = select(func.count()).select_from(query.subquery())
-    total_res = await db.execute(count_query)
-    total = total_res.scalar() or 0
+    count_query = select(func.count(models.SupervisorNote)).filter(*conditions)
+    total = (await db.execute(count_query)).scalar() or 0
     
-    # Obtiene Datos Paginados
-    query = query.offset(offset).limit(limit)
+    query = (
+        select(models.SupervisorNote)
+        .filter(*conditions)
+        .order_by(models.SupervisorNote.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     result = await db.execute(query)
-    data = result.scalars().all()
     
     return {
-        "data": data,
+        "data": result.scalars().all(),
         "meta": {
             "total": total,
             "page": page,
             "limit": limit,
-            "total_pages": (total + limit - 1) // limit
+            "total_pages": (total + limit - 1) // limit if limit > 0 else 0
         }
     }
     

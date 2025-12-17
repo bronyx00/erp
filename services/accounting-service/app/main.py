@@ -11,7 +11,7 @@ from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
-from .security import RequirePermission, Permissions, UserPayload, oauth2_scheme, get_current_tenant_id
+from erp_common.security import RequirePermission, Permissions, UserPayload, oauth2_scheme, get_current_tenant_id
 from .schemas import PaginatedResponse
 from .utils.financial_pdf import FinancialReportGenerator
 
@@ -116,42 +116,33 @@ async def get_journal_book(
 ):
     """Libro Diario: Lista cronológicamente de todos los asientos"""
     offset = (page - 1) * limit
+    conditions = [
+        models.LedgerEntry.tenant_id == user.tenant.id, 
+        models.LedgerEntry.transaction_date >= start_date, 
+        models.LedgerEntry.transaction_date <= end_date
+        ]
     
-    base_query = (
-        select(models.LedgerEntry)
-        .filter(
-            models.LedgerEntry.tenant_id == user.tenant_id,
-            models.LedgerEntry.transaction_date >= start_date,
-            models.LedgerEntry.transaction_date <= end_date
-        )
-    )
+    # Conteo rapido
+    count_query = select(func.count(models.LedgerEntry)).filter(*conditions)
+    total = (await db.execute(count_query)).scalar() or 0
     
-    # Total Count
-    count_query = select(func.count()).select_from(base_query.subquery())
-    total_res = await db.execute(count_query)
-    total = total_res.scalar() or 0
-    
-    # Fetch Data 
     query = (
-        base_query
-        .options(selectinload(models.LedgerEntry.lines).joinedload(models.LedgerLine.account))
+        select(models.LedgerEntry)
+        .filter(*conditions)
         .order_by(models.LedgerEntry.transaction_date, models.LedgerEntry.id)
         .offset(offset)
         .limit(limit)
     )
     
     result = await db.execute(query)
-    entries = result.scalars().all()
-    
-    total_pages = (total + limit - 1) // limit
     
     return {
-        "data": entries,
+        "data": result.scalars().all(),
         "meta": {
             "total": total,
             "page": page,
             "limit": limit,
-            "total_pages": total_pages
+            "total_pages": (total + limit - 1) // limit if limit > 0 else 0
         }
     }
 

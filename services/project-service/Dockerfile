@@ -1,19 +1,23 @@
 FROM python:3.11-slim
 
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
 WORKDIR /app
 
-# Instalar dependencias del sistema (necesarias para psycopg2)
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements e instalar
-COPY requirements.txt .
+# --- Instalamos el paquete común ---
+COPY packages /tmp/packages
+RUN pip install /tmp/packages/erp_common
+# -----------------------------------
+
+COPY services/project-service/requirements.txt .
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código
-COPY . .
+COPY services/project-service/app /app/app
 
-# Comando por defecto (se sobrescribe en docker-compose)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

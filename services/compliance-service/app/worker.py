@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.adapters.compliance_ve import VEAdapter
 
 # Configuración
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/%2F")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL")
 QUEUE_NAME = "invoice_events"
 
 def get_adapter(country_code="VE"):

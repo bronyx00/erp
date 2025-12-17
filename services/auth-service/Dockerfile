@@ -10,12 +10,16 @@ WORKDIR /app
 # Instalar dependencias del sistema necesarias para compilar
 RUN apt-get update && apt-get install -y gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 
+# --- Instalar paquete común ---
+COPY packages /tmp/packages
+RUN pip install /tmp/packages/erp_common
+
 # Copiar requerimientos e instalarlos
-COPY requirements.txt .
+COPY services/auth-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar el código de la carpeta 'app' dentro del contenedor
-COPY ./app /app/app
+COPY services/auth-service/app /app/app
 
 # Puerto por defecto
 EXPOSE 8000

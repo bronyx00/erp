@@ -4,7 +4,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
-from . import crud, schemas, security, database, models
+from . import crud, schemas, database, models
+from erp_common import security
 import httpx
 
 app = FastAPI(title="Auth Service", root_path="/api/auth")

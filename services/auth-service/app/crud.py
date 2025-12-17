@@ -1,7 +1,8 @@
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from . import models, schemas, security
+from . import models, schemas
+from erp_common import security
 
 async def get_user_by_email(db: AsyncSession, email: str):
     """Busca un usuario por email"""

@@ -1,0 +1,1 @@
+# Paquete común para ERP Vitality

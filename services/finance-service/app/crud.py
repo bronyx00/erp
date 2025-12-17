@@ -4,7 +4,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, Session
-from sqlalchemy import func, String, extract, desc, and_
+from sqlalchemy import func, String, extract, desc, and_, cast, or_
 from typing import Optional
 from datetime import datetime, date
 from decimal import Decimal
@@ -330,20 +330,37 @@ async def get_quotes(
     tenant_id: int,
     page: int = 1,
     limit: int = 20,
+    search: Optional[str] = None
 ):
     offset = (page - 1) * limit
     
-    query = select(models.Quote).filter(
-        models.Quote.tenant_id == tenant_id,
-    ).order_by(models.Quote.id.desc())
+    conditions = [models.Quote.tenant_id == tenant_id]
     
-    # Contar Total
-    count_query = select(func.count()).select_from(query.subquery())
+    if search:
+        search_term = f"%{search}%"
+        conditions.append(
+            or_(
+                models.Quote.customer_name.ilike(search_term),
+                models.Quote.customer_rif.ilike(search_term),
+                cast(models.Quote.quote_number, String).ilike(search_term),
+                models.Quote.created_by_email.ilike(search_term)
+            )
+        )
+    
+    # Contar Rapido
+    count_query = select(func.count(models.Quote)).filter(*conditions)
     total_res = await db.execute(count_query)
     total = total_res.scalar() or 0
     
-    # Obtiene Datos Paginados
-    query = query.offset(offset).limit(limit)
+    # Consulta de Datos
+    query = (
+        select(models.Quote)
+        .filter(*conditions)
+        .order_by(models.Quote.id.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    
     result = await db.execute(query)
     data = result.scalars().all()
     
@@ -353,7 +370,7 @@ async def get_quotes(
             "total": total,
             "page": page,
             "limit": limit,
-            "total_pages": (total + limit - 1) // limit
+            "total_pages": (total + limit - 1) // limit if limit > 0 else 0
         }
     }    
     
@@ -367,38 +384,45 @@ async def get_invoices(
     search: Optional[str] = None
 ):
     offset = (page - 1) * limit
-    
-    # Query Base
-    query = select(models.Invoice).filter(models.Invoice.tenant_id == tenant_id)
+    conditions = [models.Invoice.tenant_id == tenant_id]
     
     # Filtros Dinámicos
     if status:
-        query = query.filter(models.Invoice.status == status)
+        conditions.append(models.Invoice.status == status)
         
     if search:
-        # Búsqueda insesible a mayúsculas en nombre o número
         search_term = f"%{search}%"
-        query = query.filter(
-            (models.Invoice.customer_name.ilike(search_term)) |
-            (models.Invoice.invoice_number.cast(String).ilike(search_term))
+        conditions.append(
+            or_(
+                models.Invoice.customer_name.ilike(search_term),
+                models.Invoice.customer_rif.ilike(search_term),
+                cast(models.Invoice.invoice_number, String).ilike(search_term),
+                models.Invoice.control_number.ilike(search_term)
+            )
         )
     
-    # Contar total
-    count_query = select(func.count()).select_from(query.subquery())
+    # Contar Rapido
+    count_query = select(func.count(models.Invoice.id)).filter(*conditions)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
     
     # Ordenar y Paginar
-    query = query.order_by(models.Invoice.created_at.desc()).offset(offset).limit(limit)
+    query = (
+        select(models.Invoice)
+        .filter(*conditions)
+        .order_by(models.Invoice.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     
     result = await db.execute(query)
-    invoices = result.scalars().all()
+    data = result.scalars().all()
     
     # Cálculo total de páginas
-    total_pages = (total + limit - 1) // limit 
+    total_pages = (total + limit - 1) // limit if limit > 0 else 0
     
     return {
-        "data": invoices,
+        "data": data,
         "meta": {
             "total": total,
             "page": page,
