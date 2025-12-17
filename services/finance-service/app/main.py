@@ -231,6 +231,7 @@ async def get_dashboard_metrics(
 ):
     return await crud.get_dashboard_metrics(db, user.tenant_id)
 
+
 @app.get("/sales-over-time", response_model=list[schemas.SalesDataPoint])
 async def read_sales_over_time(
     db: AsyncSession = Depends(database.get_db), 

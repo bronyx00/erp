@@ -1,13 +1,32 @@
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, Text, Date
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, Text, Date, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
+import enum
+
+class FinanceSettings(Base):
+    """
+    Configuración global del módulo de Finanzas.
+    """
+    __tablename__ = "finance_settings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, index=True, nullable=False)
+    
+    # Switch ¿Habilitar selección de vendedor en facturación?
+    enable_salesperson_selection = Column(Boolean, default=False)
+    
+    currency_symbol = Column(String, default="$")
+    tax_rate = Column(Numeric(5, 2), default=16.00) # IVA por defecto
+    
 
 class Invoice(Base):
     __tablename__ = "invoices"
     
-    id = Column(Integer, primary_key=True, index=True) # ID interno Global
-    tenant_id = Column(Integer, index=True, nullable=False) # Empresa que creo la Factura
+    id = Column(Integer, primary_key=True, index=True)              # ID interno Global
+    tenant_id = Column(Integer, index=True, nullable=False)         # Empresa que creo la Factura
+    salesperson_id = Column(Integer, nullable=True, index=True)     # ID de empleado quien hizo la venta
+    created_by_user_id = Column(Integer, nullable=False)            # El usuario que registró la factura
     
     # --- NUMERACIÓN FISCAL ---
     # Este número se reinicia para cada empresa
@@ -21,6 +40,7 @@ class Invoice(Base):
     company_address_snapshot = Column(String)
     
     # Cliente
+    customer_id = Column(Integer, ForeignKey("customer.id"), nullable=True)
     customer_name = Column(String)                                  # Nombre o Razón Social Cliente
     customer_rif = Column(String)                                   # RIF/Cédula Cliente
     customer_email = Column(String, index=True)
@@ -56,11 +76,11 @@ class InvoiceItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"))
     
-    product_id = Column(Integer, nullable=False) # ID del producto en Inventary Service
-    product_name = Column(String) # Guarda el nombre por si cambia en el futuro
+    product_id = Column(Integer, nullable=False)                    # ID del producto en Inventary Service
+    product_name = Column(String)                                   # Guarda el nombre por si cambia en el futuro
     quantity = Column(Integer, default=1)
-    unit_price = Column(Numeric(10, 2)) # Precio al momento de la venta
-    total_price = Column(Numeric(10, 2)) # qty * unit_price
+    unit_price = Column(Numeric(10, 2))                             # Precio al momento de la venta
+    total_price = Column(Numeric(10, 2))                            # qty * unit_price
     
     invoice = relationship("Invoice", back_populates="items")
 

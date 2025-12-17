@@ -1,3 +1,4 @@
+import enum
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Date, Text, JSON, ForeignKey, Time
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -70,10 +71,51 @@ class Employee(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+class IncomeCalculationType(str, enum.Enum):
+    FIXED = "FIXED"                     # Monto fijo (Ej: Bono Transporte $20)
+    PERCENTAGE_OF_SALARY = "SALARY_PCT" # % del Sueldo Base (Ej: Antiguedad)
+    PERCENTAGE_OF_SALES = "SALES_PCT"   # % de Ventas del Periodo (Comisiones)
+    
+class IncomeConcept(Base):
+    """
+    Catálogo de Conceptos de Ingreso (Ej: Bono Producción, Comisión Ventas).
+    Define si el concepto es 'Salarial' (afecta IVSS/Prestaciones) o no.
+    """
+    __tablename__ = "income_concepts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, index=True, nullable=False)
+    
+    name = Column(String, nullable=False)   # Ej: "Bono de Productividad"
+    is_active = Column(Boolean, default=True)
+    
+    # Define si este ingreso paga impuestos o no
+    # True = Se suma al salario base para IVSS/FAOV
+    # False = No paga impuestos
+    is_salary = Column(Boolean, default=False)
+    
+    # Tipo de cálculo: FIXED (Monto fijo) o PERCENTAGE (% del sueldo base)
+    calculation_type = Column(String, default="FIXED")
+    
+class EmployeeRecurringIncome(Base):
+    """
+    Asigna un concepto a un empleado específico.
+    Ej: Juan tiene un 'Bono de Producción' de $50.
+    """
+    __tablename__ = "employee_recurring_incomes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
+    concept_id = Column(Integer, ForeignKey("income_concepts.id"), nullable=False)
+    
+    amount = Column(Numeric(10, 2), default=0) # Valor (Dinero o porcentaje)
+    
+    employee = relationship("Employee", backref="recurring_incomes")
+    concept = relationship("IncomeConcept")
+    
 class Payroll(Base):
     """
     Representa el recibo de pago individual de un empleado.
-    Actualizado para incluir las deducciones legales venezolanas y las contribuciones patronales.
     """
     __tablename__ = "payrolls"
     
@@ -87,12 +129,19 @@ class Payroll(Base):
     period_start = Column(Date, nullable=False)
     period_end = Column(Date, nullable=False)
     
-    # --- ASIGNACIONES ---
+    # --- INGRESOS ---
     base_salary = Column(Numeric(10, 2), default=0)         # Sueldo Base
-    bonuses = Column(Numeric(10, 2), default=0)             # Bono
-    total_earnings = Column(Numeric(10, 2), nullable=False) # Total Asignaciones (Bruto)
+    
+    # Total de bonos que SÍ pagan impuestos (salariales)
+    taxable_bonuses = Column(Numeric(10, 2), default=0)
+    # Total de bonos que NO pagan impuestos (No salariales)
+    non_taxable_bonuses = Column(Numeric(10, 2), default=0)
+    
+    total_earnings = Column(Numeric(10, 2), nullable=False) # Total Ingresos (Bruto)
     
     # --- RETENCIONES AL TRABAJADOR ---
+    ivss_base = Column(Numeric(10, 2), default=0)           # Base sobre la que se calculó el IVSS
+    
     # (IVSS - 4%)
     ivss_employee = Column(Numeric(10, 2), default=0) 
     # (FAOV - 1%)
@@ -112,9 +161,40 @@ class Payroll(Base):
     # --- PAGO NETO ---
     net_pay = Column(Numeric(10, 2), nullable=False)
     
+    # Detalle en JSON para saber qué bonos se pagaron exactamente
+    details = Column(JSON, default=dict) # Ej: {"Bono Prod": 50, "Sueldo": 40}
+    
     status = Column(String, default="DRAFT")                # DRAFT, CALCULATED, PAID
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+class PayrollGlobalSettings(Base):
+    """
+    Configuración Global de Nómina (Tasas, Topes, Unidad Tributaria, etc).
+    Permite cambiar los valores sin tocar código.
+    """
+    __tablename__ = "payroll_settings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, index=True, nullable=False)
+    
+    # Valores Monetarios Globales
+    official_minumin_wage = Column(Numeric(10, 2), default=1.00)    # Salario Mínimo Oficial
+    food_bonus_value = Column(Numeric(10, 2), default=40.00)        # Cestaticket
+    
+    # Porcentajes de Ley
+    ivss_employee_rate = Column(Numeric(5, 4), default=0.04)
+    ivss_employer_rate = Column(Numeric(5, 4), default=0.09)
+    ivss_cap_min_wages = Column(Integer, default=5)
+    
+    faov_employee_rate = Column(Numeric(5, 4), default=0.01)
+    faov_employer_rate = Column(Numeric(5, 4), default=0.02)
+    
+    # Flags de Comportamiento
+    calculate_taxes_on_bonuses = Column(Boolean, default=False)
+    
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
     
 class SupervisorNote(Base):
     __tablename__ = "supervisor_notes"

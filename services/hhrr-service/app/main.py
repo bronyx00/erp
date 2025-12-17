@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
 from .schemas import PaginatedResponse
 from .security import RequirePermission, Permissions, UserPayload
+from app.routers import payrolls
 import pika
 import json
 import logging
@@ -28,6 +29,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def on_startup():
+    await database.init_db()
+    
+app.include_router(payrolls.router)
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 
 def publish_event(routing_key: str, data: dict):
     try:
@@ -95,30 +107,6 @@ async def update_employee(
     if not update_employee:
         raise HTTPException(status_code=404, detail="Empleado no encontrado")
     return updated_employee
-
-@app.post("/payroll", response_model=schemas.PayrollResponse)
-async def generate_payroll(
-    payroll: schemas.PayrollCreate,
-    db: AsyncSession = Depends(database.get_db),
-    user: UserPayload = Depends(RequirePermission(Permissions.PAYROLL_PROCESS)) 
-):
-    try:
-        new_payroll = await crud.create_payroll(db, payroll, user.tenant_id)
-        
-        # Evento para Contabilidad
-        event_data = {
-            "tenant_id": user.tenant_id,
-            "amount": float(new_payroll.total_amount),
-            "category": "Nómina",
-            "description": f"Nómina {payroll.period_start} al {payroll.period_end}",
-            "reference_id": str(new_payroll.id)
-        }
-        publish_event("payroll.paid", event_data)
-        
-        return new_payroll
-    
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     
 # ---- NOTAS ----
 @app.post("/notes", response_model=schemas.SupervisorNoteResponse)
