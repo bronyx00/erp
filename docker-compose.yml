@@ -426,6 +426,7 @@ services:
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@project_db:5432/project_db
+      - PROJECT_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@project_db:5432/project_db
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - TZ=${TZ}
     depends_on:

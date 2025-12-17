@@ -10,7 +10,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from . import models, schemas, main
 from jose import jwt
-from .security import SECRET_KEY, ALGORITHM
+from erp_common.security import SECRET_KEY, ALGORITHM
 from .models import FinanceSettings, Invoice
 
 logger = logging.getLogger(__name__)
