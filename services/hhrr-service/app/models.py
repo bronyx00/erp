@@ -123,7 +123,7 @@ class Payroll(Base):
     tenant_id = Column(Integer, index=True, nullable=False)
     
     # Relación con el Empleado
-    employee_id = Column(Integer, ForeignKey=("employees.id"), nullable=False)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
     employee = relationship("Employee")
     
     period_start = Column(Date, nullable=False)

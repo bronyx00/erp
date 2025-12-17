@@ -16,6 +16,17 @@ class PaginatedResponse(BaseModel, Generic[T]):
     data: List[T]
     meta: MetaData
     
+# --- SETTINGS SCHEMAS ---
+class FinanceSettingsBase(BaseModel):
+    enable_salesperson_selection: bool = False
+    default_currency: str = "USD"
+    
+class FinanceSettingsRead(FinanceSettingsBase):
+    id: int
+    tenant_id: int
+    
+    model_config = ConfigDict(from_attributes=True)
+    
 # --- INVOICE SUMMARY (Ligera) ---
 class InvoiceSummary(BaseModel):
     id: int
@@ -23,22 +34,23 @@ class InvoiceSummary(BaseModel):
     control_number: Optional[str] = None
     status: str
     total_usd: Decimal
+    salesperson_id: Optional[int] = None
     customer_name: Optional[str] = None
     customer_rif: Optional[str] = None
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
-
-class InvoiceItemCreate(BaseModel):
-    product_id: int
-    quantity: int
     
 class InvoicePaymentCreate(BaseModel):
     amount: Decimal
     payment_method: str
     reference: Optional[str] = None
-    notes: Optional[str] = None
+    notes: Optional[str] = None    
 
+# --- INVOICE SCHEMAS ---
+class InvoiceItemCreate(BaseModel):
+    product_id: int
+    quantity: int
     
 class InvoiceItemResponse(BaseModel):
     product_name: str
@@ -46,9 +58,10 @@ class InvoiceItemResponse(BaseModel):
     unit_price: Decimal
     total_price: Decimal
     model_config = ConfigDict(from_attributes=True)
-    
+
 class InvoiceCreate(BaseModel):
     customer_tax_id: str
+    salesperson_id: Optional[int] = None
     currency: str = "USD"
     items: List[InvoiceItemCreate] # Recibe una lista de items
     payment: Optional[InvoicePaymentCreate] = None
@@ -85,6 +98,8 @@ class InvoiceResponse(BaseModel):
     customer_name: Optional[str] = None
     customer_rif: Optional[str] = None
     customer_email: Optional[str] = None
+    
+    salesperson_id: Optional[int] = None
     
     items: List[InvoiceItemResponse] # Devuelve el detalle}
     payments: List[PaymentResponse] = []
@@ -154,3 +169,11 @@ class SalesReportResponse(BaseModel):
 class SalesDataPoint(BaseModel):
     month: str
     sales_usd: float
+    
+# --- REPORTE DE COMISIONES ---
+class SalesTotalResponse(BaseModel):
+    tenant_id: int
+    employee_id: int
+    total_sales_usd: Decimal
+    period_start: date
+    period_end: date

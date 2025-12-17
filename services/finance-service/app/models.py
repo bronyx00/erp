@@ -16,7 +16,7 @@ class FinanceSettings(Base):
     # Switch ¿Habilitar selección de vendedor en facturación?
     enable_salesperson_selection = Column(Boolean, default=False)
     
-    currency_symbol = Column(String, default="$")
+    default_currency = Column(String, default="USD")
     tax_rate = Column(Numeric(5, 2), default=16.00) # IVA por defecto
     
 
@@ -40,7 +40,6 @@ class Invoice(Base):
     company_address_snapshot = Column(String)
     
     # Cliente
-    customer_id = Column(Integer, ForeignKey("customer.id"), nullable=True)
     customer_name = Column(String)                                  # Nombre o Razón Social Cliente
     customer_rif = Column(String)                                   # RIF/Cédula Cliente
     customer_email = Column(String, index=True)
@@ -61,6 +60,7 @@ class Invoice(Base):
     status = Column(String, default="ISSUED")                       # ISSUED, PAID, VOID
     is_synced_compliance = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    issue_date = Column(Date, nullable=False)
     
     # --- AUDITORIA ---
     created_by_email = Column(String, nullable=True)                # Email del cajero/usuario

@@ -4,13 +4,14 @@ import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, Session
-from sqlalchemy import func, String, extract, desc
+from sqlalchemy import func, String, extract, desc, and_
 from typing import Optional
 from datetime import datetime, date
 from decimal import Decimal
 from . import models, schemas, main
 from jose import jwt
 from .security import SECRET_KEY, ALGORITHM
+from .models import FinanceSettings, Invoice
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,27 @@ async def get_tenant_data(token: str):
             logger.error(f"Error Auth: {e}")
             return None
         
+async def get_sales_total_by_employee(db: AsyncSession, tenant_id: int, employee_id: int, start_date: date, end_date: date) -> Decimal:
+    """
+    Suma el subtotal_usd de las facturas valiudas de un vendedor.
+    """
+    stmt = select(func.sum(models.Invoice.subtotal_usd)).where(
+        and_(
+            models.Invoice.tenant_id == tenant_id,
+            models.Invoice.salesperson_id == employee_id,
+            # Solo facturas pagadas cuentan para la comisión
+            models.Invoice.status.in_(["PAID"]),
+            # Filtramos por fecha de creación
+            func.date(models.Invoice.created_at) >= start_date,
+            func.date(models.Invoice.created_at) <= end_date
+        )
+    )
+    
+    result = await db.execute(stmt)
+    total = result.scalar()
+    
+    return total if total is not None else Decimal(0)
+        
 async def get_customer_by_tax_id(tax_id: str, token: str):
     search_id = str(tax_id).strip().upper()
     
@@ -88,7 +110,7 @@ async def get_next_invoice_number(db: AsyncSession, tenant_id: int) -> int:
     """Calcula el siguiente número correlativo para la empresa"""
     query = select(func.max(models.Invoice.invoice_number)).filter(models.Invoice.tenant_id == tenant_id)
     result = await db.execute(query)
-    max_num = result.scalr()
+    max_num = result.scalar()
     return (max_num or 0) + 1
 
 async def get_latest_rate(db: AsyncSession, currency_from: str = "USD", currency_to: str = "VES"):
@@ -105,12 +127,28 @@ async def get_latest_rate(db: AsyncSession, currency_from: str = "USD", currency
     result = await db.execute(query)
     return result.scalars().first()
 
-async def get_next_invoice_number(db: AsyncSession, tenant_id: int) -> int:
-    """Busca el último número de factura de esta empresa y suma 1"""
-    query = select(func.max(models.Invoice.invoice_number)).filter(models.Invoice.tenant_id == tenant_id)
-    result = await db.execute(query)
-    max_enum = result.scalar()
-    return (max_enum or 0) + 1
+async def get_finance_settings(db: AsyncSession, tenant_id: int):
+    """
+    OBtiene la configuración del tenant.
+    Si no existe, crea una configuración por defecto.
+    """
+    # Intenta buscar la configuración existente
+    stmt = select(FinanceSettings).where(FinanceSettings.tenant_id == tenant_id)
+    result = await db.execute(stmt)
+    settings = result.scalars().first()
+    
+    # Si no existe, creamos los valos por defecto
+    if not settings:
+        settings = FinanceSettings(
+            tenant_id=tenant_id,
+            enable_salesperson_selection=False,
+            default_currency="USD"
+        )
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+        
+    return settings
 
 async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int, token: str):
     """
@@ -216,6 +254,7 @@ async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenan
         tenant_id=tenant_id,
         invoice_number=next_number,
         control_number=f"00-{next_number:08d}",
+        salesperson_id=invoice.salesperson_id,
         
         # Snapshot Empresa
         company_name_snapshot=tenant_data.get('name'), # Nombre comercial

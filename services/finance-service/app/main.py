@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +6,7 @@ from sqlalchemy.future import select
 from typing import Optional
 from .database import engine, SyncSessionLocal
 from contextlib import asynccontextmanager
+from datetime import date
 import logging
 import pika
 import json
@@ -14,10 +15,9 @@ import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from . import crud, schemas, database, models
 from .services import exchange
-from .security import get_current_tenant_id, oauth2_scheme, SECRET_KEY, ALGORITHM, RequirePermission, Permissions, UserPayload
-from .schemas import PaginatedResponse, InvoiceSummary
+from .security import oauth2_scheme, RequirePermission, Permissions, UserPayload
+from .schemas import PaginatedResponse, InvoiceSummary, SalesTotalResponse, FinanceSettingsRead
 from .utils.pdf_generator import generate_invoice_pdf
-from jose import jwt, JWTError
 
 # --- Configuración de Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -88,6 +88,17 @@ def publish_event(routing_key: str, data: dict):
         logger.info(f"📢 Evento publicado: {routing_key}")
     except Exception as e:
         logger.error(f"❌ Error publicando evento {routing_key}: {e}")
+        
+# --- CONFIGURACIÓN ---
+@app.get("/settings", response_model=FinanceSettingsRead)
+async def read_settings(
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_READ))
+):
+    """
+    Obtiene la configuración financiera.
+    """
+    return await crud.get_finance_settings(db, user.tenant_id)
 
 # --- Endpoints ---
 @app.post("/invoices", response_model=schemas.InvoiceResponse)
@@ -230,6 +241,29 @@ async def get_dashboard_metrics(
     user: UserPayload = Depends(RequirePermission(Permissions.REPORTS_VIEW))
 ):
     return await crud.get_dashboard_metrics(db, user.tenant_id)
+
+# --- COMISIONES ---
+@app.get("/reports/sales-total", response_model=SalesTotalResponse)
+async def get_sales_total_for_payroll(
+    tenant_id: int,
+    employee_id: int,
+    start_date: date,
+    end_date: date,
+    db: AsyncSession = Depends(database.get_db)
+):
+    """
+    Endpoint interno consumido por el servicio HHRR.
+    Calcula el total de ventas de un vendedor para pagar comisiones.
+    """
+    total_sales = await crud.get_sales_total_by_employee(db, tenant_id, employee_id, start_date, end_date)
+    
+    return {
+        "tenant_id": tenant_id,
+        "employee_id": employee_id,
+        "total_sales_usd": total_sales,
+        "period_start": start_date,
+        "period_end": end_date
+    }
 
 
 @app.get("/sales-over-time", response_model=list[schemas.SalesDataPoint])
