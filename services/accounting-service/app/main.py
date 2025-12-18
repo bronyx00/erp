@@ -37,6 +37,12 @@ async def create_expense(
     db: AsyncSession = Depends(database.get_db),
     tenant_id: int = Depends(get_current_tenant_id)
 ):
+    """
+    Registra una transacción manual (ingreso o egreso).
+    
+    Se utiliza principalmente para registrar gastos operativos o ingresos 
+    que no provienen de facturación automática.
+    """
     return await crud.create_transaction(db, transaction, tenant_id)
 
 @app.get("/balance", response_model=schemas.BalanceResponse)
@@ -44,6 +50,12 @@ async def get_balance(
     db: AsyncSession = Depends(database.get_db),
     tenant_id: int = Depends(get_current_tenant_id)
 ):
+    """
+    Obtiene un resumen financiero rápido.
+    
+    Retorna la suma total de ingresos, egresos y la utilidad neta calculada
+    en base a todas las transacciones registradas.
+    """
     return await crud.get_balance(db, tenant_id)
 
 @app.post("/accounts/import", response_model=schemas.ImportResult)
@@ -52,7 +64,14 @@ async def import_chart_of_accounts(
     db: AsyncSession = Depends(database.get_db),
     tenant_id: int = Depends(get_current_tenant_id)
 ):
-    """Importa Plan de Cuentas desde Excel"""
+    """
+    Carga masiva del Plan de Cuentas desde un archivo Excel (.xlsx).
+    
+    El archivo debe contener las columnas obligatorias:
+    - `codigo`: Código contable (ej. 1.1.01)
+    - `nombre`: Nombre de la cuenta
+    - `tipo`: Tipo de cuenta (ASSET, LIABILITY, EQUITY, INCOME, EXPENSE)
+    """
     if not file.filename.endswith('.xlsx'):
         raise HTTPException(400, "Solo se permiten archivos Excel (.xlsx)")
     
@@ -190,6 +209,15 @@ async def download_financial_report(
     tenant_id: int = Depends(get_current_tenant_id),
     token: str = Depends(oauth2_scheme)
 ):
+    """
+    Genera y descarga reportes financieros en formato PDF.
+    
+    - **report_type**: 'balance_sheet' (Balance General), 'income_statement' (Estado de Resultados), etc.
+    - **period**: Trimestre (Q1-Q4), Semestre (S1-S2) o Año (YEAR).
+    - **year**: Año fiscal del reporte.
+    
+    Retorna un archivo PDF (application/pdf).
+    """
     # Obtener Datos de Empresa
     tenant_info = await crud.get_tenant_data(token)
     company_name = tenant_info.get('business_name') if tenant_info else "EMPRESA DEMO"

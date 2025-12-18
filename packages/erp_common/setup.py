@@ -10,6 +10,7 @@ setup(
         "passlib[bcrypt]",
         "sqlalchemy",
         "asyncpg",
-        "pydantic"
+        "pydantic",
+        "tenacity"
     ],
 )

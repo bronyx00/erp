@@ -1,14 +1,24 @@
 import asyncio
 import json
 import os
+import sys
 import aio_pika
-from sqlalchemy.future import select
-from app.database import AsyncSessionLocal
-from app.models import LedgerEntry, LedgerLine, Account, PayrollAccountingConfig
 from decimal import Decimal
 from datetime import datetime
+from sqlalchemy.future import select
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
+# Ajuste de path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.database import AsyncSessionLocal
+from app.models import LedgerEntry, LedgerLine, Account, PayrollAccountingConfig
+
+RABBITMQ_URL = os.getenv("RABBITMQ_URL")
+
+@retry(stop=stop_after_attempt(15), wait=wait_fixed(5), retry=retry_if_exception_type(Exception))
+async def get_rabbitmq_connection():
+    print(f"⏳ [Accounting] Conectando a RabbitMQ...", flush=True)
+    return await aio_pika.connect_robust(RABBITMQ_URL)
 
 async def get_account_id_by_code(db, code: str, tenant_id: int):
     result = await db.execute(select(Account).where(Account.code == code, Account.tenant_id == tenant_id))
@@ -73,18 +83,6 @@ async def process_invoice_created(data: dict):
         await db.rollback()
     finally:
         await db.close()
-
-async def process_payment(data: dict):
-    # Si el pago viene de una creación inmediata (Contado), LO IGNORAMOS
-    # porque ya se registró el ingreso de caja en el paso anterior.
-    if data.get("origin") == "immediate":
-        print(f" [i] ⏩ Pago inmediato de Fac. {data.get('invoice_id')} ya registrado. Omitiendo.", flush=True)
-        return
-
-    # Si es un pago posterior (Cobro de Crédito)
-    inv_id = data.get("invoice_id")
-    print(f" [x] 💰 Registrando COBRO de Crédito Fac. {inv_id}...", flush=True)
-    
 
 async def process_payroll_calculated(data: dict):
     """
@@ -182,15 +180,27 @@ async def process_payroll_calculated(data: dict):
     finally:
         await db.close()
 
-async def main():
-    print("⏳ [Accounting Worker] Iniciando...", flush=True)
-    while True:
+async def process_message(message: aio_pika.IncomingMessage):
+    async with message.process():
         try:
-            connection = await aio_pika.connect_robust(RABBITMQ_URL)
-            break
-        except:
-            await asyncio.sleep(5)
+            data = json.loads(message.body.decode())
+            routing_key = message.routing_key
+            print(f"📥 [Accounting] Evento recibido: {routing_key}", flush=True)
 
+            if routing_key == "invoice.created":
+                # Asegúrate de importar process_invoice_created
+                from app.worker import process_invoice_created 
+                await process_invoice_created(data)
+            elif routing_key == "payroll.calculated":
+                # Asegúrate de importar process_payroll_calculated
+                from app.worker import process_payroll_calculated
+                await process_payroll_calculated(data)
+                
+        except Exception as e:
+            print(f"❌ Error procesando mensaje: {e}", flush=True)
+
+async def main():
+    connection = await get_rabbitmq_connection()
     async with connection:
         channel = await connection.channel()
         exchange = await channel.declare_exchange("erp_events", aio_pika.ExchangeType.TOPIC, durable=True)
@@ -200,18 +210,12 @@ async def main():
         await queue.bind(exchange, routing_key="invoice.paid")
         await queue.bind(exchange, routing_key="payroll.calculated")
         
-        async with queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                async with message.process():
-                    data = json.loads(message.body.decode())
-                    if message.routing_key == "invoice.created":
-                        await process_invoice_created(data)
-                    elif message.routing_key == "invoice.paid":
-                        await process_payment(data)
-                    elif message.routing_key == "payroll.calculated":
-                        await process_payroll_calculated(data)
+        print("🎧 [Accounting] Escuchando eventos financieros...", flush=True)
+        await queue.consume(process_message)
+        await asyncio.Future()
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except KeyboardInterrupt: pass
+    except KeyboardInterrupt:
+        pass
