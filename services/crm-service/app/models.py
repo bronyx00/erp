@@ -3,6 +3,13 @@ from sqlalchemy.sql import func
 from .database import Base
 
 class Customer(Base):
+    """
+    Modelo que representa a un Cliente (Customer) en el sistema.
+    
+    Attributes:
+        tenant_id: ID de la empresa a la que pertenece este cliente (Multi-tenancy).
+        tax_id: Identificador fiscal (RIF, Cédula, NIT) único por empresa.
+    """
     __tablename__ = "customers"
     
     id = Column(Integer, primary_key=True, index=True)

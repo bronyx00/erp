@@ -1,13 +1,13 @@
 import os
 from erp_common.database import DatabaseManager, Base
 
-# URL de conexión 
-DATABASE_URL = os.getenv("CRM_DATABASE_URL")
+# Estandarizamos a DATABASE_URL para coincidir con el docker-compose
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Inicialización de Manager común
+# Inicialización del Manager común
 db_manager = DatabaseManager(DATABASE_URL)
 
-# Exporta las variables que la app espera
+# Exportamos las herramientas para el resto de la app
 engine = db_manager.engine
 get_db = db_manager.get_db
 Base = Base
