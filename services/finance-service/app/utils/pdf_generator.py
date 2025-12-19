@@ -18,6 +18,10 @@ FONT_SIZE_M = 9
 FONT_SIZE_L = 11
 
 class FiscalTicketGenerator:
+    """
+    Generador de PDFs formato Ticket (Papel Térmico 80mm).
+    Usado para impresoras fiscales o de comandas.
+    """
     def __init__(self, buffer, invoice, items=None):
         self.c = canvas.Canvas(buffer, pagesize=(PAGE_WIDTH, MAX_HEIGHT))
         self.invoice = invoice

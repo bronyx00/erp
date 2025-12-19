@@ -1,26 +1,27 @@
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, Text, Date, JSON
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, Text, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
-import enum
 
 class FinanceSettings(Base):
     """
-    Configuración global del módulo de Finanzas.
+    Configuración global del módulo de Finanzas por empresa (Tenant).
+    Define moneda base, impuestos y reglas de facturación.
     """
     __tablename__ = "finance_settings"
     
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, index=True, nullable=False)
-    
-    # Switch ¿Habilitar selección de vendedor en facturación?
     enable_salesperson_selection = Column(Boolean, default=False)
-    
     default_currency = Column(String, default="USD")
     tax_rate = Column(Numeric(5, 2), default=16.00) # IVA por defecto
     
 
 class Invoice(Base):
+    """
+    Cabecera de Factura.
+    Representa una venta fiscal o interna.
+    """
     __tablename__ = "invoices"
     
     id = Column(Integer, primary_key=True, index=True)              # ID interno Global
@@ -35,9 +36,9 @@ class Invoice(Base):
     
     # Datos fiscales Snapshot
     # Por si la empresa cambia de dirección mañana, la factura vieja no cambia
-    company_name_snapshot = Column(String)
-    company_rif_snapshot = Column(String)
-    company_address_snapshot = Column(String)
+    company_name = Column(String)
+    company_rif = Column(String)
+    company_address = Column(String)
     
     # Cliente
     customer_name = Column(String)                                  # Nombre o Razón Social Cliente
@@ -63,7 +64,6 @@ class Invoice(Base):
     issue_date = Column(Date, nullable=False)
     
     # --- AUDITORIA ---
-    created_by_email = Column(String, nullable=True)                # Email del cajero/usuario
     created_by_role = Column(String, nullable=True)                 # Rol al momento de crear
     
     # Relaciones
@@ -71,6 +71,7 @@ class Invoice(Base):
     payments = relationship("Payment", back_populates="invoice")
     
 class InvoiceItem(Base):
+    """Detalle de productos o servicios dentro de una factura."""
     __tablename__ = "invoice_items"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -85,6 +86,7 @@ class InvoiceItem(Base):
     invoice = relationship("Invoice", back_populates="items")
 
 class Payment(Base):
+    """Registro de pagos recibidos asociados a una factura."""
     __tablename__ = "payments"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -101,6 +103,7 @@ class Payment(Base):
     invoice = relationship("Invoice", back_populates="payments")
 
 class ExchangeRate(Base):
+    """Histórico de tasas de cambio (BCV/Paralelo)."""
     __tablename__ = "exchange_rates"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -111,6 +114,7 @@ class ExchangeRate(Base):
     acquired_at = Column(DateTime(timezone=True), server_default=func.now()) # Cuándo la guardamos
     
 class Quote(Base):
+    """Cotizaciones / Presupuestos."""
     __tablename__ = "quotes"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -148,6 +152,7 @@ class Quote(Base):
     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
     
 class QuoteItem(Base):
+    """Items de una cotización."""
     __tablename__ = "quote_items"
     
     id = Column(Integer, primary_key=True, index=True)

@@ -3,31 +3,34 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import Optional
-from .database import engine, SyncSessionLocal
 from contextlib import asynccontextmanager
+from typing import Optional
 from datetime import date
 import logging
+import os
 import pika
 import json
-import os
-# Planificador
+
+# Scheduler
 from apscheduler.schedulers.background import BackgroundScheduler
+
+# Imports Locales
 from . import crud, schemas, database, models
 from .services import exchange
+from .database import engine, SyncSessionLocal
+
+# Imports Comunes
 from erp_common.security import oauth2_scheme, RequirePermission, Permissions, UserPayload
-from .schemas import PaginatedResponse, InvoiceSummary, SalesTotalResponse, FinanceSettingsRead
+from .schemas import PaginatedResponse, InvoiceSummary, SalesTotalResponse, FinanceSettingsRead, InvoiceResponse
 from .utils.pdf_generator import generate_invoice_pdf
 
-# --- Configuración de Logging ---
+# Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("finance-service")
 
-# --- Función del Scheduler ---
+# --- SCHEDULER (Segundo Plano) ---
 def run_exchange_rate_job():
-    """
-    Ejecuta la actualización de la tasa usando una conexión síncrona.
-    """
+    """Tarea programada para actualizar la tasa del BCV."""
     logger.info("⏰ [SCHEDULER] Iniciando tarea de tasa cambiaria...")
     try:
         with SyncSessionLocal() as db:
@@ -36,12 +39,10 @@ def run_exchange_rate_job():
     except Exception as e:
         logger.error(f"❌ [SCHEDULER] Falló la tarea: {e}")
     
-# --- Ciclo de Vida de la App (Startup/Shutdown) ---
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Iniciando Finance Service...")
-    
-    # 1. Crear tablas (Si no existen, como respaldo)
+    # 1. Crear tablas al inicio
     async with engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
         
@@ -52,16 +53,19 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     logger.info("⏰ Scheduler iniciado.")
     
-    # --- ¡ESTA LÍNEA ES CRÍTICA! ---
     yield 
-    # -------------------------------
     
     # 3. Apagado
     scheduler.shutdown()
-    logger.info("🛑 Finance Service detenido.")
 
 # --- Configuración de FastAPI ---
-app = FastAPI(title="Finance Service", root_path="/api/finance", lifespan=lifespan)
+app = FastAPI(
+    title="Finance Service",
+    description="Módulo de Facturación, Cotizaciones y Control Financiero.",
+    version="1.0.0",
+    root_path="/api/finance",
+    lifespan=lifespan
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -71,8 +75,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Configuración de RabbitMQ --- 
+# --- CONFIGURACIÓN RABBITMQ --- 
 def publish_event(routing_key: str, data: dict):
+    """Publica un evento en el bus de mensajes para notificar a otros servicios."""
     try:
         url = os.getenv("RABBITMQ_URL", 'amqp://guest:guest@rabbitmq:5672/%2F')
         connection = pika.BlockingConnection(pika.URLParameters(url))
@@ -88,26 +93,39 @@ def publish_event(routing_key: str, data: dict):
         logger.info(f"📢 Evento publicado: {routing_key}")
     except Exception as e:
         logger.error(f"❌ Error publicando evento {routing_key}: {e}")
-        
-# --- CONFIGURACIÓN ---
-@app.get("/settings", response_model=FinanceSettingsRead)
-async def read_settings(
-    db: AsyncSession = Depends(database.get_db),
+
+# --- ENDPOINTS ---
+@app.get("/invoices", response_model=PaginatedResponse[InvoiceSummary])
+async def read_invoices(
+    page: int = 1,
+    limit: int = 50,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(database.get_db), 
     user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_READ))
 ):
     """
-    Obtiene la configuración financiera.
+    **Listado de Facturas**
+    
+    Muestra el historial de facturas emitidas.
     """
-    return await crud.get_finance_settings(db, user.tenant_id)
+    return await crud.get_invoices(db, tenant_id=user.tenant_id, page=page, limit=limit, status=status, search=search)
 
-# --- Endpoints ---
-@app.post("/invoices", response_model=schemas.InvoiceResponse)
+
+@app.post("/invoices", response_model=InvoiceResponse, status_code=201)
 async def create_invoice(
     invoice: schemas.InvoiceCreate, 
     db: AsyncSession = Depends(database.get_db), 
     user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_CREATE)),
     token: str = Depends(oauth2_scheme)
 ):
+    """
+    **Emitir Factura**
+    
+    Crea una nueva factura de venta. 
+    Se comunica con el servicio de Inventario para verificar items y precios (opcional).
+    Envía un evento a RabbitMQ (`invoice.created`) al finalizar.
+    """
     new_invoice = await crud.create_invoice(db, invoice, tenant_id=user.tenant_id, token=token)
     
     invoice_dict = {
@@ -122,95 +140,42 @@ async def create_invoice(
     
     return new_invoice
 
-@app.post("/payments", response_model=schemas.PaymentResponse)
-async def create_payment(
-    payment: schemas.PaymentCreate, 
-    db: AsyncSession = Depends(database.get_db), 
-    user: UserPayload = Depends(RequirePermission(Permissions.PAYMENT_CREATE))
-):
-    try:
-        new_payment, invoice, is_fully_paid = await crud.create_payment(db, payment, tenant_id=user.tenant_id)
-        
-        if is_fully_paid:
-            event_data = {
-                "invoice_id": invoice.id,
-                "tenant_id": user.tenant_id,
-                "total_amount": float(invoice.total_usd),
-                "paid_at": str(new_payment.created_at),
-                "items": [{"product_id": item.product_id, "quantity": item.quantity} for item in invoice.items]
-            }
-            publish_event("invoice.paid", event_data)
-        
-        return new_payment
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    
-@app.get("/invoices", response_model=PaginatedResponse[InvoiceSummary])
-async def read_invoices(
-    page: int = 1,
-    limit: int = 50,
-    status: Optional[str] = None,
-    search: Optional[str] = None,
-    db: AsyncSession = Depends(database.get_db), 
+@app.get("/invoices/{invoice_id}/pdf")
+async def get_invoice_pdf(
+    invoice_id: int,
+    db: AsyncSession = Depends(database.get_db),
     user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_READ))
 ):
-    return await crud.get_invoices(db, tenant_id=user.tenant_id, page=page, limit=limit, status=status, search=search)
-
-# --- COTIZACIONES ---
-@app.post("/quotes", response_model=schemas.QuoteResponse)
-async def create_quote_endpoint(
-    quote: schemas.QuoteCreate,
-    db: AsyncSession = Depends(database.get_db),
-    user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_CREATE)),
-    token: str = Depends(oauth2_scheme)
-):
-    return await crud.create_quote(db, quote, user.tenant_id, token)
-
-@app.get("/quotes", response_model=PaginatedResponse[schemas.QuoteResponse])
-async def list_quotes(
-    page: int = 1,
-    limit: int = 20,
-    db: AsyncSession = Depends(database.get_db),
-    user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_READ))
-):
-    return await crud.get_quotes(db, tenant_id=user.tenant_id, page=page, limit=limit)
-
-@app.post("/quotes/{quote_id}/convert", response_model=schemas.InvoiceResponse)
-async def convert_quote(
-    quote_id: int,
-    db: AsyncSession = Depends(database.get_db),
-    user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_CREATE)),
-    token: int = Depends(oauth2_scheme)
-):
-    try:
-        invoice = await crud.convert_quote_to_invoice(db, quote_id, user.tenant_id, token)
-        return invoice
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.get("/exchange-rate")
-async def get_current_rate(db: AsyncSession = Depends(database.get_db)):
-    query = select(models.ExchangeRate).order_by(models.ExchangeRate.acquired_at.desc()).limit(1)
-    result = await db.execute(query)
-    rate = result.scalars().first()
+    """
+    **Descargar PDF de Factura**
     
-    if not rate:
-        return {"status": "No data", "message": "Aún no hay tasas registradas."}
-        
-    return {
-        "currency_from": rate.currency_from,
-        "currency_to": rate.currency_to,
-        "rate": rate.rate,
-        "source": rate.source,
-        "acquired_at": rate.acquired_at
-    }
-
+    Genera un PDF en formato ticket (térmico) para imprimir.
+    Retorna un stream de bytes (application/pdf).
+    """
+    invoice = await crud.get_invoice_by_id(db, invoice_id, user.tenant_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
+    
+    pdf_buffer = generate_invoice_pdf(invoice_data=invoice, items=invoice.items)
+    
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=factura_{invoice.id}.pdf"}
+    )
+    
 @app.post("/invoices/{invoice_id}/void", response_model=schemas.InvoiceResponse)
 async def void_invoice(
     invoice_id: int,
     db: AsyncSession = Depends(database.get_db),
     user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_VOID))
 ):
+    """
+    **Anular Factura**
+    
+    Marca una factura como ANULADA (VOID) y dispara un evento para revertir
+    el inventario y la contabilidad.
+    """
     invoice = await crud.get_invoice_by_id(db, invoice_id, user.tenant_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Factura no encontrada")
@@ -228,21 +193,141 @@ async def void_invoice(
     publish_event("invoice.voided", event_data)
     return invoice
 
-@app.get("/reports/sales-by-method", response_model=list[schemas.SalesReportItem])
-async def get_sales_report_by_method(
-    db: AsyncSession = Depends(database.get_db),
-    user: UserPayload = Depends(RequirePermission(Permissions.REPORTS_VIEW))
+# --- PAGOS ---
+@app.post("/payments", response_model=schemas.PaymentResponse)
+async def create_payment(
+    payment: schemas.PaymentCreate, 
+    db: AsyncSession = Depends(database.get_db), 
+    user: UserPayload = Depends(RequirePermission(Permissions.PAYMENT_CREATE))
 ):
-    return await crud.get_sales_report_by_method(db, user.tenant_id)
+    """
+    **Registrar Pago (Abono)**
+    
+    Registra un pago parcial o total a una factura existente.
+    Si el saldo llega a 0, actualiza el estado de la factura a PAID.
+    """
+    try:
+        new_payment, invoice, is_fully_paid = await crud.create_payment(db, payment, tenant_id=user.tenant_id)
+        
+        if is_fully_paid:
+            event_data = {
+                "invoice_id": invoice.id,
+                "tenant_id": user.tenant_id,
+                "total_amount": float(invoice.total_usd),
+                "paid_at": str(new_payment.created_at),
+                "items": [{"product_id": item.product_id, "quantity": item.quantity} for item in invoice.items]
+            }
+            publish_event("invoice.paid", event_data)
+        
+        return new_payment
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# --- COTIZACIONES ---
+@app.post("/quotes", response_model=schemas.QuoteResponse)
+async def create_quote_endpoint(
+    quote: schemas.QuoteCreate,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_CREATE)),
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    **Crear Cotización**
+    
+    Genera un presupuesto para un cliente. No afecta inventario ni contabilidad
+    hasta que se convierta en factura.
+    """
+    return await crud.create_quote(db, quote, user.tenant_id, token)
+
+@app.get("/quotes", response_model=PaginatedResponse[schemas.QuoteResponse])
+async def list_quotes(
+    page: int = 1,
+    limit: int = 20,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_READ))
+):
+    """
+    **Listar Cotizaciones**
+    
+    Muestra el historial de presupuestos emitidos.
+    """
+    return await crud.get_quotes(db, tenant_id=user.tenant_id, page=page, limit=limit)
+
+@app.post("/quotes/{quote_id}/convert", response_model=schemas.InvoiceResponse)
+async def convert_quote(
+    quote_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_CREATE)),
+    token: int = Depends(oauth2_scheme)
+):
+    """
+    **Convertir a Factura**
+    
+    Transforma una cotización existente en una factura real, copiando todos sus datos.
+    Marca la cotización como FACTURADA (INVOICED).
+    """
+    try:
+        invoice = await crud.convert_quote_to_invoice(db, quote_id, user.tenant_id, token)
+        return invoice
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- CONFIGURACIÓN Y TASAS ---
+@app.get("/settings", response_model=FinanceSettingsRead)
+async def read_settings(
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_READ))
+):
+    """
+    Obtiene la configuración financiera.
+    """
+    return await crud.get_finance_settings(db, user.tenant_id)
+
+@app.get("/exchange-rate")
+async def get_current_rate(db: AsyncSession = Depends(database.get_db)):
+    """Obtiene la última tasa de cambio registrada en el sistema."""
+    query = select(models.ExchangeRate).order_by(models.ExchangeRate.acquired_at.desc()).limit(1)
+    result = await db.execute(query)
+    rate = result.scalars().first()
+    
+    if not rate:
+        return {"status": "No data", "message": "Aún no hay tasas registradas."}
+        
+    return {
+        "currency_from": rate.currency_from,
+        "currency_to": rate.currency_to,
+        "rate": rate.rate,
+        "source": rate.source,
+        "acquired_at": rate.acquired_at
+    }
+    
+# --- REPORTES ---
 
 @app.get("/reports/dashboard", response_model=schemas.DashboardMetrics)
 async def get_dashboard_metrics(
     db: AsyncSession = Depends(database.get_db),
     user: UserPayload = Depends(RequirePermission(Permissions.REPORTS_VIEW))
 ):
+    """Métricas KPI para el dashboard principal."""
     return await crud.get_dashboard_metrics(db, user.tenant_id)
 
-# --- COMISIONES ---
+@app.get("/reports/sales-by-method", response_model=list[schemas.SalesReportItem])
+async def get_sales_report_by_method(
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.REPORTS_VIEW))
+):
+    """Reporte agrupado de ventas por método de pago."""
+    return await crud.get_sales_report_by_method(db, user.tenant_id)
+
+@app.get("/sales-over-time", response_model=list[schemas.SalesDataPoint])
+async def read_sales_over_time(
+    db: AsyncSession = Depends(database.get_db), 
+    user: UserPayload = Depends(RequirePermission(Permissions.REPORTS_VIEW))
+):
+    """Gráfico comparativo de ventas Año Actual vs Año Anterior."""
+    return await crud.get_sales_compatison(db, user.tenant_id)
+
 @app.get("/reports/sales-total", response_model=SalesTotalResponse)
 async def get_sales_total_for_payroll(
     tenant_id: int,
@@ -252,8 +337,10 @@ async def get_sales_total_for_payroll(
     db: AsyncSession = Depends(database.get_db)
 ):
     """
-    Endpoint interno consumido por el servicio HHRR.
-    Calcula el total de ventas de un vendedor para pagar comisiones.
+    **[INTERNO] Total Ventas por Empleado**
+    
+    Endpoint consumido por el servicio de HHRR para calcular comisiones de nómina.
+    No requiere token de usuario normal, pero debería estar protegido por red interna o API Key.
     """
     total_sales = await crud.get_sales_total_by_employee(db, tenant_id, employee_id, start_date, end_date)
     
@@ -266,27 +353,3 @@ async def get_sales_total_for_payroll(
     }
 
 
-@app.get("/sales-over-time", response_model=list[schemas.SalesDataPoint])
-async def read_sales_over_time(
-    db: AsyncSession = Depends(database.get_db), 
-    user: UserPayload = Depends(RequirePermission(Permissions.REPORTS_VIEW))
-):
-    return await crud.get_sales_compatison(db, user.tenant_id)
-
-@app.get("/invoices/{invoice_id}/pdf")
-async def get_invoice_pdf(
-    invoice_id: int,
-    db: AsyncSession = Depends(database.get_db),
-    user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_READ))
-):
-    invoice = await crud.get_invoice_by_id(db, invoice_id, user.tenant_id)
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Factura no encontrada")
-    
-    pdf_buffer = generate_invoice_pdf(invoice_data=invoice, items=invoice.items)
-    
-    return StreamingResponse(
-        pdf_buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=factura_{invoice.id}.pdf"}
-    )

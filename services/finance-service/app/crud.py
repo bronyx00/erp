@@ -1,33 +1,36 @@
 import httpx
 import logging
+import os
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload, Session
-from sqlalchemy import func, String, extract, desc, and_, cast, or_
-from typing import Optional
+from sqlalchemy.orm import selectinload
+from sqlalchemy import func, String, extract, desc, and_, cast, or_, extract
+from typing import Optional, Dict, Any, List
 from datetime import datetime, date
 from decimal import Decimal
-from . import models, schemas, main
+from . import models, schemas
+from .main import publish_event
 from jose import jwt
 from erp_common.security import SECRET_KEY, ALGORITHM
-from .models import FinanceSettings, Invoice
+from .models import FinanceSettings
 
 logger = logging.getLogger(__name__)
 
-# URL internal de Docker
-INVENTORY_SERVICE_URL = "http://inventory-service:8000"
-AUTH_URL = "http://auth-service:8000"
-CRM_URL = "http://crm-service:8000"
+# URLs de otros microservicios (Leídas del ENV o defaults de Docker)
+INVENTORY_SERVICE_URL = os.getenv("INVENTORY_SERVICE_URL", "http://inventory-service:8000")
+AUTH_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8000")
+CRM_URL = os.getenv("CRM_SERVICE_URL", "http://crm-service:8000")
 
-# Función auxiliar para redondear dinero
+# --- UTILIDADES ---
 def round_money(amount: Decimal) -> Decimal:
+    """Redondea un monto a 2 decimales."""
     return amount.quantize(Decimal("0.01"))
 
-# Helper para decodificar usuario
 def get_user_from_token(token: str):
+    """Extrae info básica del token sin validar contra DB (rápido)."""
     try:
-        payload = jwt.decode(token, SECRET_KEY, ALGORITHM)
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload.get("sub"), payload.get("role")
     except Exception as e:
         logger.error(f"Error decodificando token: {e}")
@@ -44,6 +47,35 @@ async def get_product_details(product_id: int, token: str):
             logger.error(f"Error Inventory: {e}")
             return None
 
+# --- INTEGRACIONES EXTERNAS (HTTP) ---
+
+async def get_product_details(product_id: int, token: str):
+    """Consulta el servicio de Inventario para obtener nombre y precio."""
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(f"{INVENTORY_SERVICE_URL}/api/inventory/products/{product_id}", headers=headers)
+            return resp.json() if resp.status_code == 200 else None
+        except Exception as e:
+            logger.error(f"Error contactando Inventory Service: {e}")
+            return None
+        
+async def get_customer_details(customer_id: int, token: str):
+    """Consulta el servicio CRM para obtener datos fiscales del cliente."""
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(f"{CRM_URL}/api/crm/customers?search={customer_id}", headers=headers)
+            if resp.status_code == 200:
+                # Buscamos el exacto en la lista paginada
+                data = resp.json().get("data", [])
+                for c in data:
+                    if c["id"] == customer_id: return c
+            return None
+        except Exception as e:
+            logger.error(f"Error contactando CRM Service: {e}")
+            return None
+
 async def get_tenant_data(token: str):
     """Obtiene los datos fiscales de la empresa desde Auth"""
     async with httpx.AsyncClient() as client:
@@ -56,7 +88,7 @@ async def get_tenant_data(token: str):
         
 async def get_sales_total_by_employee(db: AsyncSession, tenant_id: int, employee_id: int, start_date: date, end_date: date) -> Decimal:
     """
-    Suma el subtotal_usd de las facturas valiudas de un vendedor.
+    Suma el subtotal_usd de las facturas validas de un vendedor.
     """
     stmt = select(func.sum(models.Invoice.subtotal_usd)).where(
         and_(
@@ -129,7 +161,7 @@ async def get_latest_rate(db: AsyncSession, currency_from: str = "USD", currency
 
 async def get_finance_settings(db: AsyncSession, tenant_id: int):
     """
-    OBtiene la configuración del tenant.
+    Obtiene la configuración del tenant.
     Si no existe, crea una configuración por defecto.
     """
     # Intenta buscar la configuración existente
@@ -150,287 +182,7 @@ async def get_finance_settings(db: AsyncSession, tenant_id: int):
         
     return settings
 
-async def create_invoice(db: AsyncSession, invoice: schemas.InvoiceCreate, tenant_id: int, token: str):
-    """
-    Crea una factura y opcionalmente procesa su pago inmediato.
-    Optimizado para consultar productos en paralelo.
-    """
-    # Obtiene datos del usuario
-    user_email, user_role = get_user_from_token(token)
-    
-    # Obtiene Datos Fiscales de la Empresa
-    tenant_data = await get_tenant_data(token)
-    
-    if not tenant_data:
-        raise ValueError("No se pudieron obtener los datos fiscales de la empresa")
-    
-    # Obtener Datos del Cliente
-    customer_data = {}
-    if invoice.customer_tax_id:
-        customer_data = await get_customer_by_tax_id(invoice.customer_tax_id, token) or {}
-        
-    product_tasks = [get_product_details(item.product_id, token) for item in invoice.items]
-    products_results = await asyncio.gather(*product_tasks)
-    
-    # Mapa para acceso rápido
-    products_map = {
-        p['id']: p for p in products_results if p is not None
-    }
-
-    # Cálculos (Subtotales e IVA)
-    total_base = Decimal(0)
-    total_tax = Decimal(0)
-    db_items = []
-    
-    tax_rate = Decimal(tenant_data.get('tax_rate', 16)) / 100 if tenant_data.get('tax_active') else Decimal(0)
-        
-    for item in invoice.items:
-        # Recupera del mapa en memoria
-        product = products_map.get(item.product_id)
-        
-        if not product:
-            raise ValueError(f"Producto ID {item.product_id} no encontrado")
-        
-        # Validar Stock
-        if product['stock'] < item.quantity:
-            raise ValueError(f"Stock insuficiente para {product['name']}")
-        
-        unit_price = Decimal(product['price'])
-        
-        # Lógica de Impuesto según configuración
-        item_subtotal = unit_price * item.quantity
-        
-        # Cálculo de impuesto por ítem
-        item_tax = round_money(item_subtotal * tax_rate)
-            
-        total_base += item_subtotal
-        total_tax += item_tax
-        
-        db_items.append(models.InvoiceItem(
-            product_id=item.product_id,
-            product_name=product['name'],
-            quantity=item.quantity,
-            unit_price=unit_price,
-            total_price=item_subtotal
-        ))
-    
-    total_final = round_money(total_base + total_tax)
-    
-    # Determinar Estado y Pagos
-    # Si viene un pago dede el POS que cubre el total, la factura nace PAGADA
-    initial_status = "ISSUED"
-    db_payments = []
-    
-    if invoice.payment:
-        # Valida que el monto sea suficiente
-        if invoice.payment.amount >= total_final:
-            initial_status = "PAID"
-        elif invoice.payment.amount > 0:
-            inicial_status = "PARTIALLY_PAID"
-            
-        # Crea el objeto de pago en memoria para guardalo junto con la factura
-        payment_entry = models.Payment(
-            amount=invoice.payment.amount,
-            currency=invoice.currency,
-            payment_method=invoice.payment.payment_method,
-            reference=invoice.payment.reference,
-            notes=invoice.payment.notes
-        )
-        
-        db_payments.append(payment_entry)
-    
-    # Obtener Consecutivo Fiscal
-    next_number = await get_next_invoice_number(db, tenant_id)
-    
-    # Tasa de Cambio
-    rate_val = Decimal(1)
-    if invoice.currency == "USD":
-        rate_entry = await get_latest_rate(db)
-        if rate_entry:
-            rate_val = rate_entry.rate
-    
-    # Crear Objeto Factura (Snapshot)
-    db_invoice = models.Invoice(
-        tenant_id=tenant_id,
-        invoice_number=next_number,
-        control_number=f"00-{next_number:08d}",
-        salesperson_id=invoice.salesperson_id,
-        
-        # Snapshot Empresa
-        company_name_snapshot=tenant_data.get('name'), # Nombre comercial
-        company_rif_snapshot=tenant_data.get('rif'),
-        company_address_snapshot=tenant_data.get('address'),
-        
-        # Snapshot Cliente
-        customer_name=customer_data.get('name') or 'CLIENTE GENÉRICO',
-        customer_rif=invoice.customer_tax_id,
-        customer_email=customer_data.get('email') or f"cliente@email.com",
-        customer_address=customer_data.get('address'),
-        customer_phone=customer_data.get('phone'),
-        
-        # Montos Globales
-        subtotal_usd=total_base,
-        tax_amount_usd=total_tax,
-        total_usd=total_final,
-        
-        currency=invoice.currency,
-        exchange_rate=rate_val,
-        amount_ves=total_final * rate_val,
-        
-        # Firmas
-        created_by_email=user_email,
-        created_by_role=user_role,
-        
-        status=initial_status,
-        items=db_items,
-        payments=db_payments
-    )
-    
-    # Guardar
-    db.add(db_invoice)
-    await db.commit()
-    
-    query = (
-        select(models.Invoice)
-        .options(
-            selectinload(models.Invoice.items),
-            selectinload(models.Invoice.payments) 
-        )
-        .filter(models.Invoice.id == db_invoice.id)
-    )
-    result = await db.execute(query)
-    final_invoice = result.scalars().first()
-    
-    event_data = {
-        "id": final_invoice.id,
-        "tenant_id": tenant_id,
-        "total_amount": float(final_invoice.total_usd),
-        "currency": final_invoice.currency,
-        "status": final_invoice.status,
-        "date": str(final_invoice.created_at)
-    }
-    
-    main.publish_event("invoice.created", event_data)
-    
-    if initial_status == "PAID":
-        paid_event = {
-            "invoice_id": final_invoice.id,
-            "tenant_id": tenant_id,
-            "total_amount": float(final_invoice.total_usd),
-            "paid_at": str(datetime.utcnow()),
-            "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in final_invoice.items],
-            "origin": "inmediate"
-        }
-        main.publish_event("invoice.paid", paid_event)
-    
-    return final_invoice
-
-async def get_quotes(
-    db: AsyncSession,
-    tenant_id: int,
-    page: int = 1,
-    limit: int = 20,
-    search: Optional[str] = None
-):
-    offset = (page - 1) * limit
-    
-    conditions = [models.Quote.tenant_id == tenant_id]
-    
-    if search:
-        search_term = f"%{search}%"
-        conditions.append(
-            or_(
-                models.Quote.customer_name.ilike(search_term),
-                models.Quote.customer_rif.ilike(search_term),
-                cast(models.Quote.quote_number, String).ilike(search_term),
-                models.Quote.created_by_email.ilike(search_term)
-            )
-        )
-    
-    # Contar Rapido
-    count_query = select(func.count(models.Quote)).filter(*conditions)
-    total_res = await db.execute(count_query)
-    total = total_res.scalar() or 0
-    
-    # Consulta de Datos
-    query = (
-        select(models.Quote)
-        .filter(*conditions)
-        .order_by(models.Quote.id.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    
-    result = await db.execute(query)
-    data = result.scalars().all()
-    
-    return {
-        "data": data,
-        "meta": {
-            "total": total,
-            "page": page,
-            "limit": limit,
-            "total_pages": (total + limit - 1) // limit if limit > 0 else 0
-        }
-    }    
-    
-
-async def get_invoices(
-    db: AsyncSession, 
-    tenant_id: int,
-    page: int = 1,
-    limit: int = 50,
-    status: Optional[str] = None,
-    search: Optional[str] = None
-):
-    offset = (page - 1) * limit
-    conditions = [models.Invoice.tenant_id == tenant_id]
-    
-    # Filtros Dinámicos
-    if status:
-        conditions.append(models.Invoice.status == status)
-        
-    if search:
-        search_term = f"%{search}%"
-        conditions.append(
-            or_(
-                models.Invoice.customer_name.ilike(search_term),
-                models.Invoice.customer_rif.ilike(search_term),
-                cast(models.Invoice.invoice_number, String).ilike(search_term),
-                models.Invoice.control_number.ilike(search_term)
-            )
-        )
-    
-    # Contar Rapido
-    count_query = select(func.count(models.Invoice.id)).filter(*conditions)
-    total_result = await db.execute(count_query)
-    total = total_result.scalar() or 0
-    
-    # Ordenar y Paginar
-    query = (
-        select(models.Invoice)
-        .filter(*conditions)
-        .order_by(models.Invoice.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    
-    result = await db.execute(query)
-    data = result.scalars().all()
-    
-    # Cálculo total de páginas
-    total_pages = (total + limit - 1) // limit if limit > 0 else 0
-    
-    return {
-        "data": data,
-        "meta": {
-            "total": total,
-            "page": page,
-            "limit": limit,
-            "total_pages": total_pages
-        }
-    }
-
+# --- PAGO ---
 async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenant_id: int):
     # Buscar la factura y verificar que pertenezca al usuario
     query = (
@@ -485,12 +237,261 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     await db.refresh(db_payment)
     return db_payment, invoice, is_fully_paid
 
-async def get_invoice_by_id(db: AsyncSession, invoice_id: int, tenant_id: int):
-    """Busca una factura asegurando que pertenece al Tenant."""
+# --- FACTURACIÓN ---
+
+async def get_invoices(
+    db: AsyncSession, 
+    tenant_id: int,
+    page: int = 1,
+    limit: int = 50,
+    status: Optional[str] = None,
+    search: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Lista facturas con paginación y búsqueda.
+    Optimizado para contar IDs en lugar de subqueries.
+    """
+    offset = (page - 1) * limit
+    conditions = [models.Invoice.tenant_id == tenant_id]
+    
+    # Filtros Dinámicos
+    if status:
+        conditions.append(models.Invoice.status == status)
+        
+    if search:
+        search_term = f"%{search}%"
+        conditions.append(
+            or_(
+                models.Invoice.customer_name.ilike(search_term),
+                models.Invoice.customer_rif.ilike(search_term),
+                cast(models.Invoice.invoice_number, String).ilike(search_term),
+                models.Invoice.control_number.ilike(search_term)
+            )
+        )
+    
+    # Contar Rapido
+    count_query = select(func.count(models.Invoice.id)).filter(*conditions)
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Ordenar y Paginar
     query = (
         select(models.Invoice)
-        .filter(models.Invoice.id == invoice_id, models.Invoice.tenant_id == tenant_id)
+        .filter(*conditions)
+        .order_by(models.Invoice.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    
+    result = await db.execute(query)
+    data = result.scalars().all()
+    
+    # Cálculo total de páginas
+    total_pages = (total + limit - 1) // limit if limit > 0 else 0
+    
+    return {
+        "data": data,
+        "meta": {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages
+        }
+    }
+
+async def create_invoice(
+    db: AsyncSession, 
+    invoice_data: schemas.InvoiceCreate, 
+    tenant_id: int, 
+    token: str
+) -> models.Invoice:
+    """
+    Emite una nueva factura de venta.
+
+    Realiza las siguientes acciones en una transacción atómica:
+    1. Obtiene datos fiscales de la empresa (Auth) y del cliente (CRM).
+    2. Consulta precios y stock de productos en paralelo (Inventory).
+    3. Calcula subtotales, impuestos y totales en divisa y moneda local.
+    4. Si el método de pago es de contado, registra el pago y marca como PAGADA.
+    5. Guarda Snapshots de todos los datos para auditoría fiscal.
+    6. Dispara eventos a RabbitMQ para contabilidad e inventario.
+    """
+    
+    # 1. Obtener Datos Externos en Paralelo
+    # Lanza las peticiones a microservicios simultáneamente
+    tasks = [
+        get_tenant_data(token),
+        get_customer_details(invoice_data.customer_id, token) if invoice_data.customer_id else asyncio.sleep(0),
+        *[get_product_details(item.product_id, token) for item in invoice_data.items]
+    ]
+    
+    results = await asyncio.gather(*tasks)
+    
+    tenant_data = results[0]
+    customer_data = results[1] if invoice_data.customer_id else {}
+    product_list = results[2:]
+    
+    # Mapa para acceso rápido a productos por ID
+    product_map = {p['id']: p for p in product_list if p}
+    
+    if not tenant_data:
+        raise ValueError("Error crítico: No se pudieron obtener datos fiscales de la empresa.")
+    
+    # 2. Configuración Fiscal y Cambiaria
+    settings_q = select(models.FinanceSettings).filter(models.FinanceSettings.tenant_id == tenant_id)
+    settings = (await db.execute(settings_q)).scalar_one_or_none()
+    tax_rate = settings.tax_rate if settings else Decimal(16.00)
+    
+    # Obtener Tasa de Cambio
+    rate_q = select(models.ExchangeRate).order_by(desc(models.ExchangeRate.acquired_at)).limit(1)
+    rate_obj = (await db.execute(rate_q)).scalar_one_or_none()
+    exchange_rate = rate_obj.rate if rate_obj else Decimal(1)
+    
+    # Obtener datos del usuario
+    user_email, user_role = get_user_from_token(token)
+    
+    # 3. Procesar Items y Totales
+    total_base = Decimal(0)
+    db_items = []
+    
+    for item in invoice_data.items:
+        product = product_map.get(item.product_id)
+        if not product:
+            raise ValueError(f"Producto ID {item.product_id} no encontrado en Inventario.")
+        
+        # Validación de Stock
+        if product.get('stock', 0) < item.quantity:
+            raise ValueError(f"Stock insuficiente para '{product['name']}'. Disponibles: {product['stock']}")
+        
+        # Precio unitario
+        unit_price = item.unit_price
+        line_total = unit_price * item.quantity
+        total_base += line_total
+        
+        db_items.append(models.InvoiceItem(
+            product_id=item.product_id,
+            product_name=product['name'],
+            quantity=item.quantity,
+            unit_price=unit_price,
+            total_price=line_total
+        ))
+        
+    # Cálculos Finales
+    tax_amount = round_money(total_base * (tax_rate / 100))
+    total_usd = round_money(total_base + tax_amount)
+    total_ves = round_money(total_usd * exchange_rate)
+    
+    # 4. Determinar Estado Inicial
+    status = "ISSUED"
+    
+    db_payments = []
+    if invoice_data.payment and invoice_data.payment.amount > 0:
+        paid_amount = invoice_data.payment.amount
+        
+        # Caso A: Pagó todo
+        if paid_amount >= total_usd:
+            status = "PAID"
+            paid_amount = total_usd
+        
+        # Caso B: Pagó una parte (Abono / Adelanto)
+        else:
+            status = "PARTIALLY_PAID"
+            
+        # Creamos el registro del pago
+        db_payments.append(models.Payment(
+            amount=paid_amount,
+            currency=invoice_data.currency, # Asumimos pago en la misma moneda base
+            payment_method=invoice_data.payment.payment_method,
+            reference=invoice_data.payment.reference,
+            payment_date=date.today()
+        ))
+        
+    # Si no envió payment, se queda como "ISSUED" (Crédito puro 100%)
+    
+    # 5. Generar Consecutivo
+    last_inv_q = select(models.Invoice).filter(models.Invoice.tenant_id == tenant_id).order_by(desc(models.Invoice.invoice_number)).limit(1)
+    last_inv = (await db.execute(last_inv_q)).scalar_one_or_none()
+    new_number = (last_inv.Invoice_number + 1) if last_inv else 1
+    
+    # 6. Crear Factura
+    new_invoice = models.Invoice(
+        tenant_id=tenant_id,
+        salesperson_id=invoice_data.salesperson_id,
+        created_by_user_id=user_email,
+        created_by_role=user_role,
+        
+        # Datos Fiscales
+        invoice_number=new_number,
+        control_number=f"00-{new_number:08d}", # Generador simple de control
+        status=status,
+        
+        # Snapshot Empresa 
+        company_name=tenant_data.get('name'),
+        company_rif=tenant_data.get('rif'),
+        company_address=tenant_data.get('address'),
+        
+        # Snapshot Cliente
+        customer_id=invoice_data.customer_id,
+        customer_name=invoice_data.customer_name or customer_data.get('name') or "CLIENTE GENÉRICO",
+        customer_rif=invoice_data.customer_rif or customer_data.get('tax_id'),
+        customer_email=invoice_data.customer_email or customer_data.get('email'),
+        customer_address=invoice_data.customer_address or customer_data.get('address'),
+        customer_phone=invoice_data.customer_phone or customer_data.get('phone'),
+        
+        # Totales
+        currency=invoice_data.currency,
+        exchange_rate=exchange_rate,
+        subtotal_usd=total_base,
+        tax_amount_usd=tax_amount,
+        total_usd=total_usd,
+        amount_ves=total_ves,
+        
+        notes=invoice_data.notes,
+        
+        # Relaciones
+        items=db_items,
+        payments=db_payments
+    )
+    
+    # Guardado Atómico
+    db.add(new_invoice)
+    await db.commit()
+    await db.refresh(new_invoice)
+    
+    # 7. Disparar Eventos
+    # Evento 1: Factura Creada
+    event_data ={
+        "id": new_invoice.id,
+        "tenant_id": tenant_id,
+        "total_amount": float(new_invoice.total_usd),
+        "currency": new_invoice.currency,
+        "status": new_invoice.status,
+        "date": str(new_invoice.created_at),
+        "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in new_invoice.items]
+    }
+    publish_event("invoice.created", event_data)
+    
+    # Evento 2: Pago Inmediato
+    if len(db_payments) > 0:
+        paid_event = {
+            "invoice_id": new_invoice.id,
+            "tenant_id": tenant_id,
+            "total_amount": float(db_payments[0].total_usd),
+            "payment_method": db_payments[0].payment_method,
+            "paid_at": str(datetime.utcnow()),
+            "items": event_data["items"], # Reenviamos items para que Inventory sepa qué descontar
+            "origin": "immediate_sale"
+        }
+        publish_event("invoice.paid", paid_event)
+        
+    return new_invoice
+
+async def get_invoice_by_id(db: AsyncSession, invoice_id: int, tenant_id: int):
+    """Busca una factura por ID con sus items cargados."""
+    query = (
+        select(models.Invoice)
         .options(selectinload(models.Invoice.items), selectinload(models.Invoice.payments))
+        .filter(models.Invoice.id == invoice_id, models.Invoice.tenant_id == tenant_id)
     )
     result = await db.execute(query)
     return result.scalars().first()
@@ -503,17 +504,22 @@ async def set_invoice_void(db: AsyncSession, invoice: models.Invoice):
     
     # Recargamos para devolver el objeto actualizado y limpio
     await db.refresh(invoice)
-    return invoice
+    return invoice   
 
 # --- GESTION DE COTIZACIONES ---
 async def get_next_quote_number(db: AsyncSession, tenant_id: int) -> str:
-    """Genera correlativo tipo COT-0001"""
+    """Genera el siguiente número correlativo para cotizaciones (Ej: COT-00005)."""
     query = select(models.Quote.id).filter(models.Quote.tenant_id == tenant_id).order_by(desc(models.Quote.id)).limit(1)
     result = await db.execute(query)
     last_id = result.scalar() or 0
     return f"COT-{last_id + 1:05d}"
 
-async def create_quote(db: AsyncSession, quote_in: schemas.QuoteCreate, tenant_id: int, token: str):
+async def create_quote(db: AsyncSession, quote_in: schemas.QuoteCreate, tenant_id: int, token: str) -> models.Quote:
+    """
+    Registra una nueva cotización en el sistema.
+    
+    Consulta precios de productos en inventario y datos del cliente en CRM.
+    """
     # Datos Usuario y Tenant
     user_email, _ = get_user_from_token(token)
     tenant_data = await get_tenant_data(token)
@@ -604,6 +610,56 @@ async def create_quote(db: AsyncSession, quote_in: schemas.QuoteCreate, tenant_i
     
     return final_quote
 
+async def get_quotes(
+    db: AsyncSession,
+    tenant_id: int,
+    page: int = 1,
+    limit: int = 20,
+    search: Optional[str] = None
+):
+    """Lista las cotizaciones con filtros."""
+    offset = (page - 1) * limit
+    
+    conditions = [models.Quote.tenant_id == tenant_id]
+    
+    if search:
+        search_term = f"%{search}%"
+        conditions.append(
+            or_(
+                models.Quote.customer_name.ilike(search_term),
+                models.Quote.customer_rif.ilike(search_term),
+                cast(models.Quote.quote_number, String).ilike(search_term),
+                models.Quote.created_by_email.ilike(search_term)
+            )
+        )
+    
+    # Contar Rapido
+    count_query = select(func.count(models.Quote)).filter(*conditions)
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+    
+    # Consulta de Datos
+    query = (
+        select(models.Quote)
+        .filter(*conditions)
+        .order_by(models.Quote.id.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    
+    result = await db.execute(query)
+    data = result.scalars().all()
+    
+    return {
+        "data": data,
+        "meta": {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total + limit - 1) // limit if limit > 0 else 0
+        }
+    } 
+
 async def convert_quote_to_invoice(db: AsyncSession, quote_in: int, tenant_id: int, token: str):
     """Convierte una Cotización en Factura Real"""
     # Buscar Cotización
@@ -640,9 +696,9 @@ async def convert_quote_to_invoice(db: AsyncSession, quote_in: int, tenant_id: i
     
     return new_invoice
 
-
 # --- REPORTES ---
 async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):
+    """Calcula KPIs del día."""
     today = datetime.utcnow().date()
     start_of_month = today.replace(day=1)
     
@@ -727,6 +783,7 @@ async def get_sales_report_by_method(db: AsyncSession, tenant_id: int):
     return report_data
 
 async def get_sales_compatison(db: AsyncSession, tenant_id: int):
+    """Compara ventas mes a mes (Año actual vs Año anterior)."""
     today = date.today()
     current_year = today.year
     last_year = current_year - 1

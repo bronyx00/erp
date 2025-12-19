@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from decimal import Decimal
 from datetime import datetime, date
 from typing import List, Optional, Generic, TypeVar
@@ -42,9 +42,9 @@ class InvoiceSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
 class InvoicePaymentCreate(BaseModel):
-    amount: Decimal
-    payment_method: str
-    reference: Optional[str] = None
+    amount: Decimal = Field(..., gt=0, description="Monto del abono o pago total")
+    payment_method: str = Field(..., description="CASH, TTDB, PAGO_MOVIL, TRANSFER")
+    reference: Optional[str] = Field(None, description="Referencia bancaria")
     notes: Optional[str] = None    
 
 # --- INVOICE SCHEMAS ---
@@ -63,8 +63,8 @@ class InvoiceCreate(BaseModel):
     customer_tax_id: str
     salesperson_id: Optional[int] = None
     currency: str = "USD"
-    items: List[InvoiceItemCreate] # Recibe una lista de items
-    payment: Optional[InvoicePaymentCreate] = None
+    items: List[InvoiceItemCreate] = Field(..., min_items=1, description="Lista de productos a facturar")
+    payment: Optional[InvoicePaymentCreate] = Field(None, description="Datos del pago inicial (si existe)")
 
 class PaymentCreate(BaseModel):
     invoice_id: int

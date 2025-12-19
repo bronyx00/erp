@@ -6,14 +6,19 @@ from .. import models
 
 logger = logging.getLogger(__name__)
 
-# URL de la API para tasa BCV
+# API Externa (DolarVzla)
 API_URL = "https://api.dolarvzla.com/public/exchange-rate"
 CAMPO_NAME = "current" # Nombre del campo que especifica la Tasa BCV en la API
 
 def fetch_and_store_rate(db: Session):
     """
-    Consulta la API externa y guarda la tasa en la DB.
-    Se usa Session síncrona porque APScheduler corre en hilos estándar.
+    Consulta la API externa para obtener la tasa BCV/Paralela y la guarda.
+    
+    Esta función se ejecuta en un Hilo (Thread) separado por APScheduler,
+    por lo que usa una `Session` síncrona de SQLAlchemy.
+
+    Args:
+        db (Session): Sesión síncrona de base de datos.
     """
     logger.info("🔄 Iniciando actualización de tasa cambiaria...")
     
