@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
-from typing import Optional
+from sqlalchemy import func, or_
+from typing import Optional, Dict, Any
 from . import models, schemas
 
 async def get_products(
@@ -10,11 +10,15 @@ async def get_products(
     page: int = 1, 
     limit: int = 50,
     search: Optional[str] = None
-):
+) -> Dict[str, Any]:
+    """
+    Lista productos con paginación.
+    Permite buscar por Nombre O por SKU.
+    """
     
     offset = (page - 1) * limit
     
-    # Define condiciones base para reusarlas en conteo y búsqueda
+    # Condiciones base
     conditions = [
         models.Product.tenant_id == tenant_id,
         models.Product.is_active == True
@@ -22,18 +26,24 @@ async def get_products(
     
     # Filtro de búsqueda si existe
     if search:
-        conditions.append(models.Product.name.ilike(f"%{search}%"))
+        term = f"%{search}%"
+        conditions.append(
+            or_(
+                models.Product.name.ilike(term),
+                models.Product.sku.ilike(term)
+            )
+        )
         
-    # Conteo optimizado
+    # 1. Conteo optimizado
     count_query = select(func.count(models.Product.id)).filter(*conditions)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
     
-    # Obtener Datos
+    # 2. Obtener Datos
     query = (
         select(models.Product)
         .filter(*conditions)
-        .order_by(models.Product.id.desc())
+        .order_by(models.Product.name.asc())
         .offset(offset)
         .limit(limit)
     )
@@ -55,7 +65,7 @@ async def get_products(
     }
 
 async def get_product_by_id(db: AsyncSession, product_id: int, tenant_id: int):
-    # Dame el producto X solo si pertenece a mi EMPRESA
+    """Busca un producto por ID dentro de la empresa."""
     query = select(models.Product).filter(
         models.Product.id == product_id,
         models.Product.tenant_id == tenant_id
@@ -64,6 +74,7 @@ async def get_product_by_id(db: AsyncSession, product_id: int, tenant_id: int):
     return result.scalars().first()
 
 async def create_product(db: AsyncSession, product: schemas.ProductCreate, tenant_id: int):
+    """Busca un producto por SKU para validaciones."""
     db_product = models.Product(
         **product.model_dump(),
         tenant_id=tenant_id

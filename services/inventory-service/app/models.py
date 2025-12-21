@@ -2,6 +2,14 @@ from sqlalchemy import Column, Integer, String, Numeric, Boolean
 from .database import Base
 
 class Product(Base):
+    """
+    Representa un producto o servicio en el inventario.
+    
+    Attributes:
+        sku: Stock Keeping Unit (Código único de referencia).
+        price: Precio unitario de venta.
+        stock: Cantidad actual disponible.
+    """
     __tablename__ = "products"
     
     id = Column(Integer, primary_key=True, index=True)
