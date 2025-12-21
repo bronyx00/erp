@@ -2,29 +2,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
+from typing import Optional, Dict, Any
 from . import models, schemas
 from datetime import datetime
 
 async def check_employee_access(db: AsyncSession, email: str, tenant_id: int) -> bool:
-    """Verifica si el empleado puede acceder según su horarioactual"""
-    # Buscar empleado y su horario
+    """
+    Verifica si un empleado tiene permitido el acceso al sistema en este momento
+    basándose en su Horario de Trabajo asignado.
+    """
+    # 1. Buscar empleado y cargar su horario
     query = select(models.Employee).options(selectinload(models.Employee.schedule))\
         .filter(models.Employee.email == email, models.Employee.tenant_id == tenant_id)
         
     result = await db.execute(query)
     employee = result.scalars().first()
     
-    # Si no existe en nómina o no tiene horario asignado, permitimos acceso
-    # Si no tiene horario restringido, entra libremente.
+    # 2. Si no tiene horario restringido o no existe, permitimos acceso (Fail-open para dueños/admins)
     if not employee or not employee.schedule or not employee.schedule.is_active:
         return True
     
-    # Determinar día y hora actual
+    # 3. Determinar momento actual
     now = datetime.now()
     current_time = now.time()
     weekday = now.weekday() # 0=Lunes, 1=Martes, ...., 6=Domingo
     
-    # Mapeo de los campos del modelo WorkSchedule
+    # 4. Mapeo de campos del modelo WorkSchedule
     sched = employee.schedule
     # (inicio, fin) para cada día
     day_map = {
@@ -39,7 +42,7 @@ async def check_employee_access(db: AsyncSession, email: str, tenant_id: int) ->
     
     start, end = day_map.get(weekday, (None, None))
     
-    # Validar Relas 
+    # 5. Reglas de Validación
     # Si el dia no tiene horas definidas (None), es dia libre -> ACCESO DENEGADO
     if start is None or end is None:
         return False
@@ -51,13 +54,15 @@ async def check_employee_access(db: AsyncSession, email: str, tenant_id: int) ->
     return False
 
 async def get_employees(db: AsyncSession, tenant_id: int, page: int = 1, limit: int = 50):
+    """Lista paginada de empleados."""
     offset = (page - 1) * limit
     conditions = [models.Employee.tenant_id == tenant_id]
 
-    # Conteo Rápido
+    # Conteo Optimizado
     count_query = select(func.count(models.Employee.id)).filter(*conditions)
     total = (await db.execute(count_query)).scalar() or 0
     
+    # Consulta de datos
     query = (
         select(models.Employee)
         .filter(*conditions)
@@ -78,6 +83,7 @@ async def get_employees(db: AsyncSession, tenant_id: int, page: int = 1, limit: 
     }
 
 async def create_employee(db: AsyncSession, employee: schemas.EmployeeCreate, tenant_id: int):
+    """Crea un nuevo empleado."""
     db_employee = models.Employee(
         tenant_id=tenant_id,
         **employee.model_dump()
@@ -87,7 +93,42 @@ async def create_employee(db: AsyncSession, employee: schemas.EmployeeCreate, te
     await db.refresh(db_employee)
     return db_employee
 
+async def get_employee_by_id(db: AsyncSession, employee_id: int, tenant_id: int):
+    """Busca empleado por ID con su horario cargado."""
+    query = select(models.Employee).filter(
+        models.Employee.id == employee_id,
+        models.Employee.tenant_id == tenant_id
+    ).options(selectinload(models.Employee.schedule))
+    result = await db.execute(query)
+    return result.scalars().first()
+
+async def update_employee (
+    db: AsyncSession,
+    employee_id: int,
+    employee_update: schemas.EmployeeUpdate,
+    tenant_id: int
+):
+    """Actualiza datos parciales de un empleado."""
+    # Busca al empleado existente
+    db_employee = await get_employee_by_id(db, employee_id, tenant_id)
+    if not db_employee:
+        return None
+    
+    # Actualiza solo los campos que vienen en el JSON
+    update_data = employee_update.model_dump(exclude_unset=True)
+    
+    for key, value in update_data.items():
+        setattr(db_employee, key, value)
+        
+    # Guarda los cambios
+    await db.commit()
+    await db.refresh(db_employee)
+    return db_employee
+
+# --- HORARIOS ---
+
 async def create_schedule(db: AsyncSession, schedule: schemas.WorkScheduleCreate, tenant_id: int):
+    """Crea el horario general de la empresa"""
     db_schedule = models.WorkSchedule(
         tenant_id=tenant_id,
         **schedule.model_dump()
@@ -98,6 +139,7 @@ async def create_schedule(db: AsyncSession, schedule: schemas.WorkScheduleCreate
     return db_schedule
 
 async def get_schedule(db: AsyncSession, tenant_id: int):
+    """Obtiene el horario de la empresa"""
     query = select(models.WorkSchedule).filter(
         models.WorkSchedule.tenant_id == tenant_id,
         models.WorkSchedule.is_active == True
@@ -105,15 +147,15 @@ async def get_schedule(db: AsyncSession, tenant_id: int):
     result = await db.execute(query)
     return result.scalars().all()
 
-async def get_employee_by_id(db: AsyncSession, employee_id: int, tenant_id: int):
-    query = select(models.Employee).filter(
-        models.Employee.id == employee_id,
-        models.Employee.tenant_id == tenant_id
-    ).options(selectinload(models.Employee.schedule))
-    result = await db.execute(query)
-    return result.scalars().first()
+# --- NÓMINA ---
 
 async def create_payroll(db: AsyncSession, payroll_data: schemas.PayrollCreate, tenant_id: int):
+    """
+    Genera una nómina GLOBAL para todos los empleados activos.
+    
+    NOTA: Esto es una versión simplificada. En un sistema real, 
+    esto iteraría empleado por empleado calculando deducciones.
+    """
     # Calcular el total a pagar (Suma de salarios de activos)
     query_sum = select(func.sum(models.Employee.salary)).filter(
         models.Employee.tenant_id == tenant_id,
@@ -125,21 +167,33 @@ async def create_payroll(db: AsyncSession, payroll_data: schemas.PayrollCreate, 
     if total_amount == 0:
         raise ValueError("No hay empleados activos o salarios para procesar.")
     
-    # Crear el registro de Nómina
-    db_payroll = models.Payroll(
-        tenant_id=tenant_id,
-        period_start=payroll_data.period_start,
-        period_end=payroll_data.period_end,
-        total_amount=total_amount,
-        status="PAID"
-    )
-    db.add(db_payroll)
-    await db.commit()
-    await db.refresh(db_payroll)
+    employees = await get_employees(db, tenant_id, limit=1000)
+    created_payrolls = []
     
-    return db_payroll
+    # Iteración para crear el pago de TODOS los empleados 
+    for emp in employees['data']:
+        payroll = models.Payroll(
+            tenant_id=tenant_id,
+            employee_id=emp.id,
+            period_start=payroll_data.period_start,
+            period_end=payroll_data.period_end,
+            
+            base_salary=emp.salary,
+            total_earning=emp.salary,
+            net_pay=emp.salary,
+            
+            status="APPROVED"
+        )
+        db.add(payroll)
+        created_payrolls.append(payroll)
+        
+    await db.commit()
+    await db.refresh(payroll)
+    
+    return created_payrolls
 
 # --- NOTAS ---
+
 async def create_note(
     db: AsyncSession,
     note: schemas.SupervisorNoteCreate,
@@ -193,24 +247,3 @@ async def get_employee_notes(
         }
     }
     
-async def update_employee (
-    db: AsyncSession,
-    employee_id: int,
-    employee_update: schemas.EmployeeUpdate,
-    tenant_id: int
-):
-    # Busca al empleado existente
-    db_employee = await get_employee_by_id(db, employee_id, tenant_id)
-    if not db_employee:
-        return None
-    
-    # Actualiza solo los campos que vienen en el JSON
-    update_data = employee_update.model_dump(exclude_unset=True)
-    
-    for key, value in update_data.items():
-        setattr(db_employee, key, value)
-        
-    # Guarda los cambios
-    await db.commit()
-    await db.refresh(db_employee)
-    return db_employee

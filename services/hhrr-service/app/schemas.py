@@ -1,9 +1,11 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
-from typing import Optional, List, Any, Generic, TypeVar
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
+from typing import Optional, List, Generic, TypeVar
 from decimal import Decimal
 from datetime import date, datetime, time
 
 T = TypeVar("T")
+
+# --- UTILIDADES ---
 
 class MetaData(BaseModel):
     total: int
@@ -15,8 +17,14 @@ class PaginatedResponse(BaseModel, Generic[T]):
     data: List[T]
     meta: MetaData
     
+# --- HORARIOS ---
+    
 class WorkScheduleBase(BaseModel):
-    name: str
+    """
+    Tabla de horarios del negocio.
+    Necesario para clausurar horarios de login de los empleados.
+    """
+    name: str = Field(..., description="Nombre del turno (ej. Diurno)")
     monday_start: Optional[time] = None
     monday_end: Optional[time] = None
     tuesday_start: Optional[time] = None
@@ -40,6 +48,8 @@ class WorkScheduleResponse(WorkScheduleBase):
     is_active: bool
     model_config = ConfigDict(from_attributes=True)
 
+# --- SUBMODELOS EMPLEADO ---
+
 class EmergencyContact(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
@@ -55,11 +65,14 @@ class PerformanceReview(BaseModel):
     date: date
     rating: int
     summary: str
+    
+# --- EMPLEADO ---
 
 class EmployeeBase(BaseModel):
+    """Información básica de un empleado"""
     first_name: str
     last_name: str
-    identification: str
+    identification: str = Field(..., description="Cédula de identidad")
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
     address: Optional[str] = None
@@ -71,7 +84,7 @@ class EmployeeBase(BaseModel):
     hired_at: Optional[date] = None
     schedule_id: Optional[int] = None
     
-    salary: Decimal = Decimal(0)
+    salary: Decimal = Field(Decimal(0), description="Salario base")
     bonus_scheme: Optional[str] = None
     
     # Campos JSON complejos
@@ -86,6 +99,7 @@ class EmployeeCreate(EmployeeBase):
     pass
 
 class EmployeeUpdate(BaseModel):
+    """Campos opcionales para actualizar un empleado"""
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     identification: Optional[str] = None
@@ -113,21 +127,24 @@ class EmployeeResponse(EmployeeBase):
     model_config = ConfigDict(from_attributes=True)
     
 # --- NOMINA ---
+
 class PayrollCreate(BaseModel):
     period_start: date
     period_end: date
     # En el futuro añadir bonos, extras, etc
+    # Aquí podríamos agregar lista de IDs para pagar solo a algunos, o dejarlo global
     
 class PayrollResponse(BaseModel):
     id: int
     period_start: date
     period_end: date
-    total_amount: Decimal
+    total_amount: Decimal = Field(..., alias="total_earnings")
     status: str
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
     
 # --- NOTAS ---
+
 class SupervisorNoteCreate(BaseModel):
     employee_id: int
     category: str = "GENERAL" 

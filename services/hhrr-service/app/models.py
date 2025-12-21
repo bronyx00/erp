@@ -1,36 +1,14 @@
-import enum
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Date, Text, JSON, ForeignKey, Time
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .database import Base
-
-class WorkSchedule(Base):
-    """Modelo para Turnos/Horarios de Trabajo"""
-    __tablename__ = "work_schedules"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, index=True, nullable=True)
-    name = Column(String, nullable=False) # Ej: "Diurno Lunes-Viernes"
-    
-    # Horas (Formato 24h)
-    monday_start = Column(Time, nullable=True)
-    monday_end = Column(Time, nullable=True)
-    tuesday_start = Column(Time, nullable=True)
-    tuesday_end = Column(Time, nullable=True)
-    wednesday_start = Column(Time, nullable=True)
-    wednesday_end = Column(Time, nullable=True)
-    thursday_start = Column(Time, nullable=True)
-    thursday_end = Column(Time, nullable=True)
-    friday_start = Column(Time, nullable=True)
-    friday_end = Column(Time, nullable=True)
-    saturday_start = Column(Time, nullable=True)
-    saturday_end = Column(Time, nullable=True)
-    sunday_start = Column(Time, nullable=True)
-    sunday_end = Column(Time, nullable=True)
-    
-    is_active = Column(Boolean, default=True)
+import enum
 
 class Employee(Base):
+    """
+    Ficha principal del empleado.
+    Incluye datos personales, laborales y configuración de compensación.
+    """
     __tablename__ = "employees"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -70,52 +48,11 @@ class Employee(Base):
     is_active = Column(Boolean, default=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-class IncomeCalculationType(str, enum.Enum):
-    FIXED = "FIXED"                     # Monto fijo (Ej: Bono Transporte $20)
-    PERCENTAGE_OF_SALARY = "SALARY_PCT" # % del Sueldo Base (Ej: Antiguedad)
-    PERCENTAGE_OF_SALES = "SALES_PCT"   # % de Ventas del Periodo (Comisiones)
-    
-class IncomeConcept(Base):
-    """
-    Catálogo de Conceptos de Ingreso (Ej: Bono Producción, Comisión Ventas).
-    Define si el concepto es 'Salarial' (afecta IVSS/Prestaciones) o no.
-    """
-    __tablename__ = "income_concepts"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, index=True, nullable=False)
-    
-    name = Column(String, nullable=False)   # Ej: "Bono de Productividad"
-    is_active = Column(Boolean, default=True)
-    
-    # Define si este ingreso paga impuestos o no
-    # True = Se suma al salario base para IVSS/FAOV
-    # False = No paga impuestos
-    is_salary = Column(Boolean, default=False)
-    
-    # Tipo de cálculo: FIXED (Monto fijo) o PERCENTAGE (% del sueldo base)
-    calculation_type = Column(String, default="FIXED")
-    
-class EmployeeRecurringIncome(Base):
-    """
-    Asigna un concepto a un empleado específico.
-    Ej: Juan tiene un 'Bono de Producción' de $50.
-    """
-    __tablename__ = "employee_recurring_incomes"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
-    concept_id = Column(Integer, ForeignKey("income_concepts.id"), nullable=False)
-    
-    amount = Column(Numeric(10, 2), default=0) # Valor (Dinero o porcentaje)
-    
-    employee = relationship("Employee", backref="recurring_incomes")
-    concept = relationship("IncomeConcept")
-    
+
 class Payroll(Base):
     """
-    Representa el recibo de pago individual de un empleado.
+    Recibo de Nómina generado.
+    Guarda el histórico de pagos, deducciones y aportes.
     """
     __tablename__ = "payrolls"
     
@@ -167,6 +104,74 @@ class Payroll(Base):
     status = Column(String, default="DRAFT")                # DRAFT, CALCULATED, PAID
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class WorkSchedule(Base):
+    """Definición de turnos laborales."""
+    __tablename__ = "work_schedules"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, index=True, nullable=True)
+    name = Column(String, nullable=False) # Ej: "Diurno Lunes-Viernes"
+    
+    # Horas (Formato 24h)
+    monday_start = Column(Time, nullable=True)
+    monday_end = Column(Time, nullable=True)
+    tuesday_start = Column(Time, nullable=True)
+    tuesday_end = Column(Time, nullable=True)
+    wednesday_start = Column(Time, nullable=True)
+    wednesday_end = Column(Time, nullable=True)
+    thursday_start = Column(Time, nullable=True)
+    thursday_end = Column(Time, nullable=True)
+    friday_start = Column(Time, nullable=True)
+    friday_end = Column(Time, nullable=True)
+    saturday_start = Column(Time, nullable=True)
+    saturday_end = Column(Time, nullable=True)
+    sunday_start = Column(Time, nullable=True)
+    sunday_end = Column(Time, nullable=True)
+    
+    is_active = Column(Boolean, default=True)
+
+class IncomeCalculationType(str, enum.Enum):
+    FIXED = "FIXED"                     # Monto fijo (Ej: Bono Transporte $20)
+    PERCENTAGE_OF_SALARY = "SALARY_PCT" # % del Sueldo Base (Ej: Antiguedad)
+    PERCENTAGE_OF_SALES = "SALES_PCT"   # % de Ventas del Periodo (Comisiones)
+    
+class IncomeConcept(Base):
+    """
+    Catálogo de Conceptos de Ingreso (Ej: Bono Producción, Comisión Ventas).
+    Define si el concepto es 'Salarial' (afecta IVSS/Prestaciones) o no.
+    """
+    __tablename__ = "income_concepts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, index=True, nullable=False)
+    
+    name = Column(String, nullable=False)   # Ej: "Bono de Productividad"
+    is_active = Column(Boolean, default=True)
+    
+    # Define si este ingreso paga impuestos o no
+    # True = Se suma al salario base para IVSS/FAOV
+    # False = No paga impuestos
+    is_salary = Column(Boolean, default=False)
+    
+    # Tipo de cálculo: FIXED (Monto fijo) o PERCENTAGE (% del sueldo base)
+    calculation_type = Column(String, default="FIXED")
+    
+class EmployeeRecurringIncome(Base):
+    """
+    Asigna un concepto a un empleado específico.
+    Ej: Juan tiene un 'Bono de Producción' de $50.
+    """
+    __tablename__ = "employee_recurring_incomes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
+    concept_id = Column(Integer, ForeignKey("income_concepts.id"), nullable=False)
+    
+    amount = Column(Numeric(10, 2), default=0) # Valor (Dinero o porcentaje)
+    
+    employee = relationship("Employee", backref="recurring_incomes")
+    concept = relationship("IncomeConcept")
     
 class PayrollGlobalSettings(Base):
     """
@@ -195,8 +200,8 @@ class PayrollGlobalSettings(Base):
     
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    
 class SupervisorNote(Base):
+    """Bitácora de anotaciones de supervisores."""
     __tablename__ = "supervisor_notes"
     
     id = Column(Integer, primary_key=True, index=True)
