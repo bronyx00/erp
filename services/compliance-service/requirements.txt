@@ -6,3 +6,5 @@ pydantic-settings>=2.2.0
 pika>=1.3.2
 # Para peticiones HTTP a las APIs fiscales externas
 requests>=2.31.0
+aio_pika
+tenacity

@@ -7,9 +7,6 @@ from contextlib import asynccontextmanager
 from typing import Optional
 from datetime import date
 import logging
-import os
-import pika
-import json
 
 # Scheduler
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -18,6 +15,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from . import crud, schemas, database, models
 from .services import exchange
 from .database import engine, SyncSessionLocal
+from .events import publish_event
 
 # Imports Comunes
 from erp_common.security import oauth2_scheme, RequirePermission, Permissions, UserPayload
@@ -74,25 +72,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# --- CONFIGURACIÓN RABBITMQ --- 
-def publish_event(routing_key: str, data: dict):
-    """Publica un evento en el bus de mensajes para notificar a otros servicios."""
-    try:
-        url = os.getenv("RABBITMQ_URL", 'amqp://guest:guest@rabbitmq:5672/%2F')
-        connection = pika.BlockingConnection(pika.URLParameters(url))
-        channel = connection.channel()
-        channel.exchange_declare(exchange='erp_events', exchange_type='topic', durable=True)
-        channel.basic_publish(
-            exchange='erp_events',
-            routing_key=routing_key,
-            body=json.dumps(data),
-            properties=pika.BasicProperties(delivery_mode=2)
-        )
-        connection.close()
-        logger.info(f"📢 Evento publicado: {routing_key}")
-    except Exception as e:
-        logger.error(f"❌ Error publicando evento {routing_key}: {e}")
 
 # --- ENDPOINTS ---
 @app.get("/invoices", response_model=PaginatedResponse[InvoiceSummary])

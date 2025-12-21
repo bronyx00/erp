@@ -10,7 +10,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, date
 from decimal import Decimal
 from . import models, schemas
-from .main import publish_event
+from .events import publish_event
 from jose import jwt
 from erp_common.security import SECRET_KEY, ALGORITHM
 from .models import FinanceSettings
