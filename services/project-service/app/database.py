@@ -1,13 +1,10 @@
 import os
 from erp_common.database import DatabaseManager, Base
 
-# URL de conexión 
-DATABASE_URL = os.getenv("PROJECT_DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Inicialización de Manager común
 db_manager = DatabaseManager(DATABASE_URL)
 
-# Exporta las variables que la app espera
 engine = db_manager.engine
 get_db = db_manager.get_db
 Base = Base

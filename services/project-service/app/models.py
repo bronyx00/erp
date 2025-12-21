@@ -4,6 +4,9 @@ from sqlalchemy.sql import func
 from .database import Base
 
 class Project(Base):
+    """
+    Representa un Proyecto macro de la empresa.
+    """
     __tablename__ = "projects"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -29,6 +32,9 @@ class Project(Base):
     tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
 
 class Task(Base):
+    """
+    Tarea individual perteneciente a un proyecto.
+    """
     __tablename__ = "tasks"
     
     id = Column(Integer, primary_key=True, index=True)
