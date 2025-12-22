@@ -46,7 +46,7 @@ export const routes: Routes = [
       // Requiere permisos de gestión o caja
       {
         path: 'pos',
-        loadComponent: () => import('./features/pos/pos').then(m => m.PosComponent),
+        loadComponent: () => import('./features/pos/pos-terminal/pos-terminal.component').then(m => m.PosTerminalComponent),
         canActivate: [roleGuard(['OWNER', 'ADMIN', 'CASHIER'])],
         title: 'ERP - Punto de Venta',
       },
