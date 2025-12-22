@@ -1,0 +1,29 @@
+// Estilizando el scrollbar para que se vea nativo y elegante en la tabla
+:host {
+  display: block;
+  height: 100%;
+}
+
+// Personalización sutil del scrollbar (Chrome/Safari/Edge)
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1; // slate-300
+  border-radius: 3px;
+
+  &:hover {
+    background-color: #94a3b8; // slate-400
+  }
+}
+
+// Fix para asegurar que el drawer (slide-over) siempre esté encima
+.fixed.z-50 {
+  z-index: 50;
+}

@@ -1,12 +1,12 @@
 import { Injectable, inject } from "@angular/core";
 import { HttpClient, HttpParams } from "@angular/common/http";
 import { Observable } from "rxjs";
-
-const API_URL = 'http://localhost:80/api';
+import { environment } from "../../../environments/environment";
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
     private http = inject(HttpClient);
+    private baseUrl = environment.apiUrl;
 
     get<T>(path: string, params: Record<string, any> = {}): Observable<T> {
         let httpParams = new HttpParams();
@@ -15,6 +15,10 @@ export class ApiService {
                 httpParams = httpParams.set(key, params[key]);
             }
         });
-        return this.http.get<T>(`${API_URL}/${path}`, { params: httpParams });
+        return this.http.get<T>(`${this.baseUrl}/${path}`, { params: httpParams });
+    }
+
+    post<T>(path: string, body: any): Observable<T> {
+        return this.http.post<T>(`${this.baseUrl}/${path}`, body)
     }
 }

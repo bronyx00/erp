@@ -1,0 +1,80 @@
+<form [formGroup]="form" (ngSubmit)="onSubmit()" class="flex flex-col h-full">
+  
+  <div class="flex-1 overflow-y-auto px-1 py-2 space-y-6">
+    
+    <div>
+      <label for="name" class="block text-sm font-medium text-slate-700 mb-1">Nombre o Razón Social <span class="text-red-500">*</span></label>
+      <input type="text" id="name" formControlName="name" 
+             class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5 transition-colors"
+             [class.border-red-300]="form.get('name')?.invalid && form.get('name')?.touched"
+             placeholder="Ej. Inversiones Globales C.A.">
+      
+      @if (form.get('name')?.invalid && form.get('name')?.touched) {
+        <p class="mt-1 text-xs text-red-500">El nombre es requerido (min 3 caracteres).</p>
+      }
+    </div>
+
+    <div>
+      <label for="taxId" class="block text-sm font-medium text-slate-700 mb-1">Documento Fiscal (RIF/NIT) <span class="text-red-500">*</span></label>
+      <div class="relative">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <i class="fas fa-id-card text-slate-400"></i>
+        </div>
+        <input type="text" id="taxId" formControlName="taxId" 
+               class="pl-10 w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5 uppercase"
+               placeholder="J-12345678-9">
+      </div>
+      @if (form.get('taxId')?.hasError('required') && form.get('taxId')?.touched) {
+        <p class="mt-1 text-xs text-red-500">Este campo es obligatorio para facturación.</p>
+      }
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <div>
+        <label for="email" class="block text-sm font-medium text-slate-700 mb-1">Correo Electrónico</label>
+        <input type="email" id="email" formControlName="email" 
+               class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5"
+               placeholder="contacto@empresa.com">
+        @if (form.get('email')?.invalid && form.get('email')?.touched) {
+          <p class="mt-1 text-xs text-red-500">Formato de correo inválido.</p>
+        }
+      </div>
+
+      <div>
+        <label for="phone" class="block text-sm font-medium text-slate-700 mb-1">Teléfono</label>
+        <input type="tel" id="phone" formControlName="phone" 
+               class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5"
+               placeholder="+58 412 1234567">
+      </div>
+    </div>
+
+    <div>
+      <label for="address" class="block text-sm font-medium text-slate-700 mb-1">Dirección Fiscal</label>
+      <textarea id="address" formControlName="address" rows="3" 
+                class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5 resize-none"
+                placeholder="Av. Principal, Edif. Torre..."></textarea>
+    </div>
+
+  </div>
+
+  <div class="pt-4 border-t border-slate-100 flex justify-end gap-3 mt-4">
+    <button type="button" (click)="onCancel.emit()" 
+            class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all">
+      Cancelar
+    </button>
+    
+    <button type="submit" 
+            [disabled]="form.invalid || isLoading()"
+            class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center">
+      @if (isLoading()) {
+        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Guardando...
+      } @else {
+        {{ isEditMode() ? 'Actualizar' : 'Crear Cliente' }}
+      }
+    </button>
+  </div>
+</form>

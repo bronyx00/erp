@@ -39,7 +39,7 @@ export const routes: Routes = [
       },
       {
         path: 'crm',
-        loadComponent: () => import('./features/crm/client-management/client-management').then(m => m.ClientManagementComponent),
+        loadComponent: () => import('./features/crm/client-list/client-list.component').then(m => m.ClientListComponent),
         canActivate: [roleGuard(['OWNER', 'ADMIN', 'SELLER'])],
       },
       // --- PUNTO DE VENTA (POS) --- 

@@ -1,0 +1,227 @@
+<div class="flex flex-col h-full bg-slate-50">
+  
+  <header class="flex items-center justify-between px-8 py-6 bg-white border-b border-slate-200 sticky top-0 z-20">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900 tracking-tight">Clientes</h1>
+      <p class="text-sm text-slate-500 mt-1">Directorio comercial y facturación.</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <button (click)="exportData()"
+              class="group px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-slate-400 focus:ring-2 focus:ring-offset-1 focus:ring-slate-200 transition-all shadow-sm flex items-center">
+        <i class="fas fa-download mr-2 text-slate-400 group-hover:text-slate-600 transition-colors"></i>
+        Exportar
+      </button>
+      
+      <button (click)="openCreate()" 
+              class="px-4 py-2 text-sm font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 focus:ring-4 focus:ring-slate-200 transition-all shadow-sm flex items-center transform active:scale-95 duration-75">
+        <i class="fas fa-plus mr-2"></i> Nuevo Cliente
+      </button>
+    </div>
+  </header>
+
+  <div class="px-8 py-4 flex items-center justify-between z-10">
+    <div class="relative w-80 group">
+      <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <i class="fas fa-search text-slate-400 group-focus-within:text-indigo-500 transition-colors"></i>
+      </div>
+      <input 
+        [formControl]="searchControl"
+        type="text" 
+        class="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg leading-5 bg-white placeholder-slate-400 focus:outline-none focus:placeholder-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm transition-all shadow-sm" 
+        placeholder="Buscar cliente..." />
+    </div>
+    
+    <div class="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+      Total: <span class="text-slate-900">{{ meta().total }}</span>
+    </div>
+  </div>
+
+  <div class="flex-1 overflow-visible px-8 pb-8"> <div class="bg-white border border-slate-200 rounded-xl shadow-sm relative min-h-[400px]"> 
+      <table class="min-w-full divide-y divide-slate-100 table-fixed">
+        <thead class="bg-slate-50/50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-[35%]">Cliente</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-[20%]">ID Fiscal</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-[25%]">Contacto</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-[10%]">Estado</th>
+            <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-[10%]">Acciones</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 bg-white">
+          
+          @if (isLoading()) {
+             @for (item of [1,2,3,4,5]; track item) {
+              <tr class="animate-pulse">
+                <td class="px-6 py-4"><div class="h-4 bg-slate-100 rounded w-3/4"></div></td>
+                <td class="px-6 py-4"><div class="h-4 bg-slate-100 rounded w-1/2"></div></td>
+                <td class="px-6 py-4"><div class="h-4 bg-slate-100 rounded w-full"></div></td>
+                <td class="px-6 py-4"><div class="h-4 bg-slate-100 rounded w-12"></div></td>
+                <td class="px-6 py-4"></td>
+              </tr>
+            }
+          } @else {
+            @for (client of customers(); track client.id) {
+              <tr class="group hover:bg-slate-50/80 transition-colors duration-150">
+                
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex items-center">
+                    <div class="flex-shrink-0 h-10 w-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white">
+                      {{ client.avatarInitials }}
+                    </div>
+                    <div class="ml-4">
+                      <div class="text-sm font-semibold text-slate-900">{{ client.name }}</div>
+                      <div class="text-xs text-slate-500">{{ client.email || 'Sin correo' }}</div>
+                    </div>
+                  </div>
+                </td>
+                
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm text-slate-600 font-mono bg-slate-100 px-2 py-1 rounded w-fit border border-slate-200">
+                    {{ client.taxId || '---' }}
+                  </div>
+                </td>
+                
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm text-slate-500 flex flex-col gap-1">
+                    <span class="flex items-center"><i class="fas fa-phone text-slate-300 text-xs mr-2 w-4"></i> {{ client.phone || '-' }}</span>
+                    <span class="flex items-center truncate max-w-[200px]" title="{{client.address}}">
+                      <i class="fas fa-map-marker-alt text-slate-300 text-xs mr-2 w-4"></i> 
+                      {{ client.address || '-' }}
+                    </span>
+                  </div>
+                </td>
+                
+                <td class="px-6 py-4 whitespace-nowrap">
+                  @if (client.isActive) {
+                    <span class="px-2.5 py-0.5 inline-flex text-xs font-medium rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                      Activo
+                    </span>
+                  } @else {
+                    <span class="px-2.5 py-0.5 inline-flex text-xs font-medium rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                      Inactivo
+                    </span>
+                  }
+                </td>
+
+                <td class="px-6 py-4 whitespace-nowrap text-right relative">
+                  
+                  <button (click)="toggleMenu($event, client.id)" 
+                          class="action-trigger text-slate-400 hover:text-indigo-600 p-2 rounded-full hover:bg-indigo-50 transition-colors focus:outline-none focus:bg-indigo-50">
+                    <i class="fas fa-ellipsis-v"></i>
+                  </button>
+
+                  @if (activeMenuId() === client.id) {
+                    <div class="absolute right-8 top-8 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 transform origin-top-right transition-all animate-in fade-in zoom-in-95 duration-100 overflow-hidden ring-1 ring-black ring-opacity-5">
+                      
+                      <div class="p-1">
+                        <div class="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-50 mb-1">
+                          Contactar
+                        </div>
+                        
+                        <button (click)="contactWhatsApp(client.phone)" 
+                                [disabled]="!client.phone"
+                                class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-md transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                          <i class="fab fa-whatsapp w-5 text-emerald-500 text-lg"></i>
+                          WhatsApp
+                        </button>
+                        
+                        <button (click)="contactEmail(client.email)"
+                                [disabled]="!client.email"
+                                class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                          <i class="far fa-envelope w-5 text-blue-500"></i>
+                          Email
+                        </button>
+                      </div>
+
+                      <div class="border-t border-slate-100 p-1 bg-slate-50/50">
+                        <button (click)="openEdit(client)" 
+                                class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-white hover:shadow-sm rounded-md transition-all flex items-center">
+                          <i class="fas fa-pen w-5 text-slate-400"></i>
+                          Editar
+                        </button>
+                      </div>
+                    </div>
+                  }
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+      
+      @if (!isLoading() && customers().length === 0) {
+        <div class="p-12 text-center">
+          <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 mb-4">
+            <i class="fas fa-users text-slate-300 text-2xl"></i>
+          </div>
+          <h3 class="text-lg font-medium text-slate-900">No hay clientes encontrados</h3>
+          <p class="mt-1 text-slate-500">Intenta ajustar tu búsqueda o crea un nuevo cliente.</p>
+        </div>
+      }
+    </div>
+  </div>
+
+  <footer class="bg-white border-t border-slate-200 px-8 py-4 flex items-center justify-between" *ngIf="meta().total > 0">
+    <div class="text-sm text-slate-500">
+      Página <span class="font-medium text-slate-900">{{ meta().page }}</span> de <span class="font-medium text-slate-900">{{ meta().totalPages }}</span>
+    </div>
+    <div class="flex gap-2">
+      <button (click)="onPageChange(meta().page - 1)" 
+              [disabled]="meta().page === 1"
+              class="px-3 py-1.5 border border-slate-200 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+        Anterior
+      </button>
+      <button (click)="onPageChange(meta().page + 1)" 
+              [disabled]="meta().page === meta().totalPages"
+              class="px-3 py-1.5 border border-slate-200 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+        Siguiente
+      </button>
+    </div>
+  </footer>
+
+  <div class="fixed inset-0 overflow-hidden z-[60]" 
+       [class.invisible]="!isDrawerOpen()" 
+       [class.visible]="isDrawerOpen()">
+       
+    <div class="absolute inset-0 overflow-hidden">
+      <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300" 
+           [class.opacity-0]="!isDrawerOpen()" 
+           [class.opacity-100]="isDrawerOpen()"
+           (click)="closeDrawer()"></div>
+      
+      <div class="fixed inset-y-0 right-0 pl-10 max-w-full flex pointer-events-auto">
+        <div class="w-screen max-w-md transform transition-transform ease-in-out duration-500 bg-white shadow-2xl flex flex-col h-full"
+             [class.translate-x-full]="!isDrawerOpen()"
+             [class.translate-x-0]="isDrawerOpen()">
+             
+           <div class="px-6 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+             <h2 class="text-lg font-semibold text-slate-900">
+               {{ selectedCustomer() ? 'Editar Cliente' : 'Nuevo Cliente' }}
+             </h2>
+             <button (click)="closeDrawer()" class="text-slate-400 hover:text-slate-600 transition-colors">
+               <i class="fas fa-times text-xl"></i>
+             </button>
+           </div>
+           
+           <div class="flex-1 p-6 overflow-y-auto">
+              <div class="flex-1 p-6 overflow-y-auto">
+                <app-client-form 
+                  [customer]="selectedCustomer()"
+                  (onSave)="onFormSaved()"
+                  (onCancel)="closeDrawer()">
+                </app-client-form>
+              </div>
+           </div>
+
+           <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+             <button (click)="closeDrawer()" type="button" class="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors">Cancelar</button>
+             <button type="button" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm shadow-indigo-200">
+               Guardar Cambios
+             </button>
+           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

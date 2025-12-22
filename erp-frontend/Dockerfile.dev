@@ -1,0 +1,18 @@
+# Usamos la misma versión de Node que en prod para consistencia
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copiamos primero los package para aprovechar el caché de Docker
+COPY package.json package-lock.json ./
+
+# Instalamos dependencias (incluyendo devDependencies como Angular CLI)
+RUN npm ci --legacy-peer-deps
+
+# Copiamos el resto del código
+COPY . .
+
+# Exponemos el puerto de desarrollo de Angular
+EXPOSE 4200
+
+CMD ["npx", "ng", "serve", "--host", "0.0.0.0", "--poll", "2000"]

@@ -65,7 +65,7 @@ class Tenant(Base):
     tax_rate = Column(Integer, default=16)
     
     plan = Column(String, default="BASIC")              # Plan contratado por la empresa
-    is_activce = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True)
     
     users = relationship("User", back_populates="tenant")
 
@@ -76,6 +76,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)

@@ -32,6 +32,7 @@ class UserCreate(UserBase):
     Datos para registrar al DUEÑO inicial.
     Incluye el nombre de la empresa que está fundando.
     """
+    full_name: str              # Nombre completo del dueño
     password: str
     # Datos de la empresa
     company_name: str           # Nombre Comercial
