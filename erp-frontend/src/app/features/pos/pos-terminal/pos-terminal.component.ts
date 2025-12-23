@@ -1,16 +1,16 @@
 import { Component, OnInit, computed, inject, signal, HostListener, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
-import { debounceTime, distinctUntilChanged, switchMap, of, catchError, filter } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, of, catchError } from 'rxjs';
 
 import { CrmService } from '../../crm/services/crm.service';
 import { InventoryService } from '../../inventory/services/inventory.service';
-import { FinanceService, InvoiceCreate } from '../../../core/services/finance';
+import { FinanceService, InvoiceCreate, ExchangeRate, PaymentMethod } from '../../../core/services/finance';
 
 import { Customer } from '../../crm/models/customer.model';
 import { Product } from '../../inventory/models/product.model';
 
-import { PaymentModalComponent, PaymentMethod } from '../payment-modal/payment-modal.component';
+import { PaymentModalComponent } from '../payment-modal/payment-modal.component';
 import { ClientFormComponent } from '../../crm/client-form/client-form.component';
 
 import { InvoiceCreatePayload } from '../models/invoice-payload.model';
@@ -32,37 +32,45 @@ export class PosTerminalComponent implements OnInit {
   private inventoryService = inject(InventoryService);
   private financeService = inject(FinanceService);
 
-  // --- STATE ---
+  // --- UI Referencias ---
+  @ViewChild('searchInput') searchInput!: ElementRef;
+  @ViewChild('clientSearchInput') clientSearchInput!: ElementRef;
+  @ViewChild('quantityInput') quantityInput!: ElementRef;
+
+  // --- ESTADOS ---
   products = signal<Product[]>([]);
   categories = signal<string[]>([]);
   selectedCategory = signal('Todas');
-  pendingProduct = signal<Product | null>(null); // Producto esperando cantidad
-  isQuantityModalOpen = signal(false);
-  quantityControl = new FormControl(1, [Validators.required, Validators.min(0.001)]); // Control para el input decimal
-  customerSelectedIndex = signal(0);
-  
+
   cart = signal<CartItem[]>([]);
   selectedCustomer = signal<Customer | null>(null);
-  
+
+  // --- ESTADOS DE FINANCE ---
+  exchangeRate = signal<number>(0); // Tasa actual
+  exchangeSource = signal<string>('---');
+
   // UI Flags
   isPaymentModalOpen = signal(false);
   isCustomerDrawerOpen = signal(false);
   isCreateClientMode = signal(false); 
-  
-  // Search
+  isQuantityModalOpen = signal(false);
+
+  // Búsquedas y Formularios
   searchControl = new FormControl('');
   customerSearchControl = new FormControl('');
   customerList = signal<Customer[]>([]);
-  customerSearchTerm = signal(''); // Para pasar al formulario de creación
+  customerSelectedIndex = signal(0);
+  customerSearchTerm = signal('');
 
-  @ViewChild('searchInput') searchInput!: ElementRef;
-  @ViewChild('clientSearchInput') clientSearchInput!: ElementRef;
-  @ViewChild('quantityInput') quantityInput!: ElementRef; // Referencia para foco automático
+  // Control de Cantidad (Pesables)
+  pendingProduct = signal<Product | null>(null); // Producto esperando cantidad
+  quantityControl = new FormControl(1, [Validators.required, Validators.min(0.001)]); // Control para el input decimal
 
   // --- COMPUTED ---
   subtotal = computed(() => this.cart().reduce((acc, item) => acc + (item.product.price * item.quantity), 0));
   tax = computed(() => this.subtotal() * 0.16);
   total = computed(() => this.subtotal() + this.tax());
+  totalVes = computed(() => this.total() * (this.exchangeRate() || 0));
 
   ngOnInit() {
     this.loadInitialData();
@@ -70,6 +78,19 @@ export class PosTerminalComponent implements OnInit {
   }
 
   loadInitialData() {
+    // 1. Cargar Tasa de Cambio
+    this.financeService.getCurrentRate().subscribe({
+      next: (data: ExchangeRate) => {
+        this.exchangeRate.set(data.rate);
+        this.exchangeSource.set(data.source);
+      },
+      error: () => {
+        console.warn('No se pudo cargar la tasa. Usando 0.');
+        this.exchangeRate.set(0);
+      }
+    });
+
+    // 2. Cargar Categorías y Productos
     this.inventoryService.getCategories().subscribe(cats => this.categories.set(cats));
     this.loadProducts();
   }
@@ -94,7 +115,7 @@ export class PosTerminalComponent implements OnInit {
 
     // Buscador Cliente
     this.customerSearchControl.valueChanges.pipe(
-      debounceTime(150), // Más rápido
+      debounceTime(150),
       distinctUntilChanged(),
       switchMap(term => {
         this.customerSearchTerm.set(term || '');
@@ -208,8 +229,6 @@ export class PosTerminalComponent implements OnInit {
 
       const qty = this.quantityControl.value || 1;
       this.processAddToCart(this.pendingProduct()!, qty);
-      
-      // Reset states
       this.isQuantityModalOpen.set(false);
       this.pendingProduct.set(null);
       // Devolver foco al buscador principal
@@ -232,11 +251,16 @@ export class PosTerminalComponent implements OnInit {
   openPaymentModal() {
     if (this.cart().length === 0) return;
     if (!this.selectedCustomer()) {
-      alert('Seleccione un cliente primero'); // O abrir drawer de cliente auto
-      this.isCustomerDrawerOpen.set(true);
+      // Auto-abrir drawer si no hay cliente al intentar pagar
+      this.openCustomerDrawer();
       return;
     }
     this.isPaymentModalOpen.set(true);
+  }
+
+  selectCustomer(c: Customer) {
+    this.selectedCustomer.set(c);
+    this.isCustomerDrawerOpen.set(false);
   }
 
   removeFromCart(productId: number) {
@@ -250,11 +274,10 @@ export class PosTerminalComponent implements OnInit {
       return;
     }
 
-    // Payload exacto para tu Backend
-    const payload: InvoiceCreatePayload = {
-        customer_tax_id: this.selectedCustomer()!.taxId,
-        salesperson_id: 0, // Por ahora 0 o tomar del AuthService
-        currency: "USD",
+    const invoicePayload: InvoiceCreate = {
+        customer_tax_id: this.selectedCustomer()!.taxId || 'V-00000000',
+        salesperson_id: 1, // TODO: Obtener del AuthService user.id
+        currency: 'USD',
         items: this.cart().map(item => ({
             product_id: item.product.id,
             quantity: item.quantity
@@ -262,20 +285,27 @@ export class PosTerminalComponent implements OnInit {
         payment: {
             amount: event.amount,
             payment_method: event.method,
-            reference: "POS-" + Date.now().toString().slice(-6), // Generamos ref temporal
-            notes: "Venta rápida POS"
+            reference: `POS-${Date.now().toString().slice(-4)}`,
+            notes: 'Venta POS Terminal'
         }
     };
 
-    console.log('✅ JSON LISTO PARA BACKEND:', JSON.stringify(payload, null, 2));
-    
-    // Simulación de éxito
-    this.isPaymentModalOpen.set(false);
-    this.cart.set([]);
-    this.selectedCustomer.set(null);
-    this.customerSearchControl.setValue('');
-    // Focus back al inicio para siguiente venta
-    this.searchInput.nativeElement.focus();
+    this.financeService.createInvoice(invoicePayload).subscribe({
+        next: (invoice) => {
+            console.log('✅ Factura Creada:', invoice);
+            alert(`Factura #${invoice.invoice_number} Generada!`);
+            
+            // Limpieza
+            this.isPaymentModalOpen.set(false);
+            this.cart.set([]);
+            this.selectedCustomer.set(null);
+            this.searchInput.nativeElement.focus();
+        },
+        error: (err) => {
+            console.error('❌ Error facturando:', err);
+            alert('Error al crear factura. Revise consola.');
+        }
+    });
   }
 
   // --- CLIENT MANAGEMENT ---
@@ -289,11 +319,6 @@ export class PosTerminalComponent implements OnInit {
     this.isCreateClientMode.set(false);
     this.isCustomerDrawerOpen.set(false);
     this.customerSearchControl.setValue('');
-  }
-
-  selectCustomer(c: Customer) {
-    this.selectedCustomer.set(c);
-    this.isCustomerDrawerOpen.set(false);
   }
 
   // --- GLOBAL HOTKEYS ---

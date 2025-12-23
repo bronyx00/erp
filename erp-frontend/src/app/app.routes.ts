@@ -19,24 +19,6 @@ export const routes: Routes = [
         loadComponent: () => import('./features/settings/settings').then(m => m.Settings),
         canActivate: [roleGuard(['OWNER'])]
       },
-      { 
-        path: 'dashboard', 
-        loadComponent: () => import('./features/dashboard/dashboard').then(m => m.DashboardComponent),
-        canActivate: [roleGuard(['OWNER', 'ADMIN', 'MANAGER'])],
-        title: 'ERP - Dashboard',
-      },
-      // --- RECURSOS HUMANOS (HHRR) ---
-      // Requiere permisos de gestión y hhrr
-      {
-        path: 'hhrr',
-        loadComponent: () => import('./features/employees/employees-detail/employee-detail').then(m => m.EmployeeDetailComponent),
-        canActivate: [roleGuard(['OWNER', 'HHRR'])]
-      },
-      {
-        path: 'hhrr/employees',
-        loadComponent: () => import('./features/employees/employees').then(m => m.EmployeesComponent),
-        canActivate: [roleGuard(['OWNER', 'ADMIN', 'HHRR'])]
-      },
       {
         path: 'crm',
         loadComponent: () => import('./features/crm/client-list/client-list.component').then(m => m.ClientListComponent),
@@ -59,31 +41,6 @@ export const routes: Routes = [
       },
       // --- CONTABILIDAD ---
       // Requiere permisos de gestión o contabilidad
-      {
-        path: 'accounting/expenses',
-        loadComponent: () => import('./features/expenses/expense-dashboard/expense-dashboard').then(m => m.ExpenseDashboardComponent),
-        canActivate: [roleGuard(['OWNER', 'COUNTER'])],
-        title: 'ERP - Control de Gastos',
-      },
-      {
-        path: 'accounting/books',
-        loadComponent: () => import('./features/accounting/accounting-books/accounting-books').then(m => m.AccountingBooksComponent),
-        canActivate: [roleGuard(['OWNER', 'COUNTER'])]
-      },
-      {
-        path: 'accounting',
-        loadComponent: () => import('./features/accounting/accounting-service').then(m => m.AccountingServiceComponent),
-        canActivate: [roleGuard(['OWNER', 'ADMIN', 'MANAGER', 'COUNTER'])],
-        title: 'ERP - Contabilidad y Finanzas',
-      },
-      // --- REPORTES ---
-      // Requiere permisos de supervición o caja
-      {
-        path: 'reports/daily-sales',
-        loadComponent: () => import('./features/reports/sales-report/sales-report').then(m => m.DailySalesReportComponent),
-        canActivate: [roleGuard(['OWNER', 'ADMIN', 'MANAGER', 'CASHIER'])],
-        title: 'ERP - Cierre de Caja',
-      },
     ]
   },
   { path: '**', redirectTo: 'login' }

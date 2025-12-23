@@ -61,7 +61,6 @@ class Invoice(Base):
     status = Column(String, default="ISSUED")                       # ISSUED, PAID, VOID
     is_synced_compliance = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    issue_date = Column(Date, nullable=False)
     
     # --- AUDITORIA ---
     created_by_role = Column(String, nullable=True)                 # Rol al momento de crear

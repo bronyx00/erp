@@ -1,8 +1,9 @@
 import { Component, ElementRef, EventEmitter, Input, Output, QueryList, ViewChildren, HostListener, signal, effect } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import type { PaymentMethod } from '../../../core/services/finance';
 
-export type PaymentMethod = 'MOBILE_PAYMENT' | 'BIO_PAYMENT' | 'DEBIT_CARD' | 'TRANSFER' | 'CASH' | 'OTHER';
+
 
 interface PaymentOption {
   id: PaymentMethod;

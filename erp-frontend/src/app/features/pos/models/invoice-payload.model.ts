@@ -1,4 +1,4 @@
-import { PaymentMethod } from "../payment-modal/payment-modal.component";
+import type { PaymentMethod } from "../../../core/services/finance";
 
 export interface InvoiceCreatePayload {
   customer_tax_id: string | null;  // "V-123456" o "GENERICO"

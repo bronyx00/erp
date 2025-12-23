@@ -31,7 +31,7 @@ def get_user_from_token(token: str):
     """Extrae info básica del token sin validar contra DB (rápido)."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("sub"), payload.get("role")
+        return payload.get("user_id"), payload.get("role")
     except Exception as e:
         logger.error(f"Error decodificando token: {e}")
         return None, None
@@ -60,20 +60,24 @@ async def get_product_details(product_id: int, token: str):
             logger.error(f"Error contactando Inventory Service: {e}")
             return None
         
-async def get_customer_details(customer_id: int, token: str):
-    """Consulta el servicio CRM para obtener datos fiscales del cliente."""
+async def get_customer_details(search_term: str, token: str):
+    """
+    Busca un cliente en CRM por RIF, Email o Nombre.
+    Retorna el primer resultado exacto o el más probable.
+    """
+    if not search_term: return None
+    
     headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient() as client:
         try:
-            resp = await client.get(f"{CRM_URL}/api/crm/customers?search={customer_id}", headers=headers)
+            resp = await client.get(f"{CRM_URL}/api/crm/customers?search={search_term}&limit=1", headers=headers)
             if resp.status_code == 200:
-                # Buscamos el exacto en la lista paginada
                 data = resp.json().get("data", [])
-                for c in data:
-                    if c["id"] == customer_id: return c
+                if data:
+                    return data[0] # Retornamos el primer cliente encontrado
             return None
         except Exception as e:
-            logger.error(f"Error contactando CRM Service: {e}")
+            logger.error(f"Error buscando cliente en CRM: {e}")
             return None
 
 async def get_tenant_data(token: str):
@@ -117,16 +121,12 @@ async def get_customer_by_tax_id(tax_id: str, token: str):
             if resp.status_code == 200:
                 body = resp.json()
                 
-                # --- CORRECCIÓN FINAL ---
-                # Detectar si viene como 'data' (tu formato actual) o 'items' (formato estándar) o lista
                 if isinstance(body, list):
                     customers = body
                 elif isinstance(body, dict):
-                    # Aquí estaba el error: buscabas "items", pero es "data"
                     customers = body.get("data", body.get("items", []))
                 else:
                     customers = []
-                # ------------------------
 
                 for c in customers:
                     c_tax = c.get('tax_id')
@@ -321,14 +321,14 @@ async def create_invoice(
     # Lanza las peticiones a microservicios simultáneamente
     tasks = [
         get_tenant_data(token),
-        get_customer_details(invoice_data.customer_id, token) if invoice_data.customer_id else asyncio.sleep(0),
+        get_customer_details(invoice_data.customer_tax_id, token) if invoice_data.customer_tax_id else asyncio.sleep(0),
         *[get_product_details(item.product_id, token) for item in invoice_data.items]
     ]
     
     results = await asyncio.gather(*tasks)
     
     tenant_data = results[0]
-    customer_data = results[1] if invoice_data.customer_id else {}
+    customer_data = results[1] if invoice_data.customer_tax_id else {}
     product_list = results[2:]
     
     # Mapa para acceso rápido a productos por ID
@@ -348,23 +348,34 @@ async def create_invoice(
     exchange_rate = rate_obj.rate if rate_obj else Decimal(1)
     
     # Obtener datos del usuario
-    user_email, user_role = get_user_from_token(token)
+    user_sub, user_role = get_user_from_token(token)
     
     # 3. Procesar Items y Totales
     total_base = Decimal(0)
     db_items = []
+    db_event_items = []
     
     for item in invoice_data.items:
         product = product_map.get(item.product_id)
         if not product:
             raise ValueError(f"Producto ID {item.product_id} no encontrado en Inventario.")
         
+        try:
+            stock_available = Decimal(str(product.get('stock', 0)))
+        except:
+            stock_available = Decimal(0)
+            
+        
         # Validación de Stock
-        if product.get('stock', 0) < item.quantity:
+        if stock_available < item.quantity:
             raise ValueError(f"Stock insuficiente para '{product['name']}'. Disponibles: {product['stock']}")
         
         # Precio unitario
-        unit_price = item.unit_price
+        try:
+            unit_price = Decimal(str(product.get('price', 0)))
+        except:
+            unit_price = Decimal(0)
+        
         line_total = unit_price * item.quantity
         total_base += line_total
         
@@ -375,6 +386,11 @@ async def create_invoice(
             unit_price=unit_price,
             total_price=line_total
         ))
+        
+        db_event_items.append({
+            "product_id": item.product_id,
+            "quantity": float(item.quantity)
+        })
         
     # Cálculos Finales
     tax_amount = round_money(total_base * (tax_rate / 100))
@@ -403,7 +419,8 @@ async def create_invoice(
             currency=invoice_data.currency, # Asumimos pago en la misma moneda base
             payment_method=invoice_data.payment.payment_method,
             reference=invoice_data.payment.reference,
-            payment_date=date.today()
+            notes=invoice_data.payment.notes,
+            created_at=date.today()
         ))
         
     # Si no envió payment, se queda como "ISSUED" (Crédito puro 100%)
@@ -411,13 +428,13 @@ async def create_invoice(
     # 5. Generar Consecutivo
     last_inv_q = select(models.Invoice).filter(models.Invoice.tenant_id == tenant_id).order_by(desc(models.Invoice.invoice_number)).limit(1)
     last_inv = (await db.execute(last_inv_q)).scalar_one_or_none()
-    new_number = (last_inv.Invoice_number + 1) if last_inv else 1
+    new_number = (last_inv.invoice_number + 1) if last_inv else 1
     
     # 6. Crear Factura
     new_invoice = models.Invoice(
         tenant_id=tenant_id,
         salesperson_id=invoice_data.salesperson_id,
-        created_by_user_id=user_email,
+        created_by_user_id=user_sub,
         created_by_role=user_role,
         
         # Datos Fiscales
@@ -431,12 +448,11 @@ async def create_invoice(
         company_address=tenant_data.get('address'),
         
         # Snapshot Cliente
-        customer_id=invoice_data.customer_id,
-        customer_name=invoice_data.customer_name or customer_data.get('name') or "CLIENTE GENÉRICO",
-        customer_rif=invoice_data.customer_rif or customer_data.get('tax_id'),
-        customer_email=invoice_data.customer_email or customer_data.get('email'),
-        customer_address=invoice_data.customer_address or customer_data.get('address'),
-        customer_phone=invoice_data.customer_phone or customer_data.get('phone'),
+        customer_name=customer_data.get('name') or "CLIENTE GENÉRICO",
+        customer_rif=customer_data.get('tax_id'),
+        customer_email=customer_data.get('email'),
+        customer_address=customer_data.get('address'),
+        customer_phone=customer_data.get('phone'),
         
         # Totales
         currency=invoice_data.currency,
@@ -445,8 +461,6 @@ async def create_invoice(
         tax_amount_usd=tax_amount,
         total_usd=total_usd,
         amount_ves=total_ves,
-        
-        notes=invoice_data.notes,
         
         # Relaciones
         items=db_items,
@@ -467,7 +481,7 @@ async def create_invoice(
         "currency": new_invoice.currency,
         "status": new_invoice.status,
         "date": str(new_invoice.created_at),
-        "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in new_invoice.items]
+        "items": db_event_items
     }
     publish_event("invoice.created", event_data)
     
@@ -476,7 +490,7 @@ async def create_invoice(
         paid_event = {
             "invoice_id": new_invoice.id,
             "tenant_id": tenant_id,
-            "total_amount": float(db_payments[0].total_usd),
+            "total_amount": float(db_payments[0].amount),
             "payment_method": db_payments[0].payment_method,
             "paid_at": str(datetime.utcnow()),
             "items": event_data["items"], # Reenviamos items para que Inventory sepa qué descontar

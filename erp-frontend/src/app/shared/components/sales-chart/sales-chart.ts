@@ -2,7 +2,6 @@ import { Component, Input, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, ChartData, ChartType } from 'chart.js';
-import { SalesDataPoint } from '../../../core/services/finance';
 
 @Component({
     selector: 'app-sales-chart',
@@ -21,7 +20,7 @@ import { SalesDataPoint } from '../../../core/services/finance';
 })
 export class SalesChartComponent implements OnInit {
     // Propiedad de entrada para recibir los datos del Dashboard
-    @Input() salesData: SalesDataPoint[] = [];
+    // @Input() salesData: SalesDataPoint[] = [];
 
     // Configuración de Chart.js
     chartType: ChartType = 'line';
@@ -55,6 +54,7 @@ export class SalesChartComponent implements OnInit {
     }
 
     processData(): void {
+        /** 
         if (!this.salesData || this.salesData.length === 0) return;
 
         const labels = this.salesData.map(d => d.month);
@@ -76,6 +76,6 @@ export class SalesChartComponent implements OnInit {
                     tension: 0.3
                 }
             ]
-        });
+        });*/
     }
 }
