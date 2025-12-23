@@ -10,8 +10,10 @@ import { FinanceService, InvoiceCreate } from '../../../core/services/finance';
 import { Customer } from '../../crm/models/customer.model';
 import { Product } from '../../inventory/models/product.model';
 
-import { PaymentModalComponent, PaymentMethod } from '../components/payment-modal/payment-modal.component';
+import { PaymentModalComponent, PaymentMethod } from '../payment-modal/payment-modal.component';
 import { ClientFormComponent } from '../../crm/client-form/client-form.component';
+
+import { InvoiceCreatePayload } from '../models/invoice-payload.model';
 
 interface CartItem {
   product: Product;
@@ -37,6 +39,7 @@ export class PosTerminalComponent implements OnInit {
   pendingProduct = signal<Product | null>(null); // Producto esperando cantidad
   isQuantityModalOpen = signal(false);
   quantityControl = new FormControl(1, [Validators.required, Validators.min(0.001)]); // Control para el input decimal
+  customerSelectedIndex = signal(0);
   
   cart = signal<CartItem[]>([]);
   selectedCustomer = signal<Customer | null>(null);
@@ -53,6 +56,7 @@ export class PosTerminalComponent implements OnInit {
   customerSearchTerm = signal(''); // Para pasar al formulario de creación
 
   @ViewChild('searchInput') searchInput!: ElementRef;
+  @ViewChild('clientSearchInput') clientSearchInput!: ElementRef;
   @ViewChild('quantityInput') quantityInput!: ElementRef; // Referencia para foco automático
 
   // --- COMPUTED ---
@@ -85,26 +89,56 @@ export class PosTerminalComponent implements OnInit {
 
   setupSearch() {
     // Buscador Producto
-    this.searchControl.valueChanges.pipe(
-      debounceTime(300),
-      distinctUntilChanged()
-    ).subscribe(term => {
-      // Si presiona enter se maneja en onSearchEnter, aquí solo filtramos visualmente
-      this.loadProducts(term || '', this.selectedCategory());
-    });
+    this.searchControl.valueChanges.pipe(debounceTime(300), distinctUntilChanged())
+      .subscribe(term => this.loadProducts(term || '', this.selectedCategory()));
 
     // Buscador Cliente
     this.customerSearchControl.valueChanges.pipe(
-      debounceTime(300),
+      debounceTime(150), // Más rápido
       distinctUntilChanged(),
       switchMap(term => {
         this.customerSearchTerm.set(term || '');
-        if (!term || term.length < 3) return of({ data: [] });
+        this.customerSelectedIndex.set(0); // Reset selección al buscar
+        if (!term) return of({ data: [] });
         return this.crmService.getCustomers(1, 5, term).pipe(catchError(() => of({ data: [] })));
       })
     ).subscribe((res: any) => {
       this.customerList.set(res.data);
     });
+  }
+
+  // --- OPEN DRAWER CON FOCUS ---
+  openCustomerDrawer() {
+    this.isCustomerDrawerOpen.set(true);
+    // Hack para esperar que el HTML renderice el input antes de enfocar
+    setTimeout(() => {
+        if (this.clientSearchInput) {
+            this.clientSearchInput.nativeElement.focus();
+            this.clientSearchInput.nativeElement.select();
+        }
+    }, 100);
+  }
+
+  // --- NAVEGACIÓN TECLADO CLIENTES ---
+  handleClientSearchKeydown(event: KeyboardEvent) {
+    const list = this.customerList();
+    if (list.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        const next = (this.customerSelectedIndex() + 1) % list.length;
+        this.customerSelectedIndex.set(next);
+    } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        const prev = (this.customerSelectedIndex() - 1 + list.length) % list.length;
+        this.customerSelectedIndex.set(prev);
+    } else if (event.key === 'Enter') {
+        event.preventDefault();
+        const selected = list[this.customerSelectedIndex()];
+        if (selected) {
+            this.selectCustomer(selected);
+        }
+    }
   }
 
   // --- KEYWORD & SHORTCUTS ACTIONS ---
@@ -205,30 +239,43 @@ export class PosTerminalComponent implements OnInit {
     this.isPaymentModalOpen.set(true);
   }
 
+  removeFromCart(productId: number) {
+    this.cart.update(items => items.filter(i => i.product.id !== productId))
+  }
+
   handlePaymentConfirm(event: { method: PaymentMethod, amount: number }) {
-    // 1. Cerrar Modal
-    this.isPaymentModalOpen.set(false);
-    
-    // 2. Crear Factura
-    const payload: InvoiceCreate = {
-      customer_tax_id: this.selectedCustomer()!.taxId || 'GENERICO',
-      currency: 'USD',
-      items: this.cart().map(i => ({ product_id: i.product.id, quantity: i.quantity })),
-      payment: {
-        amount: event.amount,
-        payment_method: event.method,
-        notes: 'Venta POS rápida'
-      }
+    if (!this.selectedCustomer()) {
+      alert('Error: Debe asignar un cliente (F4)'); 
+      this.isPaymentModalOpen.set(false);
+      return;
+    }
+
+    // Payload exacto para tu Backend
+    const payload: InvoiceCreatePayload = {
+        customer_tax_id: this.selectedCustomer()!.taxId,
+        salesperson_id: 0, // Por ahora 0 o tomar del AuthService
+        currency: "USD",
+        items: this.cart().map(item => ({
+            product_id: item.product.id,
+            quantity: item.quantity
+        })),
+        payment: {
+            amount: event.amount,
+            payment_method: event.method,
+            reference: "POS-" + Date.now().toString().slice(-6), // Generamos ref temporal
+            notes: "Venta rápida POS"
+        }
     };
 
-    this.financeService.createInvoice(payload).subscribe({
-      next: (inv) => {
-        alert(`Factura #${inv.invoice_number} Generada!`);
-        this.cart.set([]);
-        this.selectedCustomer.set(null);
-      },
-      error: (err) => alert('Error al procesar venta')
-    });
+    console.log('✅ JSON LISTO PARA BACKEND:', JSON.stringify(payload, null, 2));
+    
+    // Simulación de éxito
+    this.isPaymentModalOpen.set(false);
+    this.cart.set([]);
+    this.selectedCustomer.set(null);
+    this.customerSearchControl.setValue('');
+    // Focus back al inicio para siguiente venta
+    this.searchInput.nativeElement.focus();
   }
 
   // --- CLIENT MANAGEMENT ---
@@ -252,9 +299,24 @@ export class PosTerminalComponent implements OnInit {
   // --- GLOBAL HOTKEYS ---
   @HostListener('window:keydown', ['$event'])
   handleKeys(event: KeyboardEvent) {
-    if (event.key === 'Escape' && this.isQuantityModalOpen()) {
-        this.isQuantityModalOpen.set(false);
-        this.pendingProduct.set(null);
+    if (event.key === 'Escape') {
+        if (this.isQuantityModalOpen()) {
+            this.isQuantityModalOpen.set(false);
+            this.pendingProduct.set(null);
+            this.searchInput.nativeElement.focus();
+            return;
+        }
+        if (this.isPaymentModalOpen()) {
+            this.isPaymentModalOpen.set(false);
+            return;
+        }
+        if (this.isCustomerDrawerOpen()) {
+            this.isCustomerDrawerOpen.set(false);
+            this.searchInput.nativeElement.focus();
+            return;
+        }
+        // Si no hay modales, quitamos foco del buscador principal
+        this.searchInput.nativeElement.blur();
         return;
     }
     if (event.key === 'F9') {
@@ -264,6 +326,10 @@ export class PosTerminalComponent implements OnInit {
     if (event.key === 'F2') {
         event.preventDefault();
         this.searchInput.nativeElement.focus();
+    }
+    if (event.key === 'F4') {
+        event.preventDefault();
+        this.openCustomerDrawer();
     }
   }
 }

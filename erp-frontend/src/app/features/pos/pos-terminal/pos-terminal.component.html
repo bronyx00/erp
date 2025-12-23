@@ -94,21 +94,49 @@
 
     <div class="flex-1 overflow-y-auto p-4 space-y-2">
       @for (item of cart(); track item.product.id) {
-        <div class="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-xl hover:border-indigo-200 shadow-sm transition-all group">
+        <div class="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-xl hover:border-indigo-200 shadow-sm transition-all group relative pr-10">
+            
             <div class="flex flex-col items-center gap-1">
-                <button class="w-6 h-6 rounded-full bg-slate-100 hover:bg-indigo-600 hover:text-white transition" (click)="processAddToCart(item.product, 1)">+</button>
+                <button class="w-6 h-6 rounded-full bg-slate-100 hover:bg-indigo-600 hover:text-white transition flex items-center justify-center" 
+                        (click)="processAddToCart(item.product, 1)">
+                  <span class="text-xs font-bold">+</span>
+                </button>
                 
-                <span class="font-bold text-sm">{{ item.quantity | number:'1.0-3' }}</span>
+                <span class="font-bold text-sm select-none">{{ item.quantity | number:'1.0-3' }}</span>
                 
-                <button class="w-6 h-6 rounded-full bg-slate-100 hover:bg-red-500 hover:text-white transition" (click)="processAddToCart(item.product, -1)">-</button>
+                <button class="w-6 h-6 rounded-full bg-slate-100 hover:bg-amber-500 hover:text-white transition flex items-center justify-center" 
+                        (click)="processAddToCart(item.product, -1)">
+                  <span class="text-xs font-bold">-</span>
+                </button>
             </div>
-            <div class="flex-1">
-                <p class="text-sm font-medium text-slate-800 line-clamp-1">{{ item.product.name }}</p>
-                <p class="text-xs text-slate-400 font-mono">{{ item.product.sku }}</p>
+            
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-slate-800 line-clamp-1 break-words leading-tight">{{ item.product.name }}</p>
+                <div class="flex items-center gap-2 mt-0.5">
+                   <p class="text-xs text-slate-400 font-mono">{{ item.product.sku }}</p>
+                   @if(item.product.measurementUnit !== 'UNIT') {
+                     <span class="text-[9px] bg-slate-100 text-slate-500 px-1 rounded uppercase">{{ item.product.measurementUnit }}</span>
+                   }
+                </div>
             </div>
+            
             <div class="text-right">
                 <p class="font-bold text-slate-900">${{ item.product.price * item.quantity | number:'1.2-2' }}</p>
+                <p class="text-[10px] text-slate-400">c/u ${{ item.product.price }}</p>
             </div>
+
+            <button (click)="removeFromCart(item.product.id)" 
+                    class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                    title="Eliminar del carrito">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+        </div>
+      }
+      
+      @if (cart().length === 0) {
+        <div class="h-full flex flex-col items-center justify-center text-slate-300 gap-4 opacity-50">
+          <i class="fas fa-shopping-basket text-6xl"></i>
+          <p class="font-medium text-sm">El carrito está vacío</p>
         </div>
       }
     </div>
@@ -142,25 +170,48 @@
     <div class="absolute top-0 right-0 bottom-0 w-[450px] bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
         <div class="p-5 border-b flex justify-between items-center bg-slate-50">
             <h3 class="font-bold text-lg text-slate-800">
-                {{ isCreateClientMode() ? 'Registrar Nuevo Cliente' : 'Buscar Cliente' }}
+                {{ isCreateClientMode() ? 'Registrar Nuevo Cliente' : 'Buscar Cliente (F4)' }}
             </h3>
             <button (click)="isCreateClientMode.set(false); isCustomerDrawerOpen.set(false)" class="text-slate-400 hover:text-red-500"><i class="fas fa-times text-xl"></i></button>
         </div>
 
         <div class="flex-1 p-5 overflow-y-auto" *ngIf="!isCreateClientMode()">
-            <input [formControl]="customerSearchControl" 
-                   type="text" 
-                   class="w-full p-4 bg-slate-100 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all text-lg mb-4" 
-                   placeholder="Buscar por Nombre o RIF..." 
-                   autofocus>
+            <div class="relative">
+                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input #clientSearchInput
+                       [formControl]="customerSearchControl"
+                       (keydown)="handleClientSearchKeydown($event)"
+                       type="text" 
+                       class="w-full pl-10 pr-4 py-4 bg-slate-100 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all text-lg mb-4" 
+                       placeholder="Escribe nombre o cédula..." 
+                       autofocus>
+                
+                <div class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hidden md:block">
+                    ↑↓ Seleccionar <span class="mx-1">|</span> ENTER Confirmar
+                </div>
+            </div>
 
             <div class="space-y-2">
-                @for (c of customerList(); track c.id) {
-                    <button (click)="selectCustomer(c)" class="w-full p-4 flex items-center gap-4 border border-slate-100 rounded-xl hover:border-indigo-500 hover:bg-indigo-50 transition-all text-left group">
-                        <div class="h-10 w-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold">{{ c.avatarInitials }}</div>
+                @for (c of customerList(); track c.id; let i = $index) {
+                    <button (click)="selectCustomer(c)" 
+                            class="w-full p-4 flex items-center gap-4 border rounded-xl transition-all text-left group relative"
+                            [ngClass]="i === customerSelectedIndex() 
+                                ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' 
+                                : 'border-slate-100 hover:border-indigo-300 hover:bg-slate-50'">
+                        
+                        <div *ngIf="i === customerSelectedIndex()" class="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500 rounded-l-xl"></div>
+
+                        <div class="h-10 w-10 text-indigo-600 rounded-full flex items-center justify-center font-bold"
+                             [ngClass]="i === customerSelectedIndex() ? 'bg-white' : 'bg-indigo-100'">
+                             {{ c.avatarInitials }}
+                        </div>
                         <div>
                             <p class="font-bold text-slate-800">{{ c.name }}</p>
                             <p class="text-sm text-slate-500 group-hover:text-indigo-600">{{ c.taxId }}</p>
+                        </div>
+                        
+                        <div *ngIf="i === customerSelectedIndex()" class="ml-auto text-indigo-400 animate-pulse">
+                            <i class="fas fa-level-down-alt rotate-90"></i>
                         </div>
                     </button>
                 }
