@@ -14,17 +14,20 @@ export class ClientFormComponent implements OnInit {
   private fb = inject(FormBuilder);
   private crmService = inject(CrmService);
 
-  // --- INPUTS & OUTPUTS ---
-  // Recibimos el cliente si estamos editando (o null si es nuevo)
   @Input() set customer(value: Customer | null) {
     this._customer.set(value);
   }
   
-  // Emitimos evento al terminar para que el padre cierre el drawer y recargue
-  @Output() onSave = new EventEmitter<void>();
+  // Nuevo Input para pre-llenar la cédula
+  @Input() set initialTaxId(value: string | null) {
+    if (value && !this.isEditMode()) {
+      this.form.patchValue({ taxId: value });
+    }
+  }
+
+  @Output() onSave = new EventEmitter<Customer>(); // Emitimos el cliente creado
   @Output() onCancel = new EventEmitter<void>();
 
-  // --- STATE ---
   private _customer = signal<Customer | null>(null);
   isLoading = this.crmService.isLoading;
   form!: FormGroup;
@@ -33,7 +36,6 @@ export class ClientFormComponent implements OnInit {
   constructor() {
     this.initForm();
 
-    // Effect: Reacciona cuando cambia el cliente seleccionado (Input)
     effect(() => {
       const currentCustomer = this._customer();
       if (currentCustomer) {
@@ -57,8 +59,8 @@ export class ClientFormComponent implements OnInit {
   private initForm() {
     this.form = this.fb.group({
       name: ['', [Validators.required, Validators.minLength(3)]],
-      email: ['', [Validators.email]], // Opcional pero debe ser válido
-      taxId: ['', [Validators.required]], // RIF/CUIT
+      email: ['', [Validators.email]],
+      taxId: ['', [Validators.required]],
       phone: [''],
       address: ['']
     });
@@ -66,13 +68,11 @@ export class ClientFormComponent implements OnInit {
 
   onSubmit() {
     if (this.form.invalid) {
-      this.form.markAllAsTouched(); // Muestra errores rojos si el usuario intenta guardar incompleto
+      this.form.markAllAsTouched();
       return;
     }
 
     const formValue = this.form.value;
-
-    // ADAPTER: Transformamos camelCase (Form) a snake_case (API Payload)
     const payload: CustomerPayload = {
       name: formValue.name,
       email: formValue.email || null,
@@ -86,8 +86,8 @@ export class ClientFormComponent implements OnInit {
       : this.crmService.createCustomer(payload);
 
     request$.subscribe({
-      next: () => {
-        this.onSave.emit(); // ¡Éxito! Avisamos al padre
+      next: (customer) => {
+        this.onSave.emit(customer); // Devolvemos el cliente al padre
         this.form.reset();
       },
       error: (err) => console.error('Error saving customer', err)

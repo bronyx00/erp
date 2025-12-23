@@ -1,28 +1,33 @@
 <div class="flex h-screen bg-slate-100 overflow-hidden font-sans">
-
+  
   <div class="flex-1 flex flex-col h-full min-w-0">
     
     <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-col gap-4 sticky top-0 z-10">
-      
-      <div class="relative">
+      <div class="relative group">
         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <i class="fas fa-search text-slate-400 text-lg"></i>
+          <i class="fas fa-barcode text-slate-400 text-lg group-focus-within:text-indigo-500"></i>
         </div>
         <input 
+          #searchInput
           [formControl]="searchControl"
+          (keydown.enter)="onSearchEnter()"
           type="text" 
-          class="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-sm text-lg" 
-          placeholder="Buscar producto por nombre o código (SKU)..." 
+          class="block w-full pl-11 pr-24 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-sm text-lg" 
+          placeholder="Escanear o buscar (F2)..." 
           autofocus />
+        
+        <div class="absolute inset-y-0 right-2 flex items-center gap-2">
+            <span class="text-xs bg-slate-200 text-slate-500 px-2 py-1 rounded font-mono">ENTER = ADD</span>
+        </div>
       </div>
 
       <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
         @for (cat of categories(); track cat) {
           <button (click)="filterByCategory(cat)"
-            class="px-5 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200"
+            class="px-5 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 border"
             [ngClass]="selectedCategory() === cat 
-              ? 'bg-slate-900 text-white shadow-md transform scale-105' 
-              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'">
+              ? 'bg-slate-800 text-white border-slate-800 shadow-md transform scale-105' 
+              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'">
             {{ cat }}
           </button>
         }
@@ -31,162 +36,196 @@
 
     <div class="flex-1 overflow-y-auto p-6 bg-slate-100/50">
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        
-        @for (product of filteredProducts(); track product.id) {
-          <div (click)="addToCart(product)"
-               class="group bg-white rounded-2xl shadow-sm border border-slate-200 hover:shadow-lg hover:border-indigo-300 cursor-pointer transition-all duration-200 flex flex-col overflow-hidden active:scale-95 select-none relative h-48">
+        @for (product of products(); track product.id) {
+          <div (click)="addToCartClick(product)"
+               class="group bg-white rounded-2xl shadow-sm border border-slate-200 hover:shadow-lg hover:border-indigo-400 cursor-pointer transition-all duration-200 flex flex-col overflow-hidden active:scale-95 h-48 relative">
             
-            <div class="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-500 shadow-sm border border-slate-100">
-              {{ product.stock }} un.
+            <div class="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-0.5 rounded text-[10px] font-bold text-slate-500 shadow-sm z-10">
+              Stock: {{ product.stock }}
+            </div>
+            
+            <div class="absolute top-2 left-2 bg-slate-900/80 text-white px-1.5 rounded text-[10px] font-mono opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                {{ product.sku }}
             </div>
 
-            <div class="h-28 bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center group-hover:from-indigo-50 group-hover:to-white transition-colors">
-              <i class="fas fa-box-open text-3xl text-slate-300 group-hover:text-indigo-400 transition-colors"></i>
+            <div class="h-28 bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center group-hover:from-indigo-50 transition-colors">
+              <i class="fas fa-box-open text-3xl text-slate-300 group-hover:text-indigo-500 transition-colors"></i>
             </div>
             
-            <div class="p-3 flex-1 flex flex-col justify-between">
+            <div class="p-3 flex-1 flex flex-col justify-between bg-white">
               <h3 class="text-sm font-semibold text-slate-700 leading-tight line-clamp-2 group-hover:text-indigo-700">
                 {{ product.name }}
               </h3>
               <div class="flex justify-between items-end mt-1">
-                <span class="text-xs text-slate-400 font-mono">{{ product.sku }}</span>
                 <span class="text-base font-bold text-slate-900">${{ product.price | number:'1.2-2' }}</span>
+                <span class="text-[10px] uppercase text-slate-400 font-bold bg-slate-100 px-1 rounded">{{ product.measurementUnit }}</span>
               </div>
             </div>
           </div>
         }
-
-        @if (filteredProducts().length === 0) {
-          <div class="col-span-full flex flex-col items-center justify-center py-20 text-slate-400">
-            <i class="fas fa-inbox text-5xl mb-4 opacity-50"></i>
-            <p class="text-lg">No hay productos que coincidan.</p>
-          </div>
-        }
-
       </div>
     </div>
   </div>
 
-  <div class="w-[420px] bg-white shadow-2xl z-20 flex flex-col border-l border-slate-200 h-full">
+  <div class="w-[400px] bg-white shadow-2xl z-20 flex flex-col border-l border-slate-200 h-full">
     
-    <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+    <div class="p-4 border-b border-slate-100 bg-slate-50">
       @if (selectedCustomer()) {
-        <div class="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-xl p-3 shadow-sm group cursor-pointer hover:bg-indigo-100 transition-colors"
+        <div class="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl p-3 cursor-pointer hover:bg-indigo-100 transition-colors"
              (click)="isCustomerDrawerOpen.set(true)">
           <div class="flex items-center gap-3">
-            <div class="h-10 w-10 rounded-full bg-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-sm">
+            <div class="h-10 w-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
               {{ selectedCustomer()?.avatarInitials }}
             </div>
             <div>
               <p class="text-sm font-bold text-slate-900">{{ selectedCustomer()?.name }}</p>
-              <p class="text-xs text-slate-500">{{ selectedCustomer()?.taxId || 'Consumidor Final' }}</p>
+              <p class="text-xs text-indigo-600 font-mono">{{ selectedCustomer()?.taxId }}</p>
             </div>
           </div>
-          <button class="text-slate-400 group-hover:text-indigo-600">
-            <i class="fas fa-exchange-alt"></i>
-          </button>
+          <i class="fas fa-sync text-indigo-400"></i>
         </div>
       } @else {
         <button (click)="isCustomerDrawerOpen.set(true)"
-          class="w-full py-3 px-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2">
-          <i class="fas fa-user-plus"></i> Asignar Cliente
+          class="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2">
+          <i class="fas fa-user-plus"></i> Asignar Cliente (F4)
         </button>
       }
     </div>
 
-    <div class="flex-1 overflow-y-auto p-4 space-y-3">
+    <div class="flex-1 overflow-y-auto p-4 space-y-2">
       @for (item of cart(); track item.product.id) {
-        <div class="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg group transition-colors select-none">
-          <div class="flex flex-col items-center gap-1">
-            <button (click)="updateQuantity(item.product.id, 1)" class="w-6 h-6 rounded bg-slate-100 text-slate-600 hover:bg-indigo-100 hover:text-indigo-600 flex items-center justify-center text-xs transition-colors"><i class="fas fa-plus"></i></button>
-            <span class="text-sm font-bold text-slate-900 w-6 text-center">{{ item.quantity }}</span>
-            <button (click)="updateQuantity(item.product.id, -1)" class="w-6 h-6 rounded bg-slate-100 text-slate-600 hover:bg-red-100 hover:text-red-600 flex items-center justify-center text-xs transition-colors"><i class="fas fa-minus"></i></button>
-          </div>
-          
-          <div class="flex-1 min-w-0">
-            <h4 class="text-sm font-medium text-slate-900 truncate">{{ item.product.name }}</h4>
-            <p class="text-xs text-slate-500">${{ item.product.price }} c/u</p>
-          </div>
-
-          <div class="text-right">
-            <p class="text-sm font-bold text-slate-900">${{ item.product.price * item.quantity | number:'1.2-2' }}</p>
-            <button (click)="removeFromCart(item.product.id)" class="text-xs text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-600 transition-opacity mt-1">
-              Eliminar
-            </button>
-          </div>
-        </div>
-      }
-
-      @if (cart().length === 0) {
-        <div class="h-full flex flex-col items-center justify-center text-slate-300 space-y-2 pb-20">
-          <i class="fas fa-shopping-basket text-6xl opacity-20"></i>
-          <p class="font-medium text-sm">Carrito vacío</p>
-          <p class="text-xs text-center px-8">Escanea un producto o selecciona del catálogo.</p>
+        <div class="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-xl hover:border-indigo-200 shadow-sm transition-all group">
+            <div class="flex flex-col items-center gap-1">
+                <button class="w-6 h-6 rounded-full bg-slate-100 hover:bg-indigo-600 hover:text-white transition" (click)="processAddToCart(item.product, 1)">+</button>
+                
+                <span class="font-bold text-sm">{{ item.quantity | number:'1.0-3' }}</span>
+                
+                <button class="w-6 h-6 rounded-full bg-slate-100 hover:bg-red-500 hover:text-white transition" (click)="processAddToCart(item.product, -1)">-</button>
+            </div>
+            <div class="flex-1">
+                <p class="text-sm font-medium text-slate-800 line-clamp-1">{{ item.product.name }}</p>
+                <p class="text-xs text-slate-400 font-mono">{{ item.product.sku }}</p>
+            </div>
+            <div class="text-right">
+                <p class="font-bold text-slate-900">${{ item.product.price * item.quantity | number:'1.2-2' }}</p>
+            </div>
         </div>
       }
     </div>
 
-    <div class="p-6 bg-slate-50 border-t border-slate-200">
-      <div class="space-y-2 mb-6">
+    <div class="p-6 bg-white border-t border-slate-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+      <div class="space-y-1 mb-4">
         <div class="flex justify-between text-sm text-slate-500">
-          <span>Subtotal</span>
-          <span>${{ subtotal() | number:'1.2-2' }}</span>
+            <span>Base Imponible</span> <span>${{ subtotal() | number:'1.2-2' }}</span>
         </div>
         <div class="flex justify-between text-sm text-slate-500">
-          <span>IVA (16%)</span>
-          <span>${{ tax() | number:'1.2-2' }}</span>
+            <span>IVA (16%)</span> <span>${{ tax() | number:'1.2-2' }}</span>
         </div>
-        <div class="flex justify-between items-end mt-4 pt-4 border-t border-slate-200">
-          <span class="text-base font-bold text-slate-900">Total a Pagar</span>
-          <span class="text-3xl font-bold text-slate-900 tracking-tight">${{ total() | number:'1.2-2' }}</span>
+        <div class="flex justify-between items-center pt-2">
+            <span class="text-lg font-bold text-slate-800">Total</span>
+            <span class="text-3xl font-extrabold text-indigo-600">${{ total() | number:'1.2-2' }}</span>
         </div>
       </div>
 
-      <div class="grid grid-cols-4 gap-2">
-        <button (click)="clearCart()" 
-                [disabled]="cart().length === 0"
-                class="col-span-1 py-4 rounded-xl border border-red-200 text-red-600 font-medium hover:bg-red-50 disabled:opacity-50 transition-colors">
-          <i class="fas fa-trash-alt"></i>
-        </button>
-        <button (click)="isCheckoutOpen.set(true)"
-                [disabled]="cart().length === 0"
-                class="col-span-3 py-4 bg-slate-900 text-white rounded-xl font-bold text-lg hover:bg-slate-800 shadow-lg shadow-slate-300 disabled:opacity-50 disabled:shadow-none transform active:scale-95 transition-all flex items-center justify-center gap-3">
-          <span>Cobrar</span>
-          <i class="fas fa-arrow-right"></i>
-        </button>
-      </div>
-    </div>
-
-  </div>
-
-  <div class="absolute inset-0 z-30" *ngIf="isCustomerDrawerOpen()">
-    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" (click)="isCustomerDrawerOpen.set(false)"></div>
-    <div class="absolute top-4 right-4 bottom-4 w-[400px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-10 duration-200">
-      <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-        <h3 class="font-bold text-slate-900">Seleccionar Cliente</h3>
-        <button (click)="isCustomerDrawerOpen.set(false)" class="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-500"><i class="fas fa-times"></i></button>
-      </div>
-      <div class="p-4">
-        <input [formControl]="customerSearchControl" type="text" class="w-full px-4 py-3 bg-slate-100 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all mb-4" placeholder="Escribe nombre o RIF..." autofocus>
-        
-        <div class="space-y-2">
-          @for (c of customerList(); track c.id) {
-            <button (click)="selectCustomer(c)" class="w-full p-3 flex items-center gap-3 hover:bg-indigo-50 rounded-xl transition-colors text-left group border border-transparent hover:border-indigo-100">
-              <div class="h-10 w-10 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold text-xs group-hover:border-indigo-200 group-hover:text-indigo-600">
-                {{ c.avatarInitials }}
-              </div>
-              <div>
-                <p class="font-bold text-slate-800 text-sm">{{ c.name }}</p>
-                <p class="text-xs text-slate-500">{{ c.taxId }}</p>
-              </div>
-            </button>
-          }
-          @if (customerList().length === 0 && customerSearchControl.value) {
-            <p class="text-center text-slate-400 py-4 text-sm">No se encontraron clientes.</p>
-          }
-        </div>
-      </div>
+      <button (click)="openPaymentModal()"
+              [disabled]="cart().length === 0"
+              class="w-full py-4 bg-slate-900 text-white rounded-xl font-bold text-lg hover:bg-slate-800 shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:shadow-none active:scale-95 transition-all flex justify-between px-6 items-center">
+        <span>Cobrar</span>
+        <span class="bg-white/20 px-2 py-0.5 rounded text-sm font-mono">F9</span>
+      </button>
     </div>
   </div>
 
+  <div class="absolute inset-0 z-40" *ngIf="isCustomerDrawerOpen()">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" (click)="isCustomerDrawerOpen.set(false)"></div>
+    
+    <div class="absolute top-0 right-0 bottom-0 w-[450px] bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        <div class="p-5 border-b flex justify-between items-center bg-slate-50">
+            <h3 class="font-bold text-lg text-slate-800">
+                {{ isCreateClientMode() ? 'Registrar Nuevo Cliente' : 'Buscar Cliente' }}
+            </h3>
+            <button (click)="isCreateClientMode.set(false); isCustomerDrawerOpen.set(false)" class="text-slate-400 hover:text-red-500"><i class="fas fa-times text-xl"></i></button>
+        </div>
+
+        <div class="flex-1 p-5 overflow-y-auto" *ngIf="!isCreateClientMode()">
+            <input [formControl]="customerSearchControl" 
+                   type="text" 
+                   class="w-full p-4 bg-slate-100 rounded-xl border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all text-lg mb-4" 
+                   placeholder="Buscar por Nombre o RIF..." 
+                   autofocus>
+
+            <div class="space-y-2">
+                @for (c of customerList(); track c.id) {
+                    <button (click)="selectCustomer(c)" class="w-full p-4 flex items-center gap-4 border border-slate-100 rounded-xl hover:border-indigo-500 hover:bg-indigo-50 transition-all text-left group">
+                        <div class="h-10 w-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold">{{ c.avatarInitials }}</div>
+                        <div>
+                            <p class="font-bold text-slate-800">{{ c.name }}</p>
+                            <p class="text-sm text-slate-500 group-hover:text-indigo-600">{{ c.taxId }}</p>
+                        </div>
+                    </button>
+                }
+
+                @if (customerList().length === 0 && customerSearchTerm().length > 0) {
+                    <div class="text-center py-8">
+                        <p class="text-slate-400 mb-4">No se encontró "{{ customerSearchTerm() }}"</p>
+                        <button (click)="initCreateClient()" 
+                                class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-200">
+                            <i class="fas fa-plus mr-2"></i> Registrar "{{ customerSearchTerm() }}"
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto" *ngIf="isCreateClientMode()">
+            <div class="p-5">
+                <app-client-form 
+                    [initialTaxId]="customerSearchTerm()" 
+                    (onSave)="onClientCreated($event)"
+                    (onCancel)="isCreateClientMode.set(false)">
+                </app-client-form>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  @if (isPaymentModalOpen()) {
+    <app-payment-modal 
+        [totalAmount]="total()" 
+        (onConfirm)="handlePaymentConfirm($event)" 
+        (onCancel)="isPaymentModalOpen.set(false)">
+    </app-payment-modal>
+  }
+
+  @if (isQuantityModalOpen() && pendingProduct()) {
+    <div class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 border border-slate-200">
+            <h3 class="text-lg font-bold text-slate-800 mb-1">
+                Cantidad a agregar
+            </h3>
+            <p class="text-slate-500 text-sm mb-4">
+                {{ pendingProduct()?.name }} <span class="font-mono text-xs bg-slate-100 px-1 rounded">{{ pendingProduct()?.measurementUnit }}</span>
+            </p>
+
+            <div class="flex gap-2">
+                <input #quantityInput
+                       [formControl]="quantityControl"
+                       (keydown.enter)="confirmQuantityToAdd()"
+                       type="number" step="0.001" min="0.001"
+                       class="flex-1 text-2xl font-bold text-center p-3 border-2 border-indigo-500 rounded-xl focus:outline-none text-indigo-700 bg-indigo-50"
+                       placeholder="0.000"
+                       autofocus>
+                
+                <button (click)="confirmQuantityToAdd()"
+                        class="px-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 active:scale-95 transition-all">
+                    <i class="fas fa-check"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-400 mt-2 text-center">
+                Presiona <span class="font-bold border border-slate-300 rounded px-1">ENTER</span> para confirmar
+                o <span class="font-bold border border-slate-300 rounded px-1">ESC</span> para cancelar
+            </p>
+        </div>
+    </div>
+  }
 </div>

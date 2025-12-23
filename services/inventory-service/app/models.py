@@ -1,5 +1,13 @@
 from sqlalchemy import Column, Integer, String, Numeric, Boolean
 from .database import Base
+import enum
+
+class MeasurementUnit(str, enum.Enum):
+    UNIT = "UNIT"       # Unidad / Pieza
+    KG = "KG"           # Kilogramos
+    METER = "METER"     # Metros
+    LITER = "LITER"     # Litros
+    SERVICE = "SERVICE" # Horas / Servicios
 
 class Product(Base):
     """
@@ -20,6 +28,9 @@ class Product(Base):
     
     category = Column(String, index=True, default="General")
     
+    # Unidad de medida (Por defecto Unidad)
+    measurement_unit = Column(String, default="UNIT")
+    
     price = Column(Numeric(10, 2), nullable=False) # Precio unitario en USD
-    stock = Column(Integer, default=0) # Cantidad disponible
+    stock = Column(Numeric(12,), default=0) # Cantidad disponible
     is_active = Column(Boolean, default=True)

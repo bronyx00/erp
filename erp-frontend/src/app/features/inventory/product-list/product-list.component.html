@@ -1,0 +1,150 @@
+<div class="flex flex-col h-full bg-slate-50">
+  
+  <header class="flex items-center justify-between px-8 py-6 bg-white border-b border-slate-200">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900">Inventario</h1>
+      <p class="text-sm text-slate-500 mt-1">Gestión de productos y existencias.</p>
+    </div>
+    <button (click)="openCreate()" class="px-4 py-2 text-sm font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 flex items-center shadow-sm active:scale-95 transition-all">
+      <i class="fas fa-plus mr-2"></i> Nuevo Producto
+    </button>
+  </header>
+
+  <div class="px-8 py-4 flex items-center justify-between">
+    <div class="relative w-80">
+      <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+        <i class="fas fa-search"></i>
+      </span>
+      <input [formControl]="searchControl" type="text" 
+             class="pl-10 w-full rounded-lg border-slate-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm py-2" 
+             placeholder="Buscar por nombre o SKU...">
+    </div>
+    <div class="text-xs text-slate-500">Total: <span class="font-bold text-slate-900">{{ meta().total }}</span> items</div>
+  </div>
+
+  <div class="flex-1 overflow-auto px-8 pb-8">
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <table class="min-w-full divide-y divide-slate-100">
+        <thead class="bg-slate-50/50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Producto</th>
+            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">SKU</th>
+            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Categoría</th>
+            <th class="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Precio</th>
+            <th class="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Stock</th>
+            <th class="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Acciones</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 bg-white">
+          @for (product of products(); track product.id) {
+            <tr class="hover:bg-slate-50 transition-colors group">
+              
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex items-center">
+                  <div class="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-slate-200">
+                    <i class="fas fa-box"></i>
+                  </div>
+                  <div class="ml-4">
+                    <div class="text-sm font-medium text-slate-900">{{ product.name }}</div>
+                    @if (product.description) {
+                      <div class="text-xs text-slate-500 truncate max-w-[200px]" title="{{ product.description }}">
+                        {{ product.description }}
+                      </div>
+                    }
+                  </div>
+                </div>
+              </td>
+              
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span class="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">
+                  {{ product.sku }}
+                </span>
+              </td>
+
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
+                  {{ product.category }}
+                </span>
+              </td>
+
+              <td class="px-6 py-4 whitespace-nowrap text-right">
+                <div class="text-sm font-bold text-slate-900">${{ product.price | number:'1.2-2' }}</div>
+              </td>
+
+              <td class="px-6 py-4 whitespace-nowrap text-center">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border shadow-sm"
+                  [ngClass]="{
+                    'bg-green-100 text-green-700 border-green-200': product.stock > 20,
+                    'bg-yellow-100 text-yellow-700 border-yellow-200': product.stock > 10 && product.stock <= 20,
+                    'bg-orange-100 text-orange-700 border-orange-200': product.stock > 2 && product.stock <= 10,
+                    'bg-red-100 text-red-700 border-red-200 animate-pulse': product.stock <= 2
+                  }">
+                  
+                  @if (product.stock <= 2) {
+                    <i class="fas fa-exclamation-triangle mr-1.5"></i>
+                  } @else if (product.stock <= 10) {
+                    <i class="fas fa-clock mr-1.5"></i>
+                  }
+                  
+                  @if (product.stock <= 0) {
+                    AGOTADO
+                  } @else {
+                    {{ product.stock | number:'1.0-2' }} {{ product.measurementUnit }}
+                  }
+                </span>
+              </td>
+
+              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button (click)="openEdit(product)" class="text-indigo-600 hover:text-indigo-900 mr-4 p-1 hover:bg-indigo-50 rounded transition-colors">
+                  <i class="fas fa-pen"></i>
+                </button>
+                <button (click)="deleteProduct(product.id)" class="text-slate-400 hover:text-red-600 p-1 hover:bg-red-50 rounded transition-colors">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+          }
+          
+          @if (products().length === 0 && !isLoading()) {
+            <tr>
+              <td colspan="6" class="px-6 py-12 text-center text-slate-500">
+                <div class="mb-2"><i class="fas fa-search text-2xl opacity-20"></i></div>
+                <p>No se encontraron productos.</p>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="fixed inset-0 overflow-hidden z-[60]" [class.invisible]="!isDrawerOpen()" [class.visible]="isDrawerOpen()">
+    <div class="absolute inset-0 overflow-hidden">
+      <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" 
+           [class.opacity-0]="!isDrawerOpen()" 
+           [class.opacity-100]="isDrawerOpen()" 
+           (click)="isDrawerOpen.set(false)"></div>
+           
+      <div class="fixed inset-y-0 right-0 pl-10 max-w-full flex pointer-events-auto">
+        <div class="w-screen max-w-md transform transition-transform duration-300 bg-white shadow-xl flex flex-col h-full"
+             [class.translate-x-full]="!isDrawerOpen()" 
+             [class.translate-x-0]="isDrawerOpen()">
+           
+           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+             <h2 class="text-lg font-bold text-slate-800">{{ selectedProduct() ? 'Editar Producto' : 'Nuevo Producto' }}</h2>
+             <button (click)="isDrawerOpen.set(false)" class="text-slate-400 hover:text-slate-600 transition-colors">
+               <i class="fas fa-times"></i>
+             </button>
+           </div>
+           
+           <app-product-form 
+              [product]="selectedProduct()" 
+              (onSave)="onFormSaved()" 
+              (onCancel)="isDrawerOpen.set(false)">
+           </app-product-form>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

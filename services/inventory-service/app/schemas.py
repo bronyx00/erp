@@ -26,11 +26,23 @@ class ProductBase(BaseModel):
     name: str = Field(..., description="Nombre del producto")
     description: Optional[str] = None
     category: str = Field("General", description="Categoría (ej. Servicios, Hardware)")
+    measurement_unit: str = Field("UNIT", description="UNIT, KG, METER, LITER")
     price: Decimal = Field(..., gt=0, description="Precio unitario (debe ser mayor a 0)")
-    stock: int = Field(0, ge=0, description="Stock inicial (debe ser mayor o igual a 0)")
+    stock: Decimal = Field(0, ge=0, description="Stock inicial (debe ser mayor o igual a 0)")
     
 class ProductCreate(ProductBase):
     pass
+
+class ProductUpdate(BaseModel):
+    """Campos opcionales para edición"""
+    sku: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    measurement_unit: Optional[str] = None
+    price: Optional[Decimal] = None
+    stock: Optional[Decimal] = None
+    is_active: Optional[bool] = None
 
 class ProductResponse(ProductBase):
     """Respuesta completa del producto."""

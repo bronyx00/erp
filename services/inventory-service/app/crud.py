@@ -4,6 +4,15 @@ from sqlalchemy import func, or_
 from typing import Optional, Dict, Any
 from . import models, schemas
 
+async def get_product_by_sku(db: AsyncSession, sku: str, tenant_id: int):
+    """Busca un producto por SKU para validaciones."""
+    query = select(models.Product).filter(
+        models.Product.sku == sku,
+        models.Product.tenant_id == tenant_id
+    )
+    result = await db.execute(query)
+    return result.scalars().first()
+
 async def get_products(
     db: AsyncSession, 
     tenant_id: int, 
@@ -74,7 +83,6 @@ async def get_product_by_id(db: AsyncSession, product_id: int, tenant_id: int):
     return result.scalars().first()
 
 async def create_product(db: AsyncSession, product: schemas.ProductCreate, tenant_id: int):
-    """Busca un producto por SKU para validaciones."""
     db_product = models.Product(
         **product.model_dump(),
         tenant_id=tenant_id
@@ -83,3 +91,31 @@ async def create_product(db: AsyncSession, product: schemas.ProductCreate, tenan
     await db.commit()
     await db.refresh(db_product)
     return db_product
+
+async def update_product(db: AsyncSession, product_id: int, updates: schemas.ProductUpdate, tenant_id: int):
+    db_product = await get_product_by_id(db, product_id, tenant_id)
+    if not db_product:
+        return None
+        
+    update_data = updates.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_product, key, value)
+        
+    await db.commit()
+    await db.refresh(db_product)
+    return db_product
+
+async def delete_product(db: AsyncSession, product_id: int, tenant_id: int):
+    """
+    Realiza un borrado lógico (Soft Delete) del producto.
+    No elimina la fila de la BD, solo marca is_active = False.
+    """
+    # Reutilizamos la función de búsqueda que ya tienes
+    product = await get_product_by_id(db, product_id, tenant_id)
+    
+    if product:
+        product.is_active = False
+        await db.commit()
+        await db.refresh(product)
+        
+    return product

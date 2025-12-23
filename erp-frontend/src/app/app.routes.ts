@@ -54,14 +54,8 @@ export const routes: Routes = [
       // Requiere permisos de gestión o almacén
       {
         path: 'inventory/products',
-        loadComponent: () => import('./features/inventory/product-list/product-list').then(m => m.ProductListComponent),
+        loadComponent: () => import('./features/inventory/product-list/product-list.component').then(m => m.ProductListComponent),
         canActivate: [roleGuard(['OWNER', 'STORE'])]
-      },
-      {
-        path: 'inventory/products/new',
-        loadComponent: () => import('./features/inventory/product-form/product-form').then(m => m.ProductFormComponent),
-        canActivate: [roleGuard(['OWNER', 'STORE'])],
-        title: 'ERP - Nuevo Producto',
       },
       // --- CONTABILIDAD ---
       // Requiere permisos de gestión o contabilidad

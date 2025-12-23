@@ -81,3 +81,35 @@ async def read_product(
     if db_product is None:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     return db_product
+
+@app.put("/products/{product_id}", response_model=schemas.ProductResponse)
+async def update_product(
+    product_id: int,
+    product_update: schemas.ProductUpdate,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.PRODUCT_UPDATE)) # Asegúrate de tener este permiso
+):
+    """Edita un producto existente."""
+    updated_product = await crud.update_product(db, product_id, product_update, user.tenant_id)
+    if not updated_product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    return updated_product
+
+@app.delete("/products/{product_id}", status_code=204)
+async def delete_product(
+    product_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.PRODUCT_DELETE)) 
+):
+    """
+    **Eliminar Producto**
+    
+    Marca un producto como inactivo. No se borra físicamente para mantener
+    la integridad de los reportes históricos.
+    """
+    product = await crud.delete_product(db, product_id, user.tenant_id)
+    
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+        
+    return # 204 no devuelve cuerpo

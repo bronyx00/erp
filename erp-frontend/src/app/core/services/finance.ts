@@ -3,7 +3,6 @@ import { HttpClient } from "@angular/common/http";
 import { Observable, of } from "rxjs";
 import { environment } from '../../../environments/environment';
 import { ApiService } from '../api/api.service';
-import type { PaymentMethodType } from '../../features/pos/pos';
 
 
 // --- Interfaces de Contabilidad ---
@@ -30,7 +29,7 @@ export interface LedgerEntry {
 
 // Modelo de un Item de Pago Individual
 export interface PaymentDetail {
-  method: PaymentMethodType;
+  method: any;
   amount: number;
 }
 
@@ -147,7 +146,7 @@ export interface SaleTransaction {
   tax_rate: number;
   tax_amount: number;
   total_usd: number;
-  payment_method: PaymentMethodType;
+  payment_method: any;
   amount_received: number;   // Monto que el cliente entrega
   change_due: number;       // Cambio a devolver
   items: {

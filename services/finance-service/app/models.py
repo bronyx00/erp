@@ -79,7 +79,7 @@ class InvoiceItem(Base):
     
     product_id = Column(Integer, nullable=False)                    # ID del producto en Inventary Service
     product_name = Column(String)                                   # Guarda el nombre por si cambia en el futuro
-    quantity = Column(Integer, default=1)
+    quantity = Column(Numeric(12, 3), default=1)
     unit_price = Column(Numeric(10, 2))                             # Precio al momento de la venta
     total_price = Column(Numeric(10, 2))                            # qty * unit_price
     
@@ -162,7 +162,7 @@ class QuoteItem(Base):
     product_name = Column(String)
     description = Column(String, nullable=True)
     
-    quantity = Column(Integer, default=1)
+    quantity = Column(Numeric(12, 3), default=1)
     unit_price = Column(Numeric(12, 2))
     total_price = Column(Numeric(12, 2))
     

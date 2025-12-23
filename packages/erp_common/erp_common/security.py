@@ -47,6 +47,7 @@ class Permissions:
     PRODUCT_READ = "product:read"
     PRODUCT_CREATE = "product:create"
     PRODUCT_UPDATE = "product:update"
+    PRODUCT_DELETE = "product:delete"
     STOCK_ADJUST = "stock:adjust"
     
     # CRM
@@ -118,7 +119,8 @@ ROLE_PERMISSIONS = {
     "WAREHOUSE_SUPERVISOR": [
         Permissions.PRODUCT_READ,
         Permissions.REPORTS_VIEW,
-        Permissions.NOTE_CREATE
+        Permissions.NOTE_CREATE,
+        Permissions.PRODUCT_DELETE
     ],
 
     "RRHH_MANAGER": [

@@ -49,12 +49,12 @@ class InvoicePaymentCreate(BaseModel):
 
 # --- INVOICE SCHEMAS ---
 class InvoiceItemCreate(BaseModel):
-    product_id: int
-    quantity: int
+    product_id: int = Field(..., description="ID del producto")
+    quantity: Decimal = Field(..., gt=0, description="Cantidad (soporta decimales para Kg/Mts)")
     
 class InvoiceItemResponse(BaseModel):
     product_name: str
-    quantity: int
+    quantity: Decimal
     unit_price: Decimal
     total_price: Decimal
     model_config = ConfigDict(from_attributes=True)
@@ -110,7 +110,7 @@ class InvoiceResponse(BaseModel):
 # --- Cotizaciones ---
 class QuoteItemCreate(BaseModel):
     product_id: int
-    quantity: int = 1
+    quantity: Decimal = 1.0
     # Permite sobreescribir precio o descripción
     unit_price: Optional[Decimal] = None
     description: Optional[str] = None
@@ -126,7 +126,7 @@ class QuoteCreate(BaseModel):
 class QuoteItemResponse(BaseModel):
     id: int
     product_name: str
-    quantity: int
+    quantity: Decimal
     unit_price: Decimal
     total_price: Decimal
     model_config = ConfigDict(from_attributes=True)
