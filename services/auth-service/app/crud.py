@@ -17,12 +17,16 @@ async def get_user(db: AsyncSession, user_id: int):
     Returns:
         models.User | None: El objeto usuario si existe, o None.
     """
-    result = await db.execute(select(models.User).filter(models.User.id == user_id))
+    result = await db.execute(
+        select(models.User)
+        .options(selectinload(models.User.tenant))
+        .filter(models.User.id == user_id)
+    )
     return result.scalars().first()
 
 async def get_user_by_email(db: AsyncSession, email: str):
     """
-    Busca un usuario por su correo electrónico (case insensitive).
+    Busca un usuario por su correo electrónico.
     
     Esta función es crítica para el proceso de Login.
 
@@ -33,7 +37,7 @@ async def get_user_by_email(db: AsyncSession, email: str):
     Returns:
         models.User | None: El objeto usuario si existe.
     """
-    query = select(models.User).filter(models.User.email == email)
+    query = select(models.User).options(selectinload(models.User.tenant)).filter(models.User.email == email)
     result = await db.execute(query)
     return result.scalars().first()
 
@@ -70,8 +74,10 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate, tenant_id: int
     # 3. Guardar
     db.add(db_user)
     await db.commit()
-    await db.refresh(db_user)
-    return db_user
+    
+    query = select(models.User).options(selectinload(models.User.tenant)).filter(models.User.id == db_user.id)
+    result = await db.execute(query)
+    return result.scalars().first()
 
 async def create_tenant(db: AsyncSession, tenant: schemas.TenantCreate):
     """
@@ -115,9 +121,7 @@ async def register_company_and_owner(db: AsyncSession, user_data: schemas.UserCr
         address=user_data.company_address
     )
     db.add(new_tenant)
-    
-    # 'flush' envía los datos a la DB para generar el ID del tenant, 
-    # pero NO confirma la transacción aún (si falla el usuario, se deshace todo).
+
     await db.flush()
     
     # 2. Crear el Usuario Owner
@@ -164,14 +168,16 @@ async def create_employee(db: AsyncSession, user_data: schemas.SubUserCreate, te
     )
     db.add(new_user)
     await db.commit()
-    await db.refresh(new_user)
-    return new_user
+    
+    query = select(models.User).options(selectinload(models.User.tenant)).filter(models.User.id == new_user.id)
+    result = await db.execute(query)
+    return result.scalars().first()
 
 async def get_users_by_tenant(db: AsyncSession, tenant_id: int):
     """
     Obtiene la lista de todos los usuarios activos de una empresa.
     """
-    query = select(models.User).filter(
+    query = select(models.User).options(selectinload(models.User.tenant)).filter(
         models.User.tenant_id == tenant_id,
         models.User.is_active == True
     )

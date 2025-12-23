@@ -42,6 +42,7 @@ class UserCreate(UserBase):
 
 class SubUserCreate(UserBase):
     """Creación de empleados."""
+    full_name: str
     password: str
     role: str
 
