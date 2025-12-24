@@ -31,7 +31,7 @@ def get_user_from_token(token: str):
     """Extrae info básica del token sin validar contra DB (rápido)."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("user_id"), payload.get("role")
+        return payload.get("user_id"), payload.get("role"), payload.get("sub")
     except Exception as e:
         logger.error(f"Error decodificando token: {e}")
         return None, None
@@ -39,26 +39,23 @@ def get_user_from_token(token: str):
 # ---- HELPERS PARA DATOS EXTERNOS ----
 async def get_product_details(product_id: int, token: str):
     headers = {"Authorization": f"Bearer {token}"}
+    url = f"{INVENTORY_SERVICE_URL}/api/inventory/products/{product_id}"
     async with httpx.AsyncClient() as client:
         try:
-            resp = await client.get(f"{INVENTORY_SERVICE_URL}/products/{product_id}", headers=headers)
-            return resp.json() if resp.status_code == 200 else None
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                # Debug: Ver qué llega realmente
+                logger.info(f"📦 Payload recibido para producto {product_id}: {data}") 
+                return data
+            else:
+                logger.warning(f"⚠️ Inventario devolvió {resp.status_code} para ID {product_id}")
+                return None
         except Exception as e:
             logger.error(f"Error Inventory: {e}")
             return None
 
 # --- INTEGRACIONES EXTERNAS (HTTP) ---
-
-async def get_product_details(product_id: int, token: str):
-    """Consulta el servicio de Inventario para obtener nombre y precio."""
-    headers = {"Authorization": f"Bearer {token}"}
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.get(f"{INVENTORY_SERVICE_URL}/api/inventory/products/{product_id}", headers=headers)
-            return resp.json() if resp.status_code == 200 else None
-        except Exception as e:
-            logger.error(f"Error contactando Inventory Service: {e}")
-            return None
         
 async def get_customer_details(search_term: str, token: str):
     """
@@ -88,54 +85,6 @@ async def get_tenant_data(token: str):
             return resp.json() if resp.status_code == 200 else None
         except Exception as e:
             logger.error(f"Error Auth: {e}")
-            return None
-        
-async def get_sales_total_by_employee(db: AsyncSession, tenant_id: int, employee_id: int, start_date: date, end_date: date) -> Decimal:
-    """
-    Suma el subtotal_usd de las facturas validas de un vendedor.
-    """
-    stmt = select(func.sum(models.Invoice.subtotal_usd)).where(
-        and_(
-            models.Invoice.tenant_id == tenant_id,
-            models.Invoice.salesperson_id == employee_id,
-            # Solo facturas pagadas cuentan para la comisión
-            models.Invoice.status.in_(["PAID"]),
-            # Filtramos por fecha de creación
-            func.date(models.Invoice.created_at) >= start_date,
-            func.date(models.Invoice.created_at) <= end_date
-        )
-    )
-    
-    result = await db.execute(stmt)
-    total = result.scalar()
-    
-    return total if total is not None else Decimal(0)
-        
-async def get_customer_by_tax_id(tax_id: str, token: str):
-    search_id = str(tax_id).strip().upper()
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.get(f"{CRM_URL}/customers?limit=1000", headers={"Authorization": f"Bearer {token}"})
-            
-            if resp.status_code == 200:
-                body = resp.json()
-                
-                if isinstance(body, list):
-                    customers = body
-                elif isinstance(body, dict):
-                    customers = body.get("data", body.get("items", []))
-                else:
-                    customers = []
-
-                for c in customers:
-                    c_tax = c.get('tax_id')
-                    if c_tax and str(c_tax).strip().upper() == search_id:
-                        return c
-                        
-            return None
-        except Exception as e:
-            print(f"Error CRM Lookup: {e}")
             return None
         
 async def get_next_invoice_number(db: AsyncSession, tenant_id: int) -> int:
@@ -331,8 +280,20 @@ async def create_invoice(
     customer_data = results[1] if invoice_data.customer_tax_id else {}
     product_list = results[2:]
     
-    # Mapa para acceso rápido a productos por ID
-    product_map = {p['id']: p for p in product_list if p}
+    # Mapa de productos
+    product_map = {}
+    for p in product_list:
+        if not p: continue
+        
+        actual_product = p.get("data", p) if isinstance(p, dict) else p
+        
+        p_id = actual_product.get("id")
+        if p_id is not None:
+            try:
+                product_map[int(p_id)] = actual_product
+            except ValueError:
+                # Si el ID no es numérico, se guarda como está
+                product_map[p_id] = actual_product
     
     if not tenant_data:
         raise ValueError("Error crítico: No se pudieron obtener datos fiscales de la empresa.")
@@ -348,7 +309,7 @@ async def create_invoice(
     exchange_rate = rate_obj.rate if rate_obj else Decimal(1)
     
     # Obtener datos del usuario
-    user_sub, user_role = get_user_from_token(token)
+    user_sub, user_role, _ = get_user_from_token(token)
     
     # 3. Procesar Items y Totales
     total_base = Decimal(0)
@@ -356,7 +317,7 @@ async def create_invoice(
     db_event_items = []
     
     for item in invoice_data.items:
-        product = product_map.get(item.product_id)
+        product = product_map.get(int(item.product_id))
         if not product:
             raise ValueError(f"Producto ID {item.product_id} no encontrado en Inventario.")
         
@@ -391,7 +352,7 @@ async def create_invoice(
             "product_id": item.product_id,
             "quantity": float(item.quantity)
         })
-        
+
     # Cálculos Finales
     tax_amount = round_money(total_base * (tax_rate / 100))
     total_usd = round_money(total_base + tax_amount)
@@ -423,9 +384,7 @@ async def create_invoice(
             created_at=date.today()
         ))
         
-    # Si no envió payment, se queda como "ISSUED" (Crédito puro 100%)
-    
-    # 5. Generar Consecutivo
+    # 5. Numeración
     last_inv_q = select(models.Invoice).filter(models.Invoice.tenant_id == tenant_id).order_by(desc(models.Invoice.invoice_number)).limit(1)
     last_inv = (await db.execute(last_inv_q)).scalar_one_or_none()
     new_number = (last_inv.invoice_number + 1) if last_inv else 1
@@ -470,7 +429,13 @@ async def create_invoice(
     # Guardado Atómico
     db.add(new_invoice)
     await db.commit()
-    await db.refresh(new_invoice)
+    
+    result_reload = await db.execute(
+        select(models.Invoice)
+        .options(selectinload(models.Invoice.items), selectinload(models.Invoice.payments))
+        .filter(models.Invoice.id == new_invoice.id)
+    )
+    new_invoice = result_reload.scalars().first()
     
     # 7. Disparar Eventos
     # Evento 1: Factura Creada
@@ -481,7 +446,7 @@ async def create_invoice(
         "currency": new_invoice.currency,
         "status": new_invoice.status,
         "date": str(new_invoice.created_at),
-        "items": db_event_items
+        "items": new_invoice.items
     }
     publish_event("invoice.created", event_data)
     
@@ -535,11 +500,11 @@ async def create_quote(db: AsyncSession, quote_in: schemas.QuoteCreate, tenant_i
     Consulta precios de productos en inventario y datos del cliente en CRM.
     """
     # Datos Usuario y Tenant
-    user_email, _ = get_user_from_token(token)
+    _, _, user_email = get_user_from_token(token)
     tenant_data = await get_tenant_data(token)
     
     # Datos Cliente
-    customer = await get_customer_by_tax_id(quote_in.customer_tax_id, token)
+    customer = await get_customer_details(quote_in.customer_tax_id, token)
     if not customer:
         # Fallback si no existe.( Cambiar a la creacion )
         customer = {"name": "Cliente Nuevo", "rif": quote_in.customer_tax_id, "email": "", "address": "", "phone": ""}
@@ -633,7 +598,6 @@ async def get_quotes(
 ):
     """Lista las cotizaciones con filtros."""
     offset = (page - 1) * limit
-    
     conditions = [models.Quote.tenant_id == tenant_id]
     
     if search:
@@ -642,19 +606,19 @@ async def get_quotes(
             or_(
                 models.Quote.customer_name.ilike(search_term),
                 models.Quote.customer_rif.ilike(search_term),
-                cast(models.Quote.quote_number, String).ilike(search_term),
-                models.Quote.created_by_email.ilike(search_term)
+                cast(models.Quote.quote_number, String).ilike(search_term)
             )
         )
     
     # Contar Rapido
-    count_query = select(func.count(models.Quote)).filter(*conditions)
+    count_query = select(func.count(models.Quote.id)).filter(*conditions)
     total_res = await db.execute(count_query)
     total = total_res.scalar() or 0
     
     # Consulta de Datos
     query = (
         select(models.Quote)
+        .options(selectinload(models.Quote.items))
         .filter(*conditions)
         .order_by(models.Quote.id.desc())
         .offset(offset)
@@ -711,6 +675,24 @@ async def convert_quote_to_invoice(db: AsyncSession, quote_in: int, tenant_id: i
     return new_invoice
 
 # --- REPORTES ---
+async def get_sales_total_by_employee(db: AsyncSession, tenant_id: int, employee_id: int, start_date: date, end_date: date) -> Decimal:
+    """
+    Suma el subtotal_usd de las facturas validas de un vendedor.
+    """
+    stmt = select(func.sum(models.Invoice.subtotal_usd)).where(
+        and_(
+            models.Invoice.tenant_id == tenant_id,
+            models.Invoice.salesperson_id == employee_id,
+            models.Invoice.status.in_(["PAID"]),
+            func.date(models.Invoice.created_at) >= start_date,
+            func.date(models.Invoice.created_at) <= end_date
+        )
+    )
+    result = await db.execute(stmt)
+    total = result.scalar()
+    
+    return total if total is not None else Decimal(0)
+
 async def get_dashboard_metrics(db: AsyncSession, tenant_id: int):
     """Calcula KPIs del día."""
     today = datetime.utcnow().date()

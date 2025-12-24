@@ -168,7 +168,8 @@ class SalesReportResponse(BaseModel):
     
 class SalesDataPoint(BaseModel):
     month: str
-    sales_usd: float
+    current_year: float
+    last_year: float
     
 # --- REPORTE DE COMISIONES ---
 class SalesTotalResponse(BaseModel):

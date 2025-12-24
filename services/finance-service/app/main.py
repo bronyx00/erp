@@ -309,22 +309,21 @@ async def read_sales_over_time(
 
 @app.get("/reports/sales-total", response_model=SalesTotalResponse)
 async def get_sales_total_for_payroll(
-    tenant_id: int,
     employee_id: int,
     start_date: date,
     end_date: date,
-    db: AsyncSession = Depends(database.get_db)
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.REPORTS_VIEW))
 ):
     """
     **[INTERNO] Total Ventas por Empleado**
     
     Endpoint consumido por el servicio de HHRR para calcular comisiones de nómina.
-    No requiere token de usuario normal, pero debería estar protegido por red interna o API Key.
     """
-    total_sales = await crud.get_sales_total_by_employee(db, tenant_id, employee_id, start_date, end_date)
+    total_sales = await crud.get_sales_total_by_employee(db, tenant_id=user.tenant_id, employee_id=employee_id, start_date=start_date, end_date=start_date)
     
     return {
-        "tenant_id": tenant_id,
+        "tenant_id": user.tenant_id,
         "employee_id": employee_id,
         "total_sales_usd": total_sales,
         "period_start": start_date,
