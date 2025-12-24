@@ -437,6 +437,16 @@ async def create_invoice(
     )
     new_invoice = result_reload.scalars().first()
     
+    items_for_event = []
+    for i in new_invoice.items:
+        items_for_event.append({
+            "product_id": i.product_id,
+            "product_name": i.product_name,
+            "quantity": float(i.quantity),
+            "unit_price": float(i.unit_price),  
+            "total_price": float(i.total_price)
+        })
+    
     # 7. Disparar Eventos
     # Evento 1: Factura Creada
     event_data ={
@@ -446,7 +456,7 @@ async def create_invoice(
         "currency": new_invoice.currency,
         "status": new_invoice.status,
         "date": str(new_invoice.created_at),
-        "items": new_invoice.items
+        "items": items_for_event
     }
     publish_event("invoice.created", event_data)
     

@@ -73,6 +73,7 @@ class TransactionBase(BaseModel):
     reference_id: Optional[str] = None
     
 class TransactionCreate(TransactionBase):
+    created_at: Optional[datetime] = None
     pass
 
 class TransactionResponse(TransactionBase):

@@ -136,17 +136,20 @@ async def get_journal_book(
     """Libro Diario: Lista cronológicamente de todos los asientos"""
     offset = (page - 1) * limit
     conditions = [
-        models.LedgerEntry.tenant_id == user.tenant.id, 
+        models.LedgerEntry.tenant_id == user.tenant_id, 
         models.LedgerEntry.transaction_date >= start_date, 
         models.LedgerEntry.transaction_date <= end_date
         ]
     
     # Conteo rapido
-    count_query = select(func.count(models.LedgerEntry)).filter(*conditions)
+    count_query = select(func.count(models.LedgerEntry.id)).filter(*conditions)
     total = (await db.execute(count_query)).scalar() or 0
     
     query = (
         select(models.LedgerEntry)
+        .options(
+            selectinload(models.LedgerEntry.lines).selectinload(models.LedgerLine.account)
+        )
         .filter(*conditions)
         .order_by(models.LedgerEntry.transaction_date, models.LedgerEntry.id)
         .offset(offset)

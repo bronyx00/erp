@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,14 +47,20 @@ async def create_transaction(
     Returns:
         models.Transaction: La transacción creada con su ID asignado.
     """
-    db_trans = models.Transaction(
-        **transaction.model_dump(),
-        tenant_id=tenant_id
+    db_transaction = models.Transaction(
+        tenant_id=tenant_id,
+        transaction_type=transaction.transaction_type,
+        category=transaction.category,
+        amount=transaction.amount,
+        currency=transaction.currency,
+        description=transaction.description,
+        reference_id=transaction.reference_id,
+        created_at=transaction.created_at or datetime.utcnow()
     )
-    db.add(db_trans)
+    db.add(db_transaction)
     await db.commit()
-    await db.refresh(db_trans)
-    return db_trans
+    await db.refresh(db_transaction)
+    return db_transaction
 
 async def get_transactions(
     db: AsyncSession, 
