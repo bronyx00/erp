@@ -26,7 +26,10 @@ class Employee(Base):
     # --- DATOS LABORALES ---
     position = Column(String) 
     department = Column(String, nullable=True)     # Ej: Ventas, Almacén
-    manager_id = Column(Integer, nullable=True)     # ID de otro empleado (Supervisor)
+    
+    manager_id = Column(Integer, ForeignKey("employees.id"), nullable=True)     # ID de otro empleado (Supervisor)
+    manager = relationship("Employee", remote_side=[id], backref="subordinates")
+    
     hired_at = Column(Date, nullable=True)
     contract_type = Column(String, default="UNDEFINED") # Indefinido, Determinado
     

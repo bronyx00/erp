@@ -84,6 +84,7 @@ class EmployeeBase(BaseModel):
     hired_at: Optional[date] = None
     schedule_id: Optional[int] = None
     
+    contract_type: str = "UNDEFINED"
     salary: Decimal = Field(Decimal(0), description="Salario base")
     bonus_scheme: Optional[str] = None
     

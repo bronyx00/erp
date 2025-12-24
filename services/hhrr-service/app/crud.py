@@ -84,13 +84,72 @@ async def get_employees(db: AsyncSession, tenant_id: int, page: int = 1, limit: 
 
 async def create_employee(db: AsyncSession, employee: schemas.EmployeeCreate, tenant_id: int):
     """Crea un nuevo empleado."""
+    # Sanitización 
+    schedule_id_val = employee.schedule_id if employee.schedule_id and employee.schedule_id > 0 else None
+    manager_id_val = employee.manager_id if employee.manager_id and employee.manager_id > 0 else None
+    
+    # Procesamiento de campos JSON
+    emergency_contact_data = {}
+    if employee.emergency_contact:
+        if hasattr(employee.emergency_contact, 'model_dump'):
+            emergency_contact_data = employee.emergency_contact.model_dump()
+        elif hasattr(employee.emergency_contact, 'dict'): 
+            emergency_contact_data = employee.emergency_contact.dict()
+        else:
+            emergency_contact_data = employee.emergency_contact
+            
+    document_data = []
+    if employee.documents:
+        # Procesamos la lista
+        documents_data = [
+            doc.model_dump() if hasattr(doc, 'model_dump') else (doc.dict() if hasattr(doc, 'dict') else doc)
+            for doc in employee.documents
+        ]
+    
+    reviews_data = []
+    if employee.performance_reviews:
+        reviews_data = [
+            rev.model_dump() if hasattr(rev, 'model_dump') else (rev.dict() if hasattr(rev, 'dict') else rev)
+            for rev in employee.performance_reviews
+        ]
+    
     db_employee = models.Employee(
         tenant_id=tenant_id,
-        **employee.model_dump()
+        first_name=employee.first_name,
+        last_name=employee.last_name,
+        identification=employee.identification,
+        email=employee.email,
+        phone=employee.phone,
+        address=employee.address,
+        birth_date=employee.birth_date,
+        hired_at=employee.hired_at,
+        position=employee.position,
+        department=employee.department,
+        salary=employee.salary,
+        contract_type=employee.contract_type,
+        bonus_scheme=employee.bonus_scheme,
+        emergency_contact=emergency_contact_data,
+        documents=document_data,
+        performance_reviews=reviews_data,
+        status="Active",
+        is_active=True,
+        manager_id=manager_id_val,
+        schedule_id=schedule_id_val
     )
     db.add(db_employee)
     await db.commit()
-    await db.refresh(db_employee)
+    
+    query = (
+        select(models.Employee)
+        .options(
+            selectinload(models.Employee.schedule),
+            selectinload(models.Employee.manager)
+        )
+        .filter(models.Employee.id == db_employee.id)
+    )
+    result = await db.execute(query)
+    db_employee = result.scalars().first()
+    
     return db_employee
 
 async def get_employee_by_id(db: AsyncSession, employee_id: int, tenant_id: int):
