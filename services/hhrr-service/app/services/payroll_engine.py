@@ -148,12 +148,12 @@ async def generate_payroll_event(payroll: Payroll, db: AsyncSession):
     faov_base = comprehensive_salary
     
     # Calcular Retenciones
-    ivss_emp = ivss_base * settings.ivss_employee_rate
-    faov_emp = faov_base * settings.faov_employee_rate
+    ivss_emp = ivss_base * settings.ivss_employer_rate
+    faov_emp = faov_base * settings.faov_employer_rate
     
     # Calcular Aportes Patronales
-    ivss_comp = ivss_base * settings.ivss_employeer_rate
-    faov_comp = faov_base * settings.faov_employeer_rate
+    ivss_comp = ivss_base * settings.ivss_employer_rate
+    faov_comp = faov_base * settings.faov_employer_rate
     
     # Actualizar Objeto Payroll
     payroll.base_salary = base_salary
@@ -185,7 +185,7 @@ async def generate_payroll_event(payroll: Payroll, db: AsyncSession):
     await db.refresh(payroll)
     
     # Enviar a Contabilidad
-    await publish_payroll_event(payroll, settings)
+    await publish_payroll_event(payroll)
     
     return payroll
 

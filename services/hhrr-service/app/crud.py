@@ -176,10 +176,23 @@ async def update_employee (
     # Actualiza solo los campos que vienen en el JSON
     update_data = employee_update.model_dump(exclude_unset=True)
     
+    if 'manager_id' in update_data and update_data['manager_id'] == 0:
+        update_data['manager_id'] = None
+        
+    if 'schedule_id' in update_data and update_data['schedule_id'] == 0:
+        update_data['schedule_id'] = None
+
+    if 'emergency_contact' in update_data and update_data['emergency_contact']:
+         if hasattr(update_data['emergency_contact'], 'model_dump'):
+             update_data['emergency_contact'] = update_data['emergency_contact'].model_dump()
+         elif hasattr(update_data['emergency_contact'], 'dict'):
+             update_data['emergency_contact'] = update_data['emergency_contact'].dict()
+    
     for key, value in update_data.items():
         setattr(db_employee, key, value)
         
     # Guarda los cambios
+    db.add(db_employee)
     await db.commit()
     await db.refresh(db_employee)
     return db_employee
@@ -284,7 +297,7 @@ async def get_employee_notes(
     conditions = [models.SupervisorNote.employee_id == employee_id, models.SupervisorNote.tenant_id == tenant_id]
     
     # Contar total
-    count_query = select(func.count(models.SupervisorNote)).filter(*conditions)
+    count_query = select(func.count(models.SupervisorNote.id)).filter(*conditions)
     total = (await db.execute(count_query)).scalar() or 0
     
     query = (

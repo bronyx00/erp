@@ -15,7 +15,6 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
-
 def upgrade():
     # --- 1. Income Concepts ---
     op.create_table('income_concepts',
@@ -36,10 +35,10 @@ def upgrade():
         sa.Column('tenant_id', sa.Integer(), nullable=False),
         sa.Column('official_minumin_wage', sa.Numeric(precision=10, scale=2), nullable=True),
         sa.Column('food_bonus_value', sa.Numeric(precision=10, scale=2), nullable=True),
-        sa.Column('ivss_employee_rate', sa.Numeric(precision=5, scale=4), nullable=True),
+        sa.Column('ivss_employer_rate', sa.Numeric(precision=5, scale=4), nullable=True),
         sa.Column('ivss_employer_rate', sa.Numeric(precision=5, scale=4), nullable=True),
         sa.Column('ivss_cap_min_wages', sa.Integer(), nullable=True),
-        sa.Column('faov_employee_rate', sa.Numeric(precision=5, scale=4), nullable=True),
+        sa.Column('faov_employer_rate', sa.Numeric(precision=5, scale=4), nullable=True),
         sa.Column('faov_employer_rate', sa.Numeric(precision=5, scale=4), nullable=True),
         sa.Column('calculate_taxes_on_bonuses', sa.Boolean(), nullable=True),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
