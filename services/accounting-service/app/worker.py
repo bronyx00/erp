@@ -4,7 +4,8 @@ import os
 import sys
 import aio_pika
 from decimal import Decimal
-from datetime import datetime
+from datetime import date, datetime
+from app import database, models
 from sqlalchemy.future import select
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
@@ -180,6 +181,107 @@ async def process_payroll_calculated(data: dict):
     finally:
         await db.close()
 
+async def process_payroll_batch_event(payload):
+    print(f"📥 [Accounting] Procesando Lote de Nómina")
+    
+    tenant_id = payload['tenant_id']
+    payment_method = payload.get('payment_method', 'BANK_TRANSFER')
+    
+    target_account_code = payload.get('payment_account_code')
+    if not target_account_code:
+        target_account_code = "1.01.01.001" if payment_method == "CASH" else "1.01.01.003"
+    
+    description = payload.get('notes', 'Pago Masivo Nómina')
+    tx_date = date.fromisoformat(payload['paid_at'])
+    
+    # Extraer montos detallados
+    total_net_pay = Decimal(str(payload['total_net_pay']))             
+    total_expense_salary = Decimal(str(payload['total_expense_salary'])) 
+    total_expense_contrib = Decimal(str(payload['total_expense_contrib']))
+    
+    # Pasivos específicos
+    liability_ivss = Decimal(str(payload.get('liability_ivss', 0)))
+    liability_faov = Decimal(str(payload.get('liability_faov', 0)))
+    liability_other = Decimal(str(payload.get('liability_other', 0))) # ISLR, etc
+    
+    # El monto total del asiento
+    total_transaction_amount = total_net_pay + liability_ivss + liability_faov + liability_other
+    
+    async with database.AsyncSessionLocal() as db:
+        try:
+            # A. CUENTA DE PAGO
+            bank_acc = (await db.execute(select(models.Account).filter_by(code=target_account_code, tenant_id=tenant_id))).scalars().first()
+            if not bank_acc:
+                print(f"❌ Cuenta Banco {target_account_code} no existe.")
+                return
+            
+            # B. CUENTAS DE GASTO
+            # 6.01.01.001: Sueldos y Salarios
+            salary_acc = (await db.execute(select(models.Account).filter_by(code="6.01.01", tenant_id=tenant_id))).scalars().first()
+            
+            contrib_acc = salary_acc
+            
+            # C. CUENTAS DE PASIVOS
+            
+            # 2.01.03.003: SSO / IVSS por Pagar
+            ivss_acc = (await db.execute(select(models.Account).filter_by(code="2.01.03.003", tenant_id=tenant_id))).scalars().first()
+            
+            # 2.01.03.004: FAOV por Pagar
+            faov_acc = (await db.execute(select(models.Account).filter_by(code="2.01.03.004", tenant_id=tenant_id))).scalars().first()
+            
+            # 2.01.03.001: Sueldos por Pagar (Para el resto/ISLR si no hay cuenta especifica)
+            other_liability_acc = (await db.execute(select(models.Account).filter_by(code="2.01.03.001", tenant_id=tenant_id))).scalars().first()
+
+            if not salary_acc or not ivss_acc or not faov_acc:
+                print("❌ Faltan cuentas del PUC (IVSS o FAOV por pagar).")
+                return
+            
+            # --- 2. CREAR ASIENTO ---
+            entry = models.LedgerEntry(
+                tenant_id=tenant_id,
+                transaction_date=tx_date,
+                description=description,
+                reference=payload.get('reference', 'NOMINA'),
+                total_amount=total_transaction_amount
+            )
+            db.add(entry)
+            await db.flush()
+            
+            # --- 3. CREAR LÍNEAS DETALLADAS ---
+            
+            # [DEBE] Gasto Sueldos (Bruto)
+            if total_expense_salary > 0:
+                db.add(models.LedgerLine(entry_id=entry.id, account_id=salary_acc.id, debit=total_expense_salary, credit=0))
+            
+            # [DEBE] Gasto Aportes Patronales
+            if total_expense_contrib > 0:
+                db.add(models.LedgerLine(entry_id=entry.id, account_id=contrib_acc.id, debit=total_expense_contrib, credit=0))
+                
+            # [HABER] Banco (Salida neta)
+            if total_net_pay > 0:
+                db.add(models.LedgerLine(entry_id=entry.id, account_id=bank_acc.id, debit=0, credit=total_net_pay))
+            
+            # [HABER] Pasivo IVSS (Deuda con el Seguro Social)
+            if liability_ivss > 0:
+                db.add(models.LedgerLine(entry_id=entry.id, account_id=ivss_acc.id, debit=0, credit=liability_ivss))
+
+            # [HABER] Pasivo FAOV (Deuda con Banavih)
+            if liability_faov > 0:
+                db.add(models.LedgerLine(entry_id=entry.id, account_id=faov_acc.id, debit=0, credit=liability_faov))
+
+            # [HABER] Otros Pasivos (ISLR, etc)
+            if liability_other > 0:
+                db.add(models.LedgerLine(entry_id=entry.id, account_id=other_liability_acc.id, debit=0, credit=liability_other))
+                
+            await db.commit()
+            print(f"✅ Asiento de Nómina ID {entry.id} creado con cuentas PUC Venezuela.")
+            
+        except Exception as e:
+            print(f"❌ Error en asiento contable: {e}")
+            await db.rollback()
+            
+            
+
 async def process_message(message: aio_pika.IncomingMessage):
     async with message.process():
         try:
@@ -195,6 +297,8 @@ async def process_message(message: aio_pika.IncomingMessage):
                 # Asegúrate de importar process_payroll_calculated
                 from app.worker import process_payroll_calculated
                 await process_payroll_calculated(data)
+            elif routing_key == "payroll.batch_paid":
+                await process_payroll_batch_event(data)
                 
         except Exception as e:
             print(f"❌ Error procesando mensaje: {e}", flush=True)
@@ -209,6 +313,7 @@ async def main():
         await queue.bind(exchange, routing_key="invoice.created")
         await queue.bind(exchange, routing_key="invoice.paid")
         await queue.bind(exchange, routing_key="payroll.calculated")
+        await queue.bind(exchange, routing_key="payroll.batch_paid")
         
         print("🎧 [Accounting] Escuchando eventos financieros...", flush=True)
         await queue.consume(process_message)

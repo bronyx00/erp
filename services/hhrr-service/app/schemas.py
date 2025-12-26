@@ -128,7 +128,6 @@ class EmployeeResponse(EmployeeBase):
     model_config = ConfigDict(from_attributes=True)
     
 # --- NOMINA ---
-
 class PayrollCreate(BaseModel):
     period_start: date
     period_end: date
@@ -143,6 +142,24 @@ class PayrollResponse(BaseModel):
     status: str
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+    
+class PayrollBulkCreateRequest(BaseModel):
+    period_start: date
+    period_end: date
+    employee_ids: Optional[List[int]] = [] # Si está vacío, toma TODOS los empleados activos
+    
+class PayrollBulkCreateResponse(BaseModel):
+    created: int
+    skipped: int
+    total_estimated: float
+    payroll_ids: List[int]
+    
+class PayrollBulkPayRequest(BaseModel):
+    payroll_ids: List[int]
+    payment_method: str = "BANK_TRANSFER"
+    payment_account_code: Optional[str] = None
+    reference: Optional[str] = None
+    notes: Optional[str] = None
     
 # --- NOTAS ---
 

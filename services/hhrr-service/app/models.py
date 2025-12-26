@@ -191,11 +191,11 @@ class PayrollGlobalSettings(Base):
     food_bonus_value = Column(Numeric(10, 2), default=40.00)        # Cestaticket
     
     # Porcentajes de Ley
-    ivss_employer_rate = Column(Numeric(5, 4), default=0.04)
+    ivss_employee_rate = Column(Numeric(5, 4), default=0.04)
     ivss_employer_rate = Column(Numeric(5, 4), default=0.09)
     ivss_cap_min_wages = Column(Integer, default=5)
     
-    faov_employer_rate = Column(Numeric(5, 4), default=0.01)
+    faov_employee_rate = Column(Numeric(5, 4), default=0.01)
     faov_employer_rate = Column(Numeric(5, 4), default=0.02)
     
     # Flags de Comportamiento
