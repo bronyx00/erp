@@ -1,0 +1,149 @@
+<div class="flex flex-col h-full bg-white font-sans">
+    
+    <div class="shrink-0 px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        
+        <div class="flex items-center gap-3">
+            
+            @if (viewMode() === 'CREATE') {
+                <button (click)="viewMode.set('LIST')" 
+                        class="h-8 w-8 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 flex items-center justify-center transition"
+                        title="Volver a la lista">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+            }
+
+            <div>
+                <h2 class="text-xl font-bold text-slate-800">
+                    {{ viewMode() === 'CREATE' ? 'Nuevo Turno' : 'Gestión de Horarios' }}
+                </h2>
+                <p class="text-sm text-slate-500">
+                    {{ viewMode() === 'CREATE' ? 'Configura la jornada semanal' : 'Turnos y jornadas laborales' }}
+                </p>
+            </div>
+        </div>
+
+        <button (click)="onClose.emit()" class="text-slate-400 hover:text-red-500 transition p-2">
+            <i class="fas fa-times text-xl"></i>
+        </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-6 bg-slate-50/50 min-h-0">
+
+        @if (viewMode() === 'LIST') {
+            <div class="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
+                
+                <button (click)="viewMode.set('CREATE')" 
+                        class="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 mb-6 group">
+                    <div class="bg-slate-200 text-slate-500 group-hover:bg-indigo-600 group-hover:text-white rounded-full h-6 w-6 flex items-center justify-center transition-colors">
+                        <i class="fas fa-plus text-xs"></i>
+                    </div>
+                    Crear Nuevo Turno
+                </button>
+
+                @if (isLoading()) {
+                    <div class="text-center py-8 text-slate-400">Cargando horarios...</div>
+                } @else {
+                    @for (schedule of schedules(); track schedule.id) {
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 transition group relative">
+                            
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h3 class="font-bold text-slate-800">{{ schedule.name }}</h3>
+                                        @if (!schedule.is_active) {
+                                            <span class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">Archivado</span>
+                                        }
+                                    </div>
+                                    
+                                    <div class="mt-1.5 flex flex-col">
+                                        @let info = getScheduleLabel(schedule);
+                                        
+                                        <span class="text-sm font-medium text-indigo-600">
+                                            {{ info.text }}
+                                        </span>
+                                        <span class="text-xs text-slate-400">
+                                            {{ info.subtext }}
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-right">
+                                    <div class="text-xs font-mono bg-slate-50 border border-slate-100 px-2 py-1 rounded text-slate-600 inline-block mb-1">
+                                        {{ schedule.monday_start ? (schedule.monday_start | slice:0:5) : (schedule.tuesday_start ? (schedule.tuesday_start | slice:0:5) : '--:--') }} 
+                                        - 
+                                        {{ schedule.monday_end ? (schedule.monday_end | slice:0:5) : (schedule.tuesday_end ? (schedule.tuesday_end | slice:0:5) : '--:--') }}
+                                    </div>
+                                    <p class="text-[10px] text-slate-400">Hora Entrada/Salida</p>
+                                </div>
+                            </div>
+
+                        </div>
+                    }
+                }
+            </div>
+        }
+
+        @if (viewMode() === 'CREATE') {
+            <form [formGroup]="form" class="space-y-6 animate-in slide-in-from-right-4 duration-300 pb-4">
+                
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Identificador</label>
+                    <input formControlName="name" type="text" placeholder="Ej. Diurno Administrativo" 
+                           class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold text-slate-800 placeholder-slate-400 transition">
+                </div>
+
+                <div class="flex justify-end items-center gap-2">
+                    <span class="text-xs text-slate-400">Atajo:</span>
+                    <button type="button" (click)="copyMondayToWeek()" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-lg transition flex items-center gap-1 hover:shadow-sm">
+                        <i class="fas fa-magic"></i> Replicar Lunes a Viernes Activos
+                    </button>
+                </div>
+
+                <div class="space-y-2" formArrayName="days">
+                    @for (day of daysArray.controls; track $index) {
+                        <div [formGroupName]="$index" 
+                             class="flex items-center gap-3 p-3 rounded-xl border transition-all duration-200"
+                             [ngClass]="day.value.isActive ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-transparent opacity-60'">
+                            
+                            <div class="w-32 flex items-center gap-3">
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" formControlName="isActive" class="sr-only peer">
+                                    <div class="w-9 h-5 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                                </label>
+                                <span class="text-sm font-bold" [ngClass]="day.value.isActive ? 'text-slate-800' : 'text-slate-400'">
+                                    {{ weekDays[$index] }}
+                                </span>
+                            </div>
+
+                            @if (day.value.isActive) {
+                                <div class="flex-1 flex items-center gap-2 animate-in fade-in zoom-in-95 duration-200">
+                                    <input type="time" formControlName="start" class="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-center font-mono focus:border-indigo-500 focus:bg-white transition cursor-pointer">
+                                    <span class="text-slate-300 font-bold">-</span>
+                                    <input type="time" formControlName="end" class="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-center font-mono focus:border-indigo-500 focus:bg-white transition cursor-pointer">
+                                </div>
+                            } @else {
+                                <div class="flex-1 text-center">
+                                    <span class="text-xs font-bold text-slate-400 bg-slate-200/50 px-2 py-1 rounded">Día Libre</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+            </form>
+        }
+
+    </div>
+
+    @if (viewMode() === 'CREATE') {
+        <div class="shrink-0 p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+            <button type="button" (click)="viewMode.set('LIST')" class="flex-1 px-4 py-3 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition">
+                Cancelar
+            </button>
+            <button (click)="onSubmit()" [disabled]="form.invalid || isSubmitting()" 
+                    class="flex-1 px-4 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shadow-lg shadow-indigo-500/20 disabled:opacity-50 transition">
+                {{ isSubmitting() ? 'Guardando...' : 'Crear Turno' }}
+            </button>
+        </div>
+    }
+</div>

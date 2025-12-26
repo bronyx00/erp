@@ -300,6 +300,8 @@ export class PosTerminalComponent implements OnInit {
             this.cart.set([]);
             this.selectedCustomer.set(null);
             this.searchInput.nativeElement.focus();
+            this.loadProducts(this.searchControl.value || '', this.selectedCategory());
+            this.searchInput.nativeElement.focus();
         },
         error: (err) => {
             console.error('❌ Error facturando:', err);

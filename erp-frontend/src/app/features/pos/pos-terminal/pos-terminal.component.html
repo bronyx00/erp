@@ -24,7 +24,7 @@
           </div>
 
           <div class="hidden md:flex flex-col items-end justify-center px-4 bg-slate-50 border border-slate-200 rounded-xl min-w-[120px]">
-              <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{{ exchangeSource() }}</span>
+              <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tasa {{ exchangeSource() }}</span>
               <span class="text-lg font-bold text-slate-700">Bs. {{ exchangeRate() | number:'1.2-2' }}</span>
           </div>
       </div>
@@ -40,7 +40,9 @@
           </button>
         }
       </div>
-    </header> <div class="flex-1 overflow-y-auto p-6 bg-slate-100/50">
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-6 bg-slate-100/50">
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         @for (product of products(); track product.id) {
           <div (click)="addToCartClick(product)"
@@ -62,9 +64,20 @@
               <h3 class="text-sm font-semibold text-slate-700 leading-tight line-clamp-2 group-hover:text-indigo-700">
                 {{ product.name }}
               </h3>
+              
               <div class="flex justify-between items-end mt-1">
-                <span class="text-base font-bold text-slate-900">${{ product.price | number:'1.2-2' }}</span>
-                <span class="text-[10px] uppercase text-slate-400 font-bold bg-slate-100 px-1 rounded">{{ product.measurementUnit }}</span>
+                <div class="flex flex-col leading-none">
+                    <span class="text-base font-bold text-slate-900">
+                        Bs. {{ product.price * exchangeRate() | number:'1.2-2' }}
+                    </span>
+                    <span class="text-[10px] text-slate-400 font-medium">
+                        ${{ product.price | number:'1.2-2' }}
+                    </span>
+                </div>
+                
+                <span class="text-[10px] uppercase text-slate-400 font-bold bg-slate-100 px-1 rounded mb-0.5">
+                    {{ product.measurementUnit }}
+                </span>
               </div>
             </div>
           </div>
@@ -127,8 +140,12 @@
             </div>
             
             <div class="text-right">
-                <p class="font-bold text-slate-900">${{ item.product.price * item.quantity | number:'1.2-2' }}</p>
-                <p class="text-[10px] text-slate-400">c/u ${{ item.product.price }}</p>
+                <p class="font-bold text-slate-900">
+                    Bs. {{ (item.product.price * item.quantity) * exchangeRate() | number:'1.2-2' }}
+                </p>
+                <p class="text-[10px] text-slate-400">
+                    ref: ${{ item.product.price * item.quantity | number:'1.2-2' }}
+                </p>
             </div>
 
             <button (click)="removeFromCart(item.product.id)" 
@@ -149,21 +166,25 @@
 
     <div class="p-6 bg-white border-t border-slate-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
       <div class="space-y-1 mb-4">
+        
         <div class="flex justify-between text-sm text-slate-500">
-            <span>Base Imponible</span> <span>${{ subtotal() | number:'1.2-2' }}</span>
+            <span>Base Imponible</span> 
+            <span>Bs. {{ subtotal() * exchangeRate() | number:'1.2-2' }}</span>
         </div>
         <div class="flex justify-between text-sm text-slate-500">
-            <span>IVA (16%)</span> <span>${{ tax() | number:'1.2-2' }}</span>
+            <span>IVA (16%)</span> 
+            <span>Bs. {{ tax() * exchangeRate() | number:'1.2-2' }}</span>
         </div>
         
         <div class="border-t border-dashed border-slate-200 my-2 pt-2">
             <div class="flex justify-between items-center">
-                <span class="text-lg font-bold text-slate-800">Total USD</span>
-                <span class="text-3xl font-extrabold text-indigo-600">${{ total() | number:'1.2-2' }}</span>
+                <span class="text-lg font-bold text-slate-800">Total Bs.</span>
+                <span class="text-3xl font-extrabold text-indigo-600">Bs. {{ totalVes() | number:'1.2-2' }}</span>
             </div>
+            
             <div class="flex justify-between items-center mt-1">
-                <span class="text-xs font-bold text-slate-400 uppercase tracking-wide">En Bolívares</span>
-                <span class="text-lg font-bold text-slate-500">Bs. {{ totalVes() | number:'1.2-2' }}</span>
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wide">Ref ($)</span>
+                <span class="text-lg font-bold text-slate-500">${{ total() | number:'1.2-2' }}</span>
             </div>
         </div>
       </div>
@@ -256,6 +277,7 @@
   @if (isPaymentModalOpen()) {
     <app-payment-modal 
         [totalAmount]="total()" 
+        [exchangeRate]="exchangeRate()"
         (onConfirm)="handlePaymentConfirm($event)" 
         (onCancel)="isPaymentModalOpen.set(false)">
     </app-payment-modal>

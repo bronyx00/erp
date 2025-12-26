@@ -20,6 +20,11 @@ export const routes: Routes = [
         canActivate: [roleGuard(['OWNER'])]
       },
       {
+        path: 'hhrr',
+        loadComponent: () => import('./features/employees/employees.component').then(m => m.EmployeesComponent),
+
+      },
+      {
         path: 'crm',
         loadComponent: () => import('./features/crm/client-list/client-list.component').then(m => m.ClientListComponent),
         canActivate: [roleGuard(['OWNER', 'ADMIN', 'SELLER'])],

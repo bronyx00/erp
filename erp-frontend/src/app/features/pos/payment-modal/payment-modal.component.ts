@@ -3,8 +3,6 @@ import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import type { PaymentMethod } from '../../../core/services/finance';
 
-
-
 interface PaymentOption {
   id: PaymentMethod;
   label: string;
@@ -23,11 +21,18 @@ interface PaymentOption {
         <div class="bg-slate-50 border-b border-slate-200 p-6 flex justify-between items-center">
           <div>
             <h2 class="text-2xl font-bold text-slate-800">Confirmar Pago</h2>
-            <p class="text-slate-500 text-sm">Seleccione método y confirme monto</p>
+            <p class="text-slate-500 text-sm">Use flechas ↑↓ para navegar, ENTER para seleccionar</p>
           </div>
           <div class="text-right">
             <p class="text-xs font-semibold text-slate-500 uppercase">Total a Pagar</p>
-            <p class="text-3xl font-bold text-indigo-600">{{ totalAmount | currency:'USD' }}</p>
+            <div class="flex flex-col items-end leading-none">
+                <span class="text-3xl font-extrabold text-indigo-600">
+                    Bs. {{ totalAmount * exchangeRate | number:'1.2-2' }}
+                </span>
+                <span class="text-sm font-bold text-slate-400 mt-1">
+                    Ref: {{ totalAmount | currency:'USD' }}
+                </span>
+            </div>
           </div>
         </div>
 
@@ -85,6 +90,7 @@ interface PaymentOption {
 })
 export class PaymentModalComponent {
   @Input({ required: true }) totalAmount!: number;
+  @Input() exchangeRate: number = 0;
   @Output() onConfirm = new EventEmitter<{ method: PaymentMethod; amount: number }>();
   @Output() onCancel = new EventEmitter<void>();
 
