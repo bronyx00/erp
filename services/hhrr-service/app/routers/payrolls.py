@@ -1,41 +1,84 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
+from sqlalchemy import func, or_, desc
+from typing import Optional
 from .. import schemas
 from app.database import get_db
 from app.models import Payroll
-from app.services.payroll_engine import create_bulk_payrolls, generate_payroll_event, process_bulk_payment
-from pydantic import BaseModel
+from app.services.payroll_engine import create_bulk_payrolls, process_bulk_payment
 from datetime import date
 from erp_common.security import RequirePermission, Permissions, UserPayload
 
 router = APIRouter(prefix="/payrolls", tags=["Payrolls"])
 
-class PayrollCreate(BaseModel):
-    employee_id: int
-    period_start: date
-    period_end: date
-
-@router.post("/", response_model=dict)
-async def create_payroll(payroll_in: PayrollCreate, db: AsyncSession = Depends(get_db)):
-    """Crea una nómina en borrador y la calcula inmediatamente"""
+@router.get("/", response_model=schemas.PaginatedResponse[schemas.PayrollResponse])
+async def get_payrolls(
+    page: int = 1,
+    limit: int = 20,
+    search: Optional[str] = None,
+    status: Optional[str] = None,     # Filtro opcional: 'PAID', 'DRAFT', etc.
+    period_start: Optional[date] = None,
+    period_end: Optional[date] = None,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.PAYROLL_PROCESS))
+):
+    """
+    Obtiene el historial de nóminas con paginación, búsqueda y filtros.
+    """
+    offset = (page - 1) * limit
     
-    # 1. Crear Objeto DB
-    new_payroll = Payroll(
-        employee_id=payroll_in.employee_id,
-        period_start=payroll_in.period_start,
-        period_end=payroll_in.period_end,
-        tenant_id=1, # Debería venir del token JWT
-        total_earnings=0, net_pay=0 # Se calcularán luego
+    # Condiciones base
+    conditions = [
+        Payroll.tenant_id == user.tenant_id
+    ]
+    
+    if status:
+        conditions.append(Payroll.status == status)
+    if period_start:
+        conditions.append(Payroll.period_start >= period_start)
+    if period_end:
+        conditions.append(Payroll.period_end <= period_end)
+        
+    
+    if search:
+        search_term = f"%{search}%"
+        conditions.append(
+            or_(
+                Payroll.employee.ilike(search_term),
+                Payroll.id.ilike(search_term),
+                Payroll.employee.identification.ilike(search_term)
+            )
+        )
+    
+    # Conteo rápido
+    count_query = select(func.count(Payroll.id)).filter(*conditions)
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Obtener Datos
+    query = (
+        select(Payroll)
+        .filter(*conditions)
+        .options(selectinload(Payroll.employee))
+        .order_by(desc(Payroll.period_end), desc(Payroll.id))
+        .offset(offset)
+        .limit(limit)
     )
-    db.add(new_payroll)
-    await db.commit()
-    await db.refresh(new_payroll)
     
-    # 2. Llamar al Engine para cálculo real
-    calculated_payroll = await generate_payroll_event(new_payroll, db)
+    result = await db.execute(query)
+    data = result.scalars().all()
     
-    return {"status": "success", "payroll_id": calculated_payroll.id, "net_pay": calculated_payroll.net_pay}
+    return {
+        "data": data,
+        "meta": {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total + limit - 1) // limit if limit > 0 else 0
+        }
+    }
 
 @router.post("/bulk-pay", status_code=status.HTTP_200_OK)
 async def bulk_pay_payrolls(

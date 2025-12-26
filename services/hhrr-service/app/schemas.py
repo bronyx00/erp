@@ -161,6 +161,39 @@ class PayrollBulkPayRequest(BaseModel):
     reference: Optional[str] = None
     notes: Optional[str] = None
     
+class EmployeeSummary(BaseModel):
+    """Muestra el empleado dentro de la nómina"""
+    id: int
+    first_name: str
+    last_name: str
+    identification: str
+
+    class Config:
+        from_attributes = True
+
+class PayrollResponse(BaseModel):
+    id: int
+    tenant_id: int
+    employee_id: int
+    period_start: date
+    period_end: date
+    
+    # Montos
+    base_salary: float
+    total_earnings: float
+    total_deductions: float
+    net_pay: float
+    
+    status: str
+    payment_method: Optional[str] = None
+    created_at: datetime
+    
+    # Relación 
+    employee: Optional[EmployeeSummary] = None
+
+    class Config:
+        from_attributes = True
+    
 # --- NOTAS ---
 
 class SupervisorNoteCreate(BaseModel):
