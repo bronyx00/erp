@@ -1,17 +1,20 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, inject, signal, computed, ViewChild } from '@angular/core';
 import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { debounceTime, distinctUntilChanged } from 'rxjs';
 
 import { HhrrService, Employee } from '../../core/services/hhrr';
+import { AccessControlComponent } from './components/access-control/access-control.component';
+import { UserFormComponent } from './components/user-form/user-form.component';
 import { EmployeeFormComponent } from './components/employee-form/employee-form.component';
 import { EmployeeProfileComponent } from './components/employee-profile/employee-profile.component';
 import { ScheduleManagerComponent } from './components/schedule-manager/schedule-manager.component';
 import { PayrollHistoryComponent } from './components/payroll-history/payroll-history.component';
 import { PayrollGeneratorComponent } from './components/payroll-generator/payroll-generator.component';
 
+
 type Tab = 'EMPLOYEES' | 'PAYROLL' | 'ACCESS';
-type DrawerMode = 'CREATE' | 'VIEW_PROFILE' | 'EDIT' | 'MANAGE_SCHEDULE';
+type DrawerMode = 'CREATE' | 'VIEW_PROFILE' | 'EDIT' | 'MANAGE_SCHEDULE' | 'CREATE_USER';
 
 @Component({
     selector: 'app-employees',
@@ -19,12 +22,16 @@ type DrawerMode = 'CREATE' | 'VIEW_PROFILE' | 'EDIT' | 'MANAGE_SCHEDULE';
     imports: [
         CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, 
         EmployeeFormComponent, EmployeeProfileComponent, ScheduleManagerComponent,
-        PayrollHistoryComponent, PayrollGeneratorComponent
+        PayrollHistoryComponent, PayrollGeneratorComponent, AccessControlComponent,
+        UserFormComponent
     ],
     templateUrl: './employees.component.html'
 })
 export class EmployeesComponent implements OnInit {
     private hhrrService = inject(HhrrService);
+
+    // Referencia para recargar la tabla de usuarios
+    @ViewChild(AccessControlComponent) accessControl!: AccessControlComponent;
 
     // UI State
     activeTab = signal<Tab>('EMPLOYEES');
@@ -33,14 +40,13 @@ export class EmployeesComponent implements OnInit {
 
     // Data State
     employees = signal<Employee[]>([]);
-    serverPayrollTotal = signal(0);
     isLoading = signal(true);
 
     // Pagination State
     currentPage = signal(1);
     pageSize = signal(10);
     totalItems = signal(0);
-
+    serverPayrollTotal = signal(0);
 
     // Drawer & Modals
     isDrawerOpen = signal(false);
@@ -52,7 +58,11 @@ export class EmployeesComponent implements OnInit {
         const all = this.employees();
         const active = all.filter(e => e.is_active).length;
 
-        return { total: all.length, active, monthlyPayroll: this.serverPayrollTotal() };
+        return { 
+            total: all.length, 
+            active: active,
+            monthlyPayroll: this.serverPayrollTotal() 
+        };
     });
 
     // Pagination Helper
@@ -100,9 +110,9 @@ export class EmployeesComponent implements OnInit {
         this.isLoading.set(true);
 
         this.hhrrService.getEmployees(
-        this.currentPage(), 
-        this.pageSize(), 
-        this.searchTerm()
+            this.currentPage(), 
+            this.pageSize(), 
+            this.searchTerm()
         ).subscribe({
             next: (response: any) => {
                 const list = Array.isArray(response) ? response : (response.data || []);
@@ -131,13 +141,7 @@ export class EmployeesComponent implements OnInit {
             this.loadData();
     }
 
-    // ACCIONES
-
-    openProfile(employee: Employee) {
-        this.selectedEmployee.set(employee);
-        this.drawerMode.set('VIEW_PROFILE');
-        this.isDrawerOpen.set(true);
-    }
+    // --- ACCIONES GENERALES ---
 
     openCreate() {
         this.selectedEmployee.set(null);
@@ -165,11 +169,6 @@ export class EmployeesComponent implements OnInit {
         this.selectedEmployee.set(null);
     }
 
-    closePayrollWizard() {
-        this.isPayrollWizardOpen.set(false);
-        // Opcional: Recargar historial si terminó
-    }
-
     handleSave(employee: Employee) {
         this.loadData(); 
         this.closeDrawer();
@@ -178,4 +177,34 @@ export class EmployeesComponent implements OnInit {
     getInitials(first: string, last: string): string {
         return (first.charAt(0) + last.charAt(0)).toUpperCase();
     }
+
+    openProfile(employee: Employee) {
+        this.selectedEmployee.set(employee);
+        this.drawerMode.set('VIEW_PROFILE');
+        this.isDrawerOpen.set(true);
+    }
+
+    closePayrollWizard() {
+        this.isPayrollWizardOpen.set(false);
+        // Opcional: Recargar historial si terminó
+    }
+
+    // --- ACCIONES DE USUARIOS (NUEVO) ---
+
+    openCreateUser() {
+        this.selectedEmployee.set(null);
+        this.drawerMode.set('CREATE_USER');
+        this.isDrawerOpen.set(true);
+    }
+
+    handleUserCreated() {
+        this.closeDrawer();
+        // Si estamos en la tab de accesos, refrescamos la tabla
+        if (this.activeTab() === 'ACCESS' && this.accessControl) {
+            this.accessControl.loadUsers();
+        }
+    }
+
+    
+    
 }

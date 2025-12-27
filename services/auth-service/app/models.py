@@ -3,76 +3,60 @@ from sqlalchemy.orm import relationship
 from .database import Base
 import enum
 
+# --- ENUMS ---
 class TaxType(str, enum.Enum):
-    EXCLUSIVE = "EXCLUSIVE" # El precio base NO incluye IVA ( Precio + IVA )
-    INCLUSIVE = "INCLUSIVE" # El precio base YA inclute IVA (Desglosar al facturar)
+    EXCLUSIVE = "EXCLUSIVE"
+    INCLUSIVE = "INCLUSIVE"
 
-# Enums para las preferencias
 class InvoiceFormat(str, enum.Enum):
     TICKET = "TICKET"
     FULL_PAGE = "FULL_PAGE"
     
 class CurrencyDisplay(str, enum.Enum):
-    VES_ONLY = "VES_ONLY"       # Todo en Bolivares
-    DUAL = "DUAL"               # Muestra Bs y $ en cada línea
-    MIXED_TOTAL = "MIXED_TOTAL" # Líneas en BS, Total final muestra ref en $
+    VES_ONLY = "VES_ONLY"
+    DUAL = "DUAL"
+    MIXED_TOTAL = "MIXED_TOTAL"
 
 class UserRole(str, enum.Enum):
-    OWNER = "OWNER"             # Dueño absoluto (Empresa)
-    ADMIN = "ADMIN"             # Gestión del Sistema
-    
-    # Finanzas / Ventas
-    SALES_AGENT = "SALES_AGENT"             # Cajero / Vendedor (Crea Facturas)
-    SALES_SUPERVISOR = "SALES_SUPERVISOR"   # Revisa cuadres y ventas (Lectura)
-    ACCOUNTANT = "ACCOUNTANT"               # Contador (Libros, Reportes)
-    
-    # Inventario / Almacén
-    WAREHOUSE_CLERK = "WAREHOUSE_CLERK"             # Almacenista (Carga productos)
-    WAREHOUSE_SUPERVISOR = "WAREHOUSE_SUPERVISOR"   # Auditor de Inventario (Lectura)
-    
-    RRHH_MANAGER = "RRHH_MANAGER"           # Gestión nómina y personal
+    OWNER = "OWNER"
+    ADMIN = "ADMIN"
+    SALES_AGENT = "SALES_AGENT"
+    SALES_SUPERVISOR = "SALES_SUPERVISOR"
+    ACCOUNTANT = "ACCOUNTANT"
+    WAREHOUSE_CLERK = "WAREHOUSE_CLERK"
+    WAREHOUSE_SUPERVISOR = "WAREHOUSE_SUPERVISOR"
+    RRHH_MANAGER = "RRHH_MANAGER"
+    PROJECT_MANAGER = "PROJECT_MANAGER"
 
-
+# --- MODELOS ---
 class Tenant(Base):
-    """
-    Representa a la Empresa/Negocio.
-    Todos los datos del sistema (facturas, productos) pertenecerána un Tenant ID.
-    """
     __tablename__ = "tenants"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)   # Nombre de la empresa
+    name = Column(String, index=True, nullable=False)
     
-    # ---- DATOS FISCALES ----
-    rif = Column(String, nullable=False)                 # Ej: J-12345678-9
-    business_name = Column(String, nullable=False)       # Razón Social
-    address = Column(String, nullable=False)             # Dirección fiscal
+    # Datos Fiscales
+    rif = Column(String, nullable=False)
+    business_name = Column(String, nullable=False)
+    address = Column(String, nullable=False)
     phone = Column(String, nullable=True)
     
-    # ---- PREFERENCIAS DE FACTURACIÖN ----
+    # Preferencias
     invoice_format = Column(SQLEnum(InvoiceFormat), default=InvoiceFormat.TICKET)
     currency_display = Column(SQLEnum(CurrencyDisplay), default=CurrencyDisplay.VES_ONLY)
-    
-    # Campo simple para manejar sucursales por ahora (Cambiar luego por tabla)
     current_local_id = Column(String, default="CASA MATRIZ")
     
-    # ---- CONFIGURACIÓN DE FACTURACIÓN ----
-    # ¿Cobramos IVA?
+    # Configuración Fiscal
     tax_active = Column(Boolean, default=True)
-    # ¿El precio del inventario ya tiene IVA o se le suma?
     tax_type = Column(SQLEnum(TaxType), default=TaxType.EXCLUSIVE)
-    # Tasa de impuesto (16% estándar)
     tax_rate = Column(Integer, default=16)
     
-    plan = Column(String, default="BASIC")              # Plan contratado por la empresa
+    plan = Column(String, default="BASIC")
     is_active = Column(Boolean, default=True)
     
     users = relationship("User", back_populates="tenant")
 
 class User(Base):
-    """
-    Representa a un empleado dentro del sistema
-    """
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -80,10 +64,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    role = Column(String, default=UserRole.OWNER.value, nullable=False)
     
-    role = Column(String, default=UserRole.OWNER, nullable=False)
-    
-    # A qué empresa pertenece este usuario
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
-    
     tenant = relationship("Tenant", back_populates="users")

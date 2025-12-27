@@ -1,5 +1,19 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
-from typing import Optional
+from typing import Optional, List, Generic, TypeVar
+from .models import UserRole
+
+T = TypeVar("T")
+
+# --- GENÉRICOS ---
+class MetaData(BaseModel):
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    data: List[T]
+    meta: MetaData
 
 # --- TENANT ---
 class TenantBase(BaseModel):
@@ -13,55 +27,39 @@ class TenantBase(BaseModel):
     currency_display: str = "VES_ONLY"
     tax_rate: int = 16
 
-class TenantCreate(TenantBase):
-    """Datos necesarios para registrar una nueva empresa."""
-    pass
-    
 class TenantResponse(TenantBase):
     id: int
     plan: str
     model_config = ConfigDict(from_attributes=True)
 
-
 # --- USER ---
 class UserBase(BaseModel):
     email: EmailStr
-
-class UserCreate(UserBase):
-    """
-    Datos para registrar al DUEÑO inicial.
-    Incluye el nombre de la empresa que está fundando.
-    """
-    full_name: str              # Nombre completo del dueño
-    password: str
-    # Datos de la empresa
-    company_name: str           # Nombre Comercial
-    company_rif: str            # RIF Obligatorio
-    company_address: str        # Dirección Obligatoria
-    company_business_name: str  # Razón Social
-
-class SubUserCreate(UserBase):
-    """Creación de empleados."""
     full_name: str
+
+# Schema exclusivo para el registro inicial (Dueño + Empresa)
+class OnboardingRequest(UserBase):
     password: str
-    role: str
+    company_name: str
+    company_rif: str
+    company_address: str
+    company_business_name: str
+
+# Schema para crear empleados internos
+class UserCreateInternal(UserBase):
+    password: str
+    role: UserRole
 
 class UserResponse(UserBase):
     id: int
+    email: str
     is_active: bool
     role: str
     tenant_id: int
     tenant: TenantResponse
-
-    # Configuración para leer desde modelos ORM (SQLAlchemy)
     model_config = ConfigDict(from_attributes=True)
 
+# --- AUTH ---
 class Token(BaseModel):
     access_token: str
     token_type: str
-    
-class TokenPayload(BaseModel):
-    """Para validar el token internamente."""
-    sub: str
-    role: str
-    tenant_id: int

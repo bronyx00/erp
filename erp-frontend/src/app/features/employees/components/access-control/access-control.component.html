@@ -1,0 +1,90 @@
+<div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full animate-in fade-in zoom-in-95 duration-300">
+    <div class="px-6 py-4 border-b border-slate-100 bg-white flex justify-between items-center sticky top-0 z-20">
+        <div class="flex items-center gap-2 text-sm text-slate-500">
+                <i class="fas fa-shield-alt text-indigo-500"></i>
+                <span class="font-medium">Usuarios del Sistema</span>
+        </div>
+        <button (click)="onCreate.emit()" 
+                class="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 shadow-sm transition flex items-center gap-2 active:scale-95">
+            <i class="fas fa-plus"></i> Nuevo Usuario
+        </button>
+    </div>
+
+    <div class="flex-1 overflow-auto bg-white relative min-h-[300px]">
+        <table class="w-full text-left">
+            <thead class="bg-slate-50 sticky top-0 z-10 border-b border-slate-200 shadow-sm">
+                <tr>
+                    <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Usuario</th>
+                    <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Rol</th>
+                    <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase text-center">Estado</th>
+                    <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Tenant ID</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                @if (isLoading()) {
+                    <tr><td colspan="4" class="px-6 py-20 text-center text-slate-400">
+                        <i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-indigo-500"></i><br>Cargando usuarios...
+                    </td></tr>
+                } @else if (users().length === 0) {
+                    <tr><td colspan="4" class="px-6 py-20 text-center text-slate-400 italic">
+                        No se encontraron usuarios que coincidan con la búsqueda.
+                    </td></tr>
+                } @else {
+                    @for (u of users(); track u.id) {
+                        <tr class="hover:bg-slate-50 transition group">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="h-9 w-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-bold uppercase border border-slate-200 shadow-sm">
+                                        {{ u.full_name ? u.full_name.charAt(0) : u.email.charAt(0) }}
+                                    </div>
+                                    <div>
+                                        <p class="font-bold text-slate-800 text-sm">{{ u.full_name || 'Sin Nombre' }}</p>
+                                        <p class="text-xs text-slate-500 flex items-center gap-1 font-mono">
+                                            {{ u.email }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase border bg-slate-50 border-slate-200 text-slate-600 tracking-wide">
+                                    {{ u.role.replace('_', ' ') }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-center">
+                                <span [class]="u.is_active ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-rose-100 text-rose-700 border-rose-200'"
+                                        class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border inline-flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full" [class]="u.is_active ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                                    {{ u.is_active ? 'Activo' : 'Inactivo' }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-xs text-slate-400 font-mono">
+                                #{{ u.tenant_id }}
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs text-slate-500 select-none">
+        <div>
+            Mostrando <span class="font-bold text-slate-800">{{ paginationState().start }}</span> - 
+            <span class="font-bold text-slate-800">{{ paginationState().end }}</span> de 
+            <span class="font-bold text-slate-800">{{ paginationState().total }}</span> usuarios
+        </div>
+        <div class="flex gap-2">
+            <button (click)="changePage(currentPage() - 1)" [disabled]="!paginationState().hasPrev"
+                    class="px-3 py-1.5 border border-slate-300 bg-white rounded-lg hover:bg-slate-50 disabled:opacity-50 transition flex items-center gap-1">
+                <i class="fas fa-chevron-left text-[10px]"></i> Anterior
+            </button>
+            <div class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-slate-700 shadow-sm">
+                {{ currentPage() }}
+            </div>
+            <button (click)="changePage(currentPage() + 1)" [disabled]="!paginationState().hasNext"
+                    class="px-3 py-1.5 border border-slate-300 bg-white rounded-lg hover:bg-slate-50 disabled:opacity-50 transition flex items-center gap-1">
+                Siguiente <i class="fas fa-chevron-right text-[10px]"></i>
+            </button>
+        </div>
+    </div>
+</div>

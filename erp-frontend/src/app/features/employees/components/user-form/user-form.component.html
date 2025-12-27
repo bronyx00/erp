@@ -1,0 +1,111 @@
+<div class="h-full flex flex-col bg-white">
+        <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <div>
+                <h2 class="text-lg font-bold text-slate-800">Crear Credencial</h2>
+                <p class="text-xs text-slate-500">Asigna acceso a un empleado</p>
+            </div>
+            <button (click)="onCancel.emit()" class="text-slate-400 hover:text-slate-600 transition">
+                <i class="fas fa-times text-lg"></i>
+            </button>
+        </div>
+
+        <form [formGroup]="form" (ngSubmit)="submit()" class="flex-1 overflow-y-auto p-6 space-y-6">
+            
+            <div class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                <label class="block text-xs font-bold text-indigo-900 mb-2 uppercase tracking-wide">1. Seleccionar Empleado</label>
+                <div class="relative">
+                    <i class="fas fa-user-tag absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400"></i>
+                    <select (change)="onEmployeeSelect($event)" class="w-full pl-10 pr-4 py-3 bg-white border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-slate-700 shadow-sm cursor-pointer appearance-none">
+                        <option [value]="null">-- Buscar en la nómina --</option>
+                        @for (emp of availableEmployees(); track emp.id) {
+                            <option [value]="emp.id">{{ emp.first_name }} {{ emp.last_name }} - {{ emp.position }}</option>
+                        }
+                    </select>
+                    <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none text-xs"></i>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">2. Datos de Acceso</label>
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Correo (Login)</label>
+                    <input formControlName="email" type="email" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm transition" placeholder="ejemplo@empresa.com">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Contraseña</label>
+                    <input formControlName="password" type="text" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-mono transition" placeholder="Mínimo 6 caracteres">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">3. Nivel de Autoridad</label>
+                
+                <div class="space-y-4">
+                    
+                    <div>
+                        <h4 class="text-xs font-bold text-indigo-600 mb-2 flex items-center gap-1"><i class="fas fa-cash-register"></i> Ventas & Caja</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <label class="role-card" [class.active]="role === 'SALES_AGENT'">
+                                <input type="radio" formControlName="role" value="SALES_AGENT" class="hidden">
+                                <div class="font-bold text-sm">Agente</div>
+                                <div class="text-[10px] opacity-70">Facturar y ver precios.</div>
+                            </label>
+                            <label class="role-card" [class.active]="role === 'SALES_SUPERVISOR'">
+                                <input type="radio" formControlName="role" value="SALES_SUPERVISOR" class="hidden">
+                                <div class="font-bold text-sm">Supervisor</div>
+                                <div class="text-[10px] opacity-70">Anular, reportes ventas.</div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-xs font-bold text-emerald-600 mb-2 flex items-center gap-1"><i class="fas fa-boxes"></i> Inventario</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <label class="role-card" [class.active]="role === 'WAREHOUSE_CLERK'">
+                                <input type="radio" formControlName="role" value="WAREHOUSE_CLERK" class="hidden">
+                                <div class="font-bold text-sm">Almacenista</div>
+                                <div class="text-[10px] opacity-70">Entradas/Salidas simples.</div>
+                            </label>
+                            <label class="role-card" [class.active]="role === 'WAREHOUSE_SUPERVISOR'">
+                                <input type="radio" formControlName="role" value="WAREHOUSE_SUPERVISOR" class="hidden">
+                                <div class="font-bold text-sm">Jefe Almacén</div>
+                                <div class="text-[10px] opacity-70">Ajustes, auditoría.</div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-xs font-bold text-slate-600 mb-2 flex items-center gap-1"><i class="fas fa-building"></i> Gerencia</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <label class="role-card" [class.active]="role === 'ACCOUNTANT'">
+                                <input type="radio" formControlName="role" value="ACCOUNTANT" class="hidden">
+                                <div class="font-bold text-sm">Contador</div>
+                                <div class="text-[10px] opacity-70">Libros, impuestos, nómina.</div>
+                            </label>
+                            <label class="role-card" [class.active]="role === 'ADMIN'">
+                                <input type="radio" formControlName="role" value="ADMIN" class="hidden">
+                                <div class="font-bold text-sm">Admin</div>
+                                <div class="text-[10px] opacity-70">Control total sistema.</div>
+                            </label>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </form>
+
+        <div class="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+            <button (click)="onCancel.emit()" class="flex-1 py-3 border border-slate-300 rounded-xl font-bold text-slate-700 hover:bg-white transition text-sm">Cancelar</button>
+            <button (click)="submit()" 
+                    [disabled]="form.invalid || isLoading()"
+                    class="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 disabled:opacity-70 transition flex items-center justify-center gap-2 text-sm">
+                <i *ngIf="isLoading()" class="fas fa-circle-notch fa-spin"></i>
+                Crear Usuario
+            </button>
+        </div>
+    </div>
