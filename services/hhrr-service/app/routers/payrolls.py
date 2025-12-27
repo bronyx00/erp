@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
-from sqlalchemy import func, or_, desc, delete
+from sqlalchemy import func, or_, desc, delete, cast, String
 from typing import Optional
 from .. import schemas
 from app.database import get_db
-from app.models import Payroll
+from app.models import Payroll, Employee
 from app.services.payroll_engine import create_bulk_payrolls, process_bulk_payment
 from datetime import date
 from erp_common.security import RequirePermission, Permissions, UserPayload
@@ -29,6 +29,8 @@ async def get_payrolls(
     """
     offset = (page - 1) * limit
     
+    stmt = select(Payroll).join(Payroll.employee)
+    
     # Condiciones base
     conditions = [
         Payroll.tenant_id == user.tenant_id
@@ -46,11 +48,14 @@ async def get_payrolls(
         search_term = f"%{search}%"
         conditions.append(
             or_(
-                Payroll.employee.ilike(search_term),
-                Payroll.id.ilike(search_term),
-                Payroll.employee.identification.ilike(search_term)
+                Employee.first_name.ilike(search_term),
+                Employee.last_name.ilike(search_term),
+                Employee.identification.ilike(search_term),
+                cast(Payroll.id, String).ilike(search_term)
             )
         )
+    
+    
     
     # Conteo rápido
     count_query = select(func.count(Payroll.id)).filter(*conditions)
@@ -59,7 +64,7 @@ async def get_payrolls(
     
     # Obtener Datos
     query = (
-        select(Payroll)
+        stmt
         .filter(*conditions)
         .options(selectinload(Payroll.employee))
         .order_by(desc(Payroll.period_end), desc(Payroll.id))

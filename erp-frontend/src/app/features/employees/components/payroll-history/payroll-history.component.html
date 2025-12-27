@@ -1,6 +1,6 @@
 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
     
-    <div class="px-6 py-4 border-b border-slate-100 bg-white flex flex-wrap gap-4 justify-between items-center">
+    <div class="px-6 py-4 border-b border-slate-100 bg-white flex flex-wrap gap-4 justify-between items-center sticky top-0 z-20">
         
         <div class="flex gap-1 bg-slate-100 p-1 rounded-lg">
             <button (click)="setFilter('ALL')" 
@@ -22,9 +22,8 @@
 
         @if (selectedIds().length > 0) {
             <div class="flex gap-2 animate-in fade-in slide-in-from-right-2">
-                
                 <button (click)="deleteSelected()" 
-                        class="px-4 py-2 bg-rose-50 border border-rose-100 text-rose-600 text-xs font-bold rounded-lg hover:bg-rose-100 hover:border-rose-200 transition-colors flex items-center gap-2">
+                        class="px-4 py-2 bg-rose-50 border border-rose-100 text-rose-600 text-xs font-bold rounded-lg hover:bg-rose-100 transition-colors flex items-center gap-2">
                     <i class="fas fa-trash-alt"></i>
                     <span>Eliminar ({{ selectedIds().length }})</span>
                 </button>
@@ -40,7 +39,7 @@
         }
     </div>
 
-    <div class="flex-1 overflow-y-auto">
+    <div class="flex-1 overflow-auto bg-white relative min-h-[300px]">
         <table class="w-full text-left">
             <thead class="bg-slate-50 sticky top-0 z-10 border-b border-slate-200 shadow-sm">
                 <tr>
@@ -53,14 +52,20 @@
                     <th class="px-4 py-3 text-xs font-bold text-slate-500 uppercase text-right">Deducciones</th>
                     <th class="px-4 py-3 text-xs font-bold text-slate-500 uppercase text-right">Neto</th>
                     <th class="px-4 py-3 text-xs font-bold text-slate-500 uppercase text-center">Estado</th>
+                    <th class="px-4 py-3"></th>
+                </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
                 @if (isLoading()) {
-                    <tr><td colspan="7" class="px-6 py-12 text-center text-slate-400">Cargando datos...</td></tr>
-                } @else if (filteredPayrolls().length === 0) {
-                    <tr><td colspan="7" class="px-6 py-12 text-center text-slate-400 italic">No se encontraron registros.</td></tr>
+                    <tr><td colspan="8" class="px-6 py-20 text-center text-slate-400">
+                        <i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-indigo-500"></i><br>Cargando datos...
+                    </td></tr>
+                } @else if (payrolls().length === 0) {
+                    <tr><td colspan="8" class="px-6 py-20 text-center text-slate-400 italic">
+                        <i class="fas fa-inbox text-3xl mb-2 opacity-50"></i><br>No se encontraron registros.
+                    </td></tr>
                 } @else {
-                    @for (p of filteredPayrolls(); track p.id) {
+                    @for (p of payrolls(); track p.id) {
                         <tr class="hover:bg-slate-50 transition group">
                             <td class="px-4 py-3 text-center">
                                 @if (p.status === 'CALCULATED' || p.status === 'DRAFT') {
@@ -70,39 +75,21 @@
                                         class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
                                 }
                             </td>
-                            
-                            <td class="px-4 py-3">
-                                <span class="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded">
-                                    {{ p.period_end | date:'dd/MM' }}
-                                </span>
-                            </td>
-                            
+                            <td class="px-4 py-3"><span class="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded">{{ p.period_end | date:'dd/MM' }}</span></td>
                             <td class="px-4 py-3">
                                 <div class="flex flex-col">
                                     <span class="text-sm font-bold text-slate-700">{{ p.employee?.first_name }} {{ p.employee?.last_name }}</span>
                                     <span class="text-[10px] text-slate-400 font-mono">{{ p.employee?.identification }}</span>
                                 </div>
                             </td>
-                            
-                            <td class="px-4 py-3 text-right text-emerald-600 text-sm font-medium">
-                                +{{ p.total_earnings | number:'1.2-2' }}
-                            </td>
-                            <td class="px-4 py-3 text-right text-rose-500 text-sm font-medium">
-                                -{{ p.total_deductions | number:'1.2-2' }}
-                            </td>
-                            <td class="px-4 py-3 text-right">
-                                <span class="font-bold text-slate-800 bg-slate-50 px-2 py-1 rounded">{{ p.net_pay | currency:'USD' }}</span>
-                            </td>
-                            
+                            <td class="px-4 py-3 text-right text-emerald-600 text-sm font-medium">+{{ p.total_earnings | number:'1.2-2' }}</td>
+                            <td class="px-4 py-3 text-right text-rose-500 text-sm font-medium">-{{ p.total_deductions | number:'1.2-2' }}</td>
+                            <td class="px-4 py-3 text-right"><span class="font-bold text-slate-800 bg-slate-50 px-2 py-1 rounded">{{ p.net_pay | currency:'USD' }}</span></td>
                             <td class="px-4 py-3 text-center">
                                 @if(p.status === 'PAID') {
-                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-emerald-600 border border-emerald-200">
-                                        <i class="fas fa-check"></i> Pagado
-                                    </span>
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-50 text-emerald-600 border border-emerald-200"><i class="fas fa-check"></i> Pagado</span>
                                 } @else {
-                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-50 text-amber-600 border border-amber-200">
-                                        <i class="fas fa-clock"></i> Pendiente
-                                    </span>
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-50 text-amber-600 border border-amber-200"><i class="fas fa-clock"></i> Pendiente</span>
                                 }
                             </td>
                         </tr>
@@ -111,51 +98,33 @@
             </tbody>
         </table>
     </div>
-</div>
 
-@if (showPreviewModal()) {
-    <div class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+    <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs text-slate-500 select-none">
+        
+        <div>
+            Mostrando <span class="font-bold text-slate-800">{{ paginationState().start }}</span> - 
+            <span class="font-bold text-slate-800">{{ paginationState().end }}</span> de 
+            <span class="font-bold text-slate-800">{{ paginationState().total }}</span> resultados
+        </div>
+
+        <div class="flex gap-2">
+            <button (click)="changePage(currentPage() - 1)" 
+                    [disabled]="!paginationState().hasPrev"
+                    class="px-3 py-1.5 border border-slate-300 bg-white rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1 font-medium">
+                <i class="fas fa-chevron-left text-[10px]"></i> Anterior
+            </button>
             
-            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <h3 class="text-lg font-bold text-slate-800">Confirmar Pago de Lote</h3>
-                <button (click)="showPreviewModal.set(false)" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            <div class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-slate-700">
+                Página {{ currentPage() }}
             </div>
 
-            <div class="p-6">
-                <div class="flex items-center gap-4 mb-6">
-                    <div class="h-12 w-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl shrink-0">
-                        <i class="fas fa-file-invoice-dollar"></i>
-                    </div>
-                    <div>
-                        <p class="text-slate-500 text-sm">Estás a punto de procesar</p>
-                        <p class="text-2xl font-extrabold text-slate-800">{{ selectionSummary().count }} nóminas</p>
-                    </div>
-                </div>
-
-                <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 mb-6 space-y-2">
-                    <div class="flex justify-between text-sm">
-                        <span class="text-slate-500">Total a Debitar:</span>
-                        <span class="font-bold text-slate-900">{{ selectionSummary().total | currency:'USD' }}</span>
-                    </div>
-                    <div class="flex justify-between text-sm">
-                        <span class="text-slate-500">Método:</span>
-                        <span class="font-mono text-slate-700">TRANSFERENCIA BANCARIA</span>
-                    </div>
-                </div>
-
-                <div class="flex gap-3">
-                    <button (click)="showPreviewModal.set(false)" class="flex-1 py-3 border border-slate-300 rounded-xl font-bold text-slate-700 hover:bg-slate-50">
-                        Cancelar
-                    </button>
-                    <button (click)="confirmBatchPayment()" 
-                            [disabled]="isLoading()"
-                            class="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 disabled:opacity-70 flex justify-center items-center gap-2">
-                        <i *ngIf="isLoading()" class="fas fa-circle-notch fa-spin"></i>
-                        Confirmar Pago
-                    </button>
-                </div>
-            </div>
+            <button (click)="changePage(currentPage() + 1)" 
+                    [disabled]="!paginationState().hasNext"
+                    class="px-3 py-1.5 border border-slate-300 bg-white rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1 font-medium">
+                Siguiente <i class="fas fa-chevron-right text-[10px]"></i>
+            </button>
         </div>
     </div>
-}
+</div>
+
+@if (showPreviewModal()) { ... }

@@ -1,8 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from typing import Optional, Dict, Any
+from typing import Optional
 from . import models, schemas
 from datetime import datetime
 
@@ -53,14 +53,26 @@ async def check_employee_access(db: AsyncSession, email: str, tenant_id: int) ->
     
     return False
 
-async def get_employees(db: AsyncSession, tenant_id: int, page: int = 1, limit: int = 50):
+async def get_employees(db: AsyncSession, tenant_id: int, page: int = 1, limit: int = 50, search: Optional[str] = None):
     """Lista paginada de empleados."""
     offset = (page - 1) * limit
     conditions = [models.Employee.tenant_id == tenant_id]
+    
+    if search:
+        search_term = f"%{search}%"
+        conditions.append(
+            or_(
+                models.Employee.first_name.ilike(search_term),
+                models.Employee.last_name.ilike(search_term),
+                models.Employee.identification.ilike(search_term),
+                models.Employee.email.ilike(search_term)
+            )
+        )
 
     # Conteo Optimizado
     count_query = select(func.count(models.Employee.id)).filter(*conditions)
     total = (await db.execute(count_query)).scalar() or 0
+    
     
     # Consulta de datos
     query = (
@@ -72,13 +84,22 @@ async def get_employees(db: AsyncSession, tenant_id: int, page: int = 1, limit: 
     )
     result = await db.execute(query)
     
+    # Query de Nómina Mensual Total (Suma de salarios activos)
+    # Calculamos esto independiente de la paginación/búsqueda para mostrar el "Total Empresa"
+    payroll_query = select(func.sum(models.Employee.salary)).filter(
+        models.Employee.tenant_id == tenant_id,
+        models.Employee.is_active == True
+    )
+    total_payroll = (await db.execute(payroll_query)).scalar() or 0
+    
     return {
         "data": result.scalars().all(),
         "meta": {
             "total": total,
             "page": page,
             "limit": limit,
-            "total_pages": (total + limit - 1) // limit if limit > 0 else 0
+            "total_pages": (total + limit - 1) // limit if limit > 0 else 0,
+            "monthly_payroll": total_payroll
         }
     }
 

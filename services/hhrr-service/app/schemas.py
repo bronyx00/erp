@@ -12,6 +12,7 @@ class MetaData(BaseModel):
     page: int
     limit: int
     total_pages: int
+    monthly_payroll: Optional[float] = 0.0
 
 class PaginatedResponse(BaseModel, Generic[T]):
     data: List[T]

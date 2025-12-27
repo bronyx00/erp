@@ -14,120 +14,168 @@ type Tab = 'EMPLOYEES' | 'PAYROLL' | 'ACCESS';
 type DrawerMode = 'CREATE' | 'VIEW_PROFILE' | 'EDIT' | 'MANAGE_SCHEDULE';
 
 @Component({
-  selector: 'app-employees',
-  standalone: true,
-  imports: [
-    CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, 
-    EmployeeFormComponent, EmployeeProfileComponent, ScheduleManagerComponent,
-    PayrollHistoryComponent, PayrollGeneratorComponent
-  ],
-  templateUrl: './employees.component.html'
+    selector: 'app-employees',
+    standalone: true,
+    imports: [
+        CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, 
+        EmployeeFormComponent, EmployeeProfileComponent, ScheduleManagerComponent,
+        PayrollHistoryComponent, PayrollGeneratorComponent
+    ],
+    templateUrl: './employees.component.html'
 })
 export class EmployeesComponent implements OnInit {
-  private hhrrService = inject(HhrrService);
+    private hhrrService = inject(HhrrService);
 
-  activeTab = signal<Tab>('EMPLOYEES');
-  employees = signal<Employee[]>([]);
-  isLoading = signal(true);
+    // UI State
+    activeTab = signal<Tab>('EMPLOYEES');
+    searchControl = new FormControl('');
+    searchTerm = signal('');
 
-  searchControl = new FormControl('');
-  searchTerm = signal('');
+    // Data State
+    employees = signal<Employee[]>([]);
+    serverPayrollTotal = signal(0);
+    isLoading = signal(true);
 
-  // Drawer
-  isDrawerOpen = signal(false);
-  drawerMode = signal<DrawerMode>('CREATE');
-  selectedEmployee = signal<Employee | null>(null);
+    // Pagination State
+    currentPage = signal(1);
+    pageSize = signal(10);
+    totalItems = signal(0);
 
-  // Wizard de nómina
-  isPayrollWizardOpen = signal(false);
 
-  filteredEmployees = computed(() => {
-    const term = this.searchTerm().toLowerCase();
-    return this.employees().filter(e => 
-      e.first_name.toLowerCase().includes(term) || 
-      e.last_name.toLowerCase().includes(term) ||
-      e.identification.includes(term) ||
-      e.position.toLowerCase().includes(term)
-    );
-  });
+    // Drawer & Modals
+    isDrawerOpen = signal(false);
+    drawerMode = signal<DrawerMode>('CREATE');
+    selectedEmployee = signal<Employee | null>(null);
+    isPayrollWizardOpen = signal(false);
 
-  stats = computed(() => {
-    const all = this.employees();
-    const active = all.filter(e => e.is_active).length;
-    const payroll = all.filter(e => e.is_active).reduce((acc, curr) => acc + parseFloat(curr.salary as string || '0'), 0);
-    return { total: all.length, active, monthlyPayroll: payroll };
-  });
+    stats = computed(() => {
+        const all = this.employees();
+        const active = all.filter(e => e.is_active).length;
 
-  ngOnInit() {
-    this.loadData();
-    this.searchControl.valueChanges
-      .pipe(debounceTime(300), distinctUntilChanged())
-      .subscribe(val => this.searchTerm.set(val || ''));
-  }
-
-  changeTab(tab: Tab) {
-    this.activeTab.set(tab);
-    this.searchTerm.set('');
-    this.searchControl.setValue('', { emitEvent: false }); 
-  }
-
-  loadData() {
-    this.isLoading.set(true);
-    this.hhrrService.getEmployees().subscribe({
-      next: (response: any) => {
-        const list = Array.isArray(response) ? response : (response.data || []);
-        this.employees.set(list);
-        this.isLoading.set(false);
-      },
-      error: () => this.isLoading.set(false)
+        return { total: all.length, active, monthlyPayroll: this.serverPayrollTotal() };
     });
-  }
 
-  // ACCIONES
+    // Pagination Helper
+    paginationState = computed(() => {
+        const total = this.totalItems();
+        const current = this.currentPage();
+        const size = this.pageSize();
+        const start = total === 0 ? 0 : (current - 1) * size + 1;
+        const end = Math.min(current * size, total);
+        const totalPages = Math.ceil(total / size);
 
-  openProfile(employee: Employee) {
-    this.selectedEmployee.set(employee);
-    this.drawerMode.set('VIEW_PROFILE');
-    this.isDrawerOpen.set(true);
-  }
+        return { start, end, total, totalPages, hasNext: current < totalPages, hasPrev: current > 1 };
+    });
 
-  openCreate() {
-    this.selectedEmployee.set(null);
-    this.drawerMode.set('CREATE');
-    this.isDrawerOpen.set(true);
-  }
+    ngOnInit() {
+        this.loadData();
 
-  openScheduleManager() {
-    this.selectedEmployee.set(null); 
-    this.drawerMode.set('MANAGE_SCHEDULE');
-    this.isDrawerOpen.set(true);
-  }
+        // Buscador Reactivo
+        this.searchControl.valueChanges
+            .pipe(debounceTime(400), distinctUntilChanged())
+            .subscribe(val => {
+                const term = val || '';
+                this.searchTerm.set(term);
 
-  openPayrollWizard() {
-    this.isPayrollWizardOpen.set(true);
-  }
+                // Si estamos en Empleados, recargamos la tabla
+                if (this.activeTab() === 'EMPLOYEES') {
+                    this.currentPage.set(1); // Reset a página 1 al buscar
+                    this.loadData();
+                }
+            });
+    }
 
-  switchToEdit(employee: Employee) {
-    this.selectedEmployee.set(employee);
-    this.drawerMode.set('EDIT');
-  }
+    changeTab(tab: Tab) {
+        this.activeTab.set(tab);
+        this.searchTerm.set('');
+        this.searchControl.setValue('', { emitEvent: false }); 
 
-  closeDrawer() {
-    this.isDrawerOpen.set(false);
-    this.selectedEmployee.set(null);
-  }
+        if (tab === 'EMPLOYEES') {
+            this.currentPage.set(1);
+            this.loadData();
+        }
+    }
 
-  closePayrollWizard() {
-    this.isPayrollWizardOpen.set(false);
-    // Opcional: Recargar historial si terminó
-  }
+    loadData() {
+        this.isLoading.set(true);
 
-  handleSave(employee: Employee) {
-    this.loadData(); 
-    this.closeDrawer();
-  }
+        this.hhrrService.getEmployees(
+        this.currentPage(), 
+        this.pageSize(), 
+        this.searchTerm()
+        ).subscribe({
+            next: (response: any) => {
+                const list = Array.isArray(response) ? response : (response.data || []);
 
-  getInitials(first: string, last: string): string {
-    return (first.charAt(0) + last.charAt(0)).toUpperCase();
-  }
+                const meta = response.meta || {};
+                const total = meta.total !== undefined ? meta.total : list.length;
+
+                const payrollSum = meta.monthly_payroll !== undefined ? meta.monthly_payroll : 0;
+
+                this.employees.set(list);
+                this.totalItems.set(total);
+                this.serverPayrollTotal.set(payrollSum); // Guardamos el valor
+
+                this.isLoading.set(false);
+            },
+            error: () => {
+                this.employees.set([]);
+                this.isLoading.set(false);
+            }
+        });
+    }
+
+    changePage(newPage: number) {
+        if (newPage < 1 || newPage > this.paginationState().totalPages) return;
+            this.currentPage.set(newPage);
+            this.loadData();
+    }
+
+    // ACCIONES
+
+    openProfile(employee: Employee) {
+        this.selectedEmployee.set(employee);
+        this.drawerMode.set('VIEW_PROFILE');
+        this.isDrawerOpen.set(true);
+    }
+
+    openCreate() {
+        this.selectedEmployee.set(null);
+        this.drawerMode.set('CREATE');
+        this.isDrawerOpen.set(true);
+    }
+
+    openScheduleManager() {
+        this.selectedEmployee.set(null); 
+        this.drawerMode.set('MANAGE_SCHEDULE');
+        this.isDrawerOpen.set(true);
+    }
+
+    openPayrollWizard() {
+        this.isPayrollWizardOpen.set(true);
+    }
+
+    switchToEdit(employee: Employee) {
+        this.selectedEmployee.set(employee);
+        this.drawerMode.set('EDIT');
+    }
+
+    closeDrawer() {
+        this.isDrawerOpen.set(false);
+        this.selectedEmployee.set(null);
+    }
+
+    closePayrollWizard() {
+        this.isPayrollWizardOpen.set(false);
+        // Opcional: Recargar historial si terminó
+    }
+
+    handleSave(employee: Employee) {
+        this.loadData(); 
+        this.closeDrawer();
+    }
+
+    getInitials(first: string, last: string): string {
+        return (first.charAt(0) + last.charAt(0)).toUpperCase();
+    }
 }

@@ -4,222 +4,222 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 export interface EmergencyContact {
-  name: string;
-  phone: string;
-  relationship: string;
+    name: string;
+    phone: string;
+    relationship: string;
 }
 
 export interface SupervisorNote {
-  id: number;
-  employee_id: number;
-  supervisor_email: string;
-  category: string;
-  content: string;
-  is_private: boolean;
-  created_at: string;
+    id: number;
+    employee_id: number;
+    supervisor_email: string;
+    category: string;
+    content: string;
+    is_private: boolean;
+    created_at: string;
 }
 
 export interface SupervisorNoteCreate {
-  employee_id: number;
-  category: string;
-  content: string;
-  is_private: boolean;
+    employee_id: number;
+    category: string;
+    content: string;
+    is_private: boolean;
 }
 
 export interface EmployeeBase {
-  first_name: string;
-  last_name: string;
-  identification: string;
-  email: string;
-  phone?: string;
-  address?: string;
-  birth_date?: string;
-  position: string;
-  department: string;
-  hired_at: string;
-  schedule_id?: number | null;
-  contract_type?: string;
-  salary: number | string;
-  bonus_scheme?: string;
-  emergency_contact: EmergencyContact;
-  documents?: any[];
-  performance_reviews?: any[];
-  is_active: boolean;
-  status?: string;
+    first_name: string;
+    last_name: string;
+    identification: string;
+    email: string;
+    phone?: string;
+    address?: string;
+    birth_date?: string;
+    position: string;
+    department: string;
+    hired_at: string;
+    schedule_id?: number | null;
+    contract_type?: string;
+    salary: number | string;
+    bonus_scheme?: string;
+    emergency_contact: EmergencyContact;
+    documents?: any[];
+    performance_reviews?: any[];
+    is_active: boolean;
+    status?: string;
 }
 
 export interface Employee extends EmployeeBase {
-  id: number;
-  created_at: string;
-  manager_id?: number | null;
+    id: number;
+    created_at: string;
+    manager_id?: number | null;
 }
 
 export interface PaginatedResponse<T> {
-  data: T[];
-  meta: {
+    data: T[];
+    meta: {
     total: number;
     page: number;
     limit: number;
     total_pages: number;
-  };
+    };
 }
 
 export interface EmployeeResponse {
-  data: Employee[];
-  meta: any;
+    data: Employee[];
+    meta: any;
 }
 
 export interface WorkSchedule {
-  id: number;
-  name: string;
-  is_active: boolean;
-  // Horas (pueden ser null si es dia libre)
-  monday_start?: string; monday_end?: string;
-  tuesday_start?: string; tuesday_end?: string;
-  wednesday_start?: string; wednesday_end?: string;
-  thursday_start?: string; thursday_end?: string;
-  friday_start?: string; friday_end?: string;
-  saturday_start?: string; saturday_end?: string;
-  sunday_start?: string; sunday_end?: string;
+    id: number;
+    name: string;
+    is_active: boolean;
+    // Horas (pueden ser null si es dia libre)
+    monday_start?: string; monday_end?: string;
+    tuesday_start?: string; tuesday_end?: string;
+    wednesday_start?: string; wednesday_end?: string;
+    thursday_start?: string; thursday_end?: string;
+    friday_start?: string; friday_end?: string;
+    saturday_start?: string; saturday_end?: string;
+    sunday_start?: string; sunday_end?: string;
 }
 
 // --- HORARIOS ---
 export interface WorkScheduleCreate {
-  name: string;
-  monday_start?: string | null; monday_end?: string | null;
-  tuesday_start?: string | null; tuesday_end?: string | null;
-  wednesday_start?: string | null; wednesday_end?: string | null;
-  thursday_start?: string | null; thursday_end?: string | null;
-  friday_start?: string | null; friday_end?: string | null;
-  saturday_start?: string | null; saturday_end?: string | null;
-  sunday_start?: string | null; sunday_end?: string | null;
+    name: string;
+    monday_start?: string | null; monday_end?: string | null;
+    tuesday_start?: string | null; tuesday_end?: string | null;
+    wednesday_start?: string | null; wednesday_end?: string | null;
+    thursday_start?: string | null; thursday_end?: string | null;
+    friday_start?: string | null; friday_end?: string | null;
+    saturday_start?: string | null; saturday_end?: string | null;
+    sunday_start?: string | null; sunday_end?: string | null;
 }
 
 // --- NÓMINA (PAYROLL) ---
 
 export interface PayrollGenerateParams {
-  period_start: string;
-  period_end: string;
-  employee_ids?: number[];
+    period_start: string;
+    period_end: string;
+    employee_ids?: number[];
 }
 
 export interface Payroll {
-  id: number;
-  tenant_id: number;
-  employee_id: number;
-  period_start: string;
-  period_end: string;
-  
-  // Montos
-  base_salary: number;
-  total_earnings: number;
-  total_deductions: number;
-  net_pay: number;
-  
-  status: 'DRAFT' | 'CALCULATED' | 'PAID' | 'CANCELLED';
-  payment_method?: string;
-  created_at: string;
-  
-  // Relación expandida
-  employee?: {
+    id: number;
+    tenant_id: number;
+    employee_id: number;
+    period_start: string;
+    period_end: string;
+
+    // Montos
+    base_salary: number;
+    total_earnings: number;
+    total_deductions: number;
+    net_pay: number;
+
+    status: 'DRAFT' | 'CALCULATED' | 'PAID' | 'CANCELLED';
+    payment_method?: string;
+    created_at: string;
+
+    // Relación expandida
+    employee?: {
     id: number;
     first_name: string;
     last_name: string;
     identification: string;
-  };
+    };
 }
 
 export interface PayrollBulkPayParams {
-  payroll_ids: number[];
-  payment_method: string;
-  reference?: string;
-  notes?: string;
+    payroll_ids: number[];
+    payment_method: string;
+    reference?: string;
+    notes?: string;
 }
 
 
 @Injectable({
-  providedIn: 'root'
+    providedIn: 'root'
 })
 export class HhrrService {
-  private http = inject(HttpClient);
-  // Asumiendo que el servicio corre en /hhrr o similar según tu gateway
-  private readonly API_URL = `${environment.apiUrl}/hhrr`; 
+    private http = inject(HttpClient);
+    // Asumiendo que el servicio corre en /hhrr o similar según tu gateway
+    private readonly API_URL = `${environment.apiUrl}/hhrr`; 
 
-  // --- EMPLEADOS ---
-  getEmployees(skip: number = 0, limit: number = 100, search?: string): Observable<EmployeeResponse> {
-    let params = new HttpParams().set('page', '1').set('limit', limit);
-    
-    if (search) params = params.set('q', search); 
+    // --- EMPLEADOS ---
+    getEmployees(page: number = 1, limit: number = 10, search?: string): Observable<EmployeeResponse> {
+        let params = new HttpParams().set('page', page).set('limit', limit);
 
-    // Retornamos el objeto completo (data + meta)
-    return this.http.get<EmployeeResponse>(`${this.API_URL}/employees`, { params });
-  }
+        if (search) params = params.set('search', search); 
 
-  getEmployeeById(id: number): Observable<Employee> {
-    return this.http.get<Employee>(`${this.API_URL}/employees/${id}`);
-  }
+        // Retornamos el objeto completo (data + meta)
+        return this.http.get<EmployeeResponse>(`${this.API_URL}/employees`, { params });
+    }
 
-  getEmployeeDetail(id: number): Observable<Employee | undefined> {
-    return this.getEmployeeById(id);
-  }
+    getEmployeeById(id: number): Observable<Employee> {
+        return this.http.get<Employee>(`${this.API_URL}/employees/${id}`);
+    }
 
-  createEmployee(employee: EmployeeBase): Observable<Employee> {
-    return this.http.post<Employee>(`${this.API_URL}/employees`, employee);
-  }
+    getEmployeeDetail(id: number): Observable<Employee | undefined> {
+        return this.getEmployeeById(id);
+    }
 
-  updateEmployee(id: number, data: Partial<EmployeeBase>): Observable<Employee> {
-    return this.http.put<Employee>(`${this.API_URL}/employees/${id}`, data);
-  }
+    createEmployee(employee: EmployeeBase): Observable<Employee> {
+        return this.http.post<Employee>(`${this.API_URL}/employees`, employee);
+    }
 
-  // --- NOTAS ---
-  createNote(note: SupervisorNoteCreate): Observable<SupervisorNote> {
-    return this.http.post<SupervisorNote>(`${this.API_URL}/notes`, note);
-  }
+    updateEmployee(id: number, data: Partial<EmployeeBase>): Observable<Employee> {
+        return this.http.put<Employee>(`${this.API_URL}/employees/${id}`, data);
+    }
 
-  getEmployeeNotes(employeeId: number): Observable<PaginatedResponse<SupervisorNote>> {
-    return this.http.get<PaginatedResponse<SupervisorNote>>(`${this.API_URL}/employees/${employeeId}/notes`);
-  }
+    // --- NOTAS ---
+    createNote(note: SupervisorNoteCreate): Observable<SupervisorNote> {
+        return this.http.post<SupervisorNote>(`${this.API_URL}/notes`, note);
+    }
 
-  // --- HORARIOS ---
-  getSchedules(): Observable<WorkSchedule[]> {
-    return this.http.get<WorkSchedule[]>(`${this.API_URL}/work-schedules`);
-  }
+    getEmployeeNotes(employeeId: number): Observable<PaginatedResponse<SupervisorNote>> {
+        return this.http.get<PaginatedResponse<SupervisorNote>>(`${this.API_URL}/employees/${employeeId}/notes`);
+    }
 
-  createSchedule(data: WorkScheduleCreate): Observable<WorkSchedule> {
-    return this.http.post<WorkSchedule>(`${this.API_URL}/work-schedules`, data);
-  }
+    // --- HORARIOS ---
+    getSchedules(): Observable<WorkSchedule[]> {
+        return this.http.get<WorkSchedule[]>(`${this.API_URL}/work-schedules`);
+    }
 
-  // --- NÓMINA ---
+    createSchedule(data: WorkScheduleCreate): Observable<WorkSchedule> {
+        return this.http.post<WorkSchedule>(`${this.API_URL}/work-schedules`, data);
+    }
 
-  /** Obtener historial con filtros avanzados */
-  getPayrolls(
-    page: number = 1, 
-    limit: number = 20, 
-    search: string = '', 
-    status: string = ''
-  ): Observable<PaginatedResponse<Payroll>> {
-    let params = new HttpParams()
-      .set('page', page)
-      .set('limit', limit);
+    // --- NÓMINA ---
 
-    if (search) params = params.set('search', search);
-    if (status && status !== 'ALL') params = params.set('status', status);
+    /** Obtener historial con filtros avanzados */
+    getPayrolls(
+        page: number = 1, 
+        limit: number = 20, 
+        search: string = '', 
+        status: string = ''
+    ): Observable<PaginatedResponse<Payroll>> {
+        let params = new HttpParams()
+            .set('page', page)
+            .set('limit', limit);
 
-    return this.http.get<PaginatedResponse<Payroll>>(`${this.API_URL}/payrolls/`, { params });
-  }
+        if (search) params = params.set('search', search);
+        if (status && status !== 'ALL') params = params.set('status', status);
 
-  /** Generar Borradores (Calcula montos, no paga) */ 
-  generatePayroll(params: PayrollGenerateParams): Observable<Payroll[]> {
-    return this.http.post<Payroll[]>(`${this.API_URL}/payrolls/generate`, params);
-  }
+        return this.http.get<PaginatedResponse<Payroll>>(`${this.API_URL}/payrolls/`, { params });
+    }
 
-  /** Paso 2: Pagar Masivamente (Genera asiento contable y marca PAID) */
-  payPayrollBatch(params: PayrollBulkPayParams): Observable<any> {
-    return this.http.post(`${this.API_URL}/payrolls/bulk-pay`, params);
-  }
+    /** Generar Borradores (Calcula montos, no paga) */ 
+    generatePayroll(params: PayrollGenerateParams): Observable<Payroll[]> {
+        return this.http.post<Payroll[]>(`${this.API_URL}/payrolls/generate`, params);
+    }
 
-  /** Eliminar borradores (Para corregir errores antes de pagar) */
-  deletePayrollBatch(ids: number[]): Observable<any> {
-    return this.http.post(`${this.API_URL}/payrolls/bulk-delete`, { payroll_ids: ids });
-  }
+    /** Pagar Masivamente (Genera asiento contable y marca PAID) */
+    payPayrollBatch(params: PayrollBulkPayParams): Observable<any> {
+        return this.http.post(`${this.API_URL}/payrolls/bulk-pay`, params);
+    }
+
+    /** Eliminar borradores (Para corregir errores antes de pagar) */
+    deletePayrollBatch(ids: number[]): Observable<any> {
+        return this.http.post(`${this.API_URL}/payrolls/bulk-delete`, { payroll_ids: ids });
+    }
 }

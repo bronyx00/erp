@@ -75,11 +75,12 @@ async def check_access(
 async def read_employees(
     page: int = 1,
     limit: int = 50,
+    search: str = None,
     db: AsyncSession = Depends(database.get_db),
     user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_READ)) 
 ):
     """Lista todos los empleados de la empresa."""
-    return await crud.get_employees(db, tenant_id=user.tenant_id, page=page, limit=limit)
+    return await crud.get_employees(db, tenant_id=user.tenant_id, page=page, limit=limit, search=search)
 
 @app.post("/employees", response_model=schemas.EmployeeResponse)
 async def create_employee(

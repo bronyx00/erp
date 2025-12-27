@@ -17,45 +17,43 @@ export class PayrollHistoryComponent implements OnInit {
   private searchQuery = signal('');
 
   @Input() set searchTerm(value: string) {
+    // Al buscar, reseteamos a página 1 y recargamos
     this.searchQuery.set(value);
+    this.currentPage.set(1); 
+    this.loadHistory();
   }
 
   // Estados
   payrolls = signal<Payroll[]>([]);
   isLoading = signal(true);
-  
-  // Estado UI
-  searchControl = new FormControl('');
+  isDeleting= signal(false);
+
+  // Pagination State
+  currentPage = signal(1);
+  pageSize = signal(20); // N nóminas por página
+  totalItems = signal(0);
+
+  // Filter State
   currentFilter = signal<PayrollStatusFilter>('ALL');
+  
+  // Selection State
   showPreviewModal = signal(false);
   selectedIds = signal<number[]>([]); // Selección para pago masivo
 
-  // Filtrado real en el cliente para respuesta instantánea
-  filteredPayrolls = computed(() => {
-    let data = this.payrolls();
-    const filter = this.currentFilter();
-    const query = this.searchQuery().toLowerCase().trim();
+  // Cálculo de totales de paginación para el UI
+  paginationState = computed(() => {
+    const total = this.totalItems();
+    const current = this.currentPage();
+    const size = this.pageSize();
+    
+    const start = total === 0 ? 0 : (current - 1) * size + 1;
+    const end = Math.min(current * size, total);
+    const totalPages = Math.ceil(total / size);
+    
+    return { start, end, total, totalPages, hasNext: current < totalPages, hasPrev: current > 1 };
+  })
 
-    // Filtro Texto
-    if (query) {
-      data = data.filter(p => 
-        p.employee?.first_name.toLowerCase().includes(query) || 
-        p.employee?.last_name.toLowerCase().includes(query) || 
-        p.employee?.identification.includes(query)
-      );
-    }
-
-    // Filtro Estado
-    if (filter === 'CALCULATED') {
-      data = data.filter(p => p.status === 'CALCULATED' || p.status === 'DRAFT');
-    } else if (filter === 'PAID') {
-      data = data.filter(p => p.status === 'PAID');
-    }
-
-    return data;
-  });
-
-  // Resumen computado para el modal
+  // Resumen de selección
   selectionSummary = computed(() => {
     const ids = this.selectedIds();
     const items = this.payrolls().filter(p => ids.includes(p.id));
@@ -66,29 +64,53 @@ export class PayrollHistoryComponent implements OnInit {
     };
   });
 
-
   ngOnInit() {
     this.loadHistory();
   }
 
   loadHistory() {
     this.isLoading.set(true);
-    // Traemos todo (o una página grande) para filtrar en cliente como pidió
-    this.hhrrService.getPayrolls(1, 10).subscribe({
+    
+    const query = this.searchQuery().trim();
+    const status = this.currentFilter();
+
+    this.hhrrService.getPayrolls(
+      this.currentPage(), 
+      this.pageSize(), 
+      query, 
+      status 
+    ).subscribe({
       next: (res) => {
         this.payrolls.set(res.data);
+        this.totalItems.set(res.meta.total);
         this.isLoading.set(false);
       },
-      error: () => this.isLoading.set(false)
+      error: () => {
+        this.payrolls.set([]);
+        this.isLoading.set(false);
+      }
     });
   }
 
+  // --- ACCIONES DE UI ---
+
   setFilter(filter: PayrollStatusFilter) {
+    if (this.currentFilter() === filter) return;
+    
     this.currentFilter.set(filter);
-    this.selectedIds.set([]);
+    this.selectedIds.set([]); // Limpiamos selección
+    this.currentPage.set(1);  // Reset a página 1
+    this.loadHistory();       // Recargar
   }
 
-  // --- SELECCIÓN ---
+  changePage(newPage: number) {
+    if (newPage < 1 || newPage > this.paginationState().totalPages) return;
+    this.currentPage.set(newPage);
+    this.selectedIds.set([]); // Opcional: limpiar selección al cambiar de página para evitar confusiones
+    this.loadHistory();
+  }
+
+  // --- SELECCIÓN & OPERACIONES ---
   
   toggleSelection(id: number) {
     this.selectedIds.update(ids => 
@@ -107,8 +129,6 @@ export class PayrollHistoryComponent implements OnInit {
       this.selectedIds.set([]);
     }
   }
-
-  // --- ACCIONES ---
 
   initBatchPayment() {
     if (this.selectedIds().length === 0) return;
@@ -139,32 +159,31 @@ export class PayrollHistoryComponent implements OnInit {
   }
 
   deleteSelected() {
-    const count = this.selectedIds().length;
+    const ids = this.selectedIds();
+    const count = ids.length;
+    
     if (count === 0) return;
-    
-    if (!confirm(`¿Estás seguro de eliminar ${count} nóminas pendientes? Esta acción no se puede deshacer.`)) return;
+    if (!confirm(`¿Estás seguro de eliminar ${count} nóminas pendientes?`)) return;
 
-    // Actualización Optimista: Las quitamos de la vista inmediatamente
-    const idsToRemove = new Set(this.selectedIds());
-    
-    this.payrolls.update(current => 
-        current.filter(p => !idsToRemove.has(p.id))
-    );
-    
-    // Limpiamos selección
-    this.selectedIds.set([]);
+    this.isDeleting.set(true);
 
-    // Aquí llamarías a tu backend (ej. forkJoin de deletes o un endpoint bulk)
-    // this.hhrrService.deletePayrolls(ids).subscribe(...)
-  }
-
-  // Eliminar registro pendiente
-  deletePayroll(id: number) {
-    if(!confirm('¿Eliminar este registro de nómina pendiente?')) return;
-    
-    // Aquí iría la llamada al servicio deletePayroll(id)
-    // Simulamos optimísticamente:
-    this.payrolls.update(prev => prev.filter(p => p.id !== id));
-    this.selectedIds.update(ids => ids.filter(x => x !== id));
+    this.hhrrService.deletePayrollBatch(ids).subscribe({
+        next: (response) => {
+            // Manejo de respuesta del backend (según tu endpoint python)
+            if (response.status === 'warning') {
+                alert(response.message); // Ej: "No se eliminaron porque estaban pagados"
+            } else {
+                // Éxito
+                this.selectedIds.set([]); // Limpiamos selección
+                this.loadHistory();       // Recargamos tabla
+            }
+            this.isDeleting.set(false);
+        },
+        error: (err) => {
+            console.error(err);
+            alert('Error al eliminar los registros. Intenta nuevamente.');
+            this.isDeleting.set(false);
+        }
+    });
   }
 }

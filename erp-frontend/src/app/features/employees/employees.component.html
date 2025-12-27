@@ -31,28 +31,28 @@
             }
         </div>
       </div>
-
-        @if (activeTab() === 'EMPLOYEES') {
-            <div class="grid grid-cols-3 gap-6 mb-2">
-                <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4">
-                    <div class="h-12 w-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl">
-                        <i class="fas fa-users"></i>
-                    </div>
-                    <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Empleados</p>
-                        <p class="text-2xl font-extrabold text-slate-800">{{ stats().total }}</p>
-                    </div>
+      
+      @if (activeTab() === 'EMPLOYEES') {
+          <div class="grid grid-cols-3 gap-6 mb-2">
+              <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4">
+                  <div class="h-12 w-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl">
+                      <i class="fas fa-users"></i>
+                  </div>
+                  <div>
+                      <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Registrados</p>
+                      <p class="text-2xl font-extrabold text-slate-800">{{ stats().total }}</p>
+                  </div>
+              </div>
+              <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4">
+                <div class="h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl">
+                    <i class="fas fa-user-check"></i>
                 </div>
-                <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4">
-                    <div class="h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl">
-                        <i class="fas fa-user-check"></i>
-                    </div>
-                    <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Activos</p>
-                        <p class="text-2xl font-extrabold text-slate-800">{{ stats().active }}</p>
-                    </div>
-                </div>
-                <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4">
+                <div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Activos</p>
+                    <p class="text-2xl font-extrabold text-slate-800">{{ stats().active }}</p>
+                  </div>
+              </div>
+               <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4">
                     <div class="h-12 w-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl">
                         <i class="fas fa-money-bill-wave"></i>
                     </div>
@@ -61,8 +61,8 @@
                         <p class="text-2xl font-extrabold text-slate-800">{{ stats().monthlyPayroll | currency:'USD' }}</p>
                     </div>
                 </div>
-            </div>
-        }
+        </div>
+    }
     </header>
 
     <div class="px-8 py-4 flex items-center justify-between gap-4 border-b border-slate-100 bg-white z-0">
@@ -88,7 +88,7 @@
             <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
             <input [formControl]="searchControl"
                    type="text" 
-                   [placeholder]="activeTab() === 'PAYROLL' ? 'Buscar pago por nombre...' : 'Buscar empleado...'"
+                   [placeholder]="activeTab() === 'PAYROLL' ? 'Buscar pago...' : 'Buscar empleado...'"
                    class="w-full pl-10 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white border focus:border-indigo-500 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm">
         </div>
     </div>
@@ -96,68 +96,101 @@
     <div class="flex-1 overflow-y-auto px-8 py-6 bg-slate-50">
         
         @if (activeTab() === 'EMPLOYEES') {
-             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <table class="w-full text-left">
-                    <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-                        <tr>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Empleado</th>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Cargo</th>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Contacto</th>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Salario</th>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-center">Estado</th>
-                            <th class="px-6 py-4"></th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        @if(isLoading()) {
-                             <tr class="animate-pulse"><td colspan="6" class="px-6 py-8 text-center text-slate-400">Cargando...</td></tr>
-                        } @else {
-                            @for (employee of filteredEmployees(); track employee.id) {
-                                <tr class="hover:bg-slate-50/80 transition-colors group cursor-pointer" (click)="openProfile(employee)">
-                                    <td class="px-6 py-4">
-                                        <div class="flex items-center gap-3">
-                                            <div class="h-10 w-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm">
-                                                {{ getInitials(employee.first_name, employee.last_name) }}
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                <div class="flex-1 overflow-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                            <tr>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Empleado</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Cargo</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Contacto</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Salario</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-center">Estado</th>
+                                <th class="px-6 py-4"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @if(isLoading()) {
+                                <tr><td colspan="6" class="px-6 py-12 text-center text-slate-400">
+                                    <i class="fas fa-circle-notch fa-spin text-indigo-500 mb-2"></i><br>Cargando lista...
+                                </td></tr>
+                            } @else if (employees().length === 0) {
+                                <tr><td colspan="6" class="px-6 py-12 text-center text-slate-400">
+                                    No se encontraron empleados.
+                                </td></tr>
+                            } @else {
+                                @for (employee of employees(); track employee.id) {
+                                    <tr class="hover:bg-slate-50/80 transition-colors group cursor-pointer" (click)="openProfile(employee)">
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-3">
+                                                <div class="h-10 w-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm">
+                                                    {{ getInitials(employee.first_name, employee.last_name) }}
+                                                </div>
+                                                <div>
+                                                    <p class="font-bold text-slate-800">{{ employee.first_name }} {{ employee.last_name }}</p>
+                                                    <p class="text-xs text-slate-500 font-mono">{{ employee.identification }}</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p class="font-bold text-slate-800">{{ employee.first_name }} {{ employee.last_name }}</p>
-                                                <p class="text-xs text-slate-500 font-mono">{{ employee.identification }}</p>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <p class="text-sm font-medium text-slate-700">{{ employee.position }}</p>
+                                            <p class="text-xs text-slate-500">{{ employee.department }}</p>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="flex flex-col">
+                                                <span class="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                                    <i class="far fa-envelope text-slate-400 text-xs"></i>
+                                                    {{ employee.email }}
+                                                </span>
+                                                <span class="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+                                                    <i class="fas fa-phone-alt text-slate-300 text-[10px]"></i>
+                                                    {{ employee.phone || 'Sin teléfono' }}
+                                                </span>
                                             </div>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <p class="text-sm font-medium text-slate-700">{{ employee.position }}</p>
-                                        <p class="text-xs text-slate-500">{{ employee.department }}</p>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <div class="flex flex-col">
-                                            <span class="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                                <i class="far fa-envelope text-slate-400 text-xs"></i>
-                                                {{ employee.email }}
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <span class="font-bold text-slate-700">{{ employee.salary | currency:'USD' }}</span>
+                                        </td>
+                                        <td class="px-6 py-4 text-center">
+                                            <span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase border"
+                                                [ngClass]="employee.is_active ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'">
+                                                {{ employee.is_active ? 'Activo' : 'Inactivo' }}
                                             </span>
-                                            <span class="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-                                                <i class="fas fa-phone-alt text-slate-300 text-[10px]"></i>
-                                                {{ employee.phone || 'Sin teléfono' }}
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 text-right">
-                                        <span class="font-bold text-slate-700">{{ employee.salary | currency:'USD' }}</span>
-                                    </td>
-                                    <td class="px-6 py-4 text-center">
-                                        <span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase border"
-                                              [ngClass]="employee.is_active ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'">
-                                            {{ employee.is_active ? 'Activo' : 'Inactivo' }}
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4 text-right">
-                                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-indigo-600"></i>
-                                    </td>
-                                </tr>
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <i class="fas fa-chevron-right text-slate-300 group-hover:text-indigo-600"></i>
+                                        </td>
+                                    </tr>
+                                }
                             }
-                        }
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs text-slate-500 select-none">
+                    <div>
+                        Mostrando <span class="font-bold text-slate-800">{{ paginationState().start }}</span> - 
+                        <span class="font-bold text-slate-800">{{ paginationState().end }}</span> de 
+                        <span class="font-bold text-slate-800">{{ paginationState().total }}</span> empleados
+                    </div>
+                    <div class="flex gap-2">
+                        <button (click)="changePage(currentPage() - 1)" 
+                                [disabled]="!paginationState().hasPrev"
+                                class="px-3 py-1.5 border border-slate-300 bg-white rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1 font-medium">
+                            <i class="fas fa-chevron-left text-[10px]"></i> Anterior
+                        </button>
+                        
+                        <div class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-slate-700">
+                            Página {{ currentPage() }}
+                        </div>
+
+                        <button (click)="changePage(currentPage() + 1)" 
+                                [disabled]="!paginationState().hasNext"
+                                class="px-3 py-1.5 border border-slate-300 bg-white rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1 font-medium">
+                            Siguiente <i class="fas fa-chevron-right text-[10px]"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
         }
 
@@ -166,7 +199,7 @@
         }
 
         @if (activeTab() === 'ACCESS') {
-             <div class="p-8 text-center text-slate-400">
+            <div class="p-8 text-center text-slate-400">
                 <i class="fas fa-tools text-4xl mb-4"></i>
                 <p>Módulo en construcción...</p>
             </div>
@@ -202,4 +235,4 @@
             }
         </div>
     </div>
-</div>  
+</div>
