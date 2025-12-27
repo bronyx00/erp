@@ -1,0 +1,191 @@
+<div class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+    
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        
+        <div class="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+            <div>
+                <h2 class="text-xl font-bold text-slate-800">Generador de Nómina</h2>
+                <p class="text-sm text-slate-500">
+                    @if(step() === 'CONFIG') { Configura periodo y empleados }
+                    @if(step() === 'PREVIEW') { Revisa los montos antes de pagar }
+                    @if(step() === 'SUCCESS') { Proceso completado }
+                </p>
+            </div>
+            @if(step() !== 'SUCCESS') {
+                <button (click)="onClose.emit()" class="text-slate-400 hover:text-red-500 transition"><i class="fas fa-times text-xl"></i></button>
+            }
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-8 bg-white min-h-0">
+
+            @if (step() === 'CONFIG') {
+                <form [formGroup]="configForm" class="h-full flex flex-col">
+                    
+                    <div class="grid grid-cols-2 gap-6 mb-8">
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-2">Inicio Periodo</label>
+                            <input formControlName="start_date" type="date" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 transition">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-2">Fin Periodo</label>
+                            <input formControlName="end_date" type="date" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 transition">
+                        </div>
+                    </div>
+
+                    <div class="flex-1 flex flex-col min-h-0 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                        <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center shrink-0">
+                            <span class="font-bold text-slate-700 text-sm">Empleados a Pagar ({{selectedEmpIds().length}})</span>
+                            <label class="flex items-center gap-2 cursor-pointer select-none">
+                                <input type="checkbox" formControlName="select_all" (change)="toggleSelectAll($any($event.target).checked)" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                                <span class="text-xs font-bold text-slate-500">Seleccionar Todos</span>
+                            </label>
+                        </div>
+                        
+                        <div class="flex-1 overflow-y-auto p-2 bg-white space-y-1">
+                            @for (emp of employees(); track emp.id) {
+                                <div (click)="toggleSelection(emp.id)" 
+                                     class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition select-none group"
+                                     [ngClass]="selectedEmpIds().includes(emp.id) ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-transparent hover:bg-slate-50'">
+                                    
+                                    <div class="w-5 flex justify-center">
+                                        <div class="w-4 h-4 rounded border flex items-center justify-center transition"
+                                             [ngClass]="selectedEmpIds().includes(emp.id) ? 'bg-indigo-500 border-indigo-500' : 'border-slate-300 bg-white'">
+                                            <i *ngIf="selectedEmpIds().includes(emp.id)" class="fas fa-check text-white text-[10px]"></i>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="h-8 w-8 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold uppercase">
+                                        {{ emp.first_name[0] }}{{ emp.last_name[0] }}
+                                    </div>
+                                    
+                                    <div class="flex-1">
+                                        <p class="text-sm font-bold text-slate-800">{{ emp.first_name }} {{ emp.last_name }}</p>
+                                        <p class="text-xs text-slate-500">{{ emp.position }}</p>
+                                    </div>
+
+                                    <div class="text-right">
+                                        <span class="text-xs font-mono font-bold text-slate-600">{{ emp.salary | currency:'USD' }}</span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </form>
+            }
+
+            @if (step() === 'PREVIEW') {
+                <div class="h-full flex flex-col">
+                    
+                    <div class="grid grid-cols-4 gap-4 mb-6">
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Empleados</p>
+                            <p class="text-2xl font-extrabold text-slate-800">{{ totals().count }}</p>
+                        </div>
+                        <div class="p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-center">
+                            <p class="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Total Devengado</p>
+                            <p class="text-xl font-bold text-emerald-700">{{ totals().earnings | currency:'USD' }}</p>
+                        </div>
+                        <div class="p-4 bg-rose-50 rounded-xl border border-rose-100 text-center">
+                            <p class="text-[10px] text-rose-600 font-bold uppercase tracking-wider">Deducciones</p>
+                            <p class="text-xl font-bold text-rose-700">-{{ totals().deductions | currency:'USD' }}</p>
+                        </div>
+                        <div class="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-center">
+                            <p class="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Neto a Pagar</p>
+                            <p class="text-2xl font-extrabold text-indigo-700">{{ totals().net | currency:'USD' }}</p>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 overflow-hidden border border-slate-200 rounded-xl flex flex-col bg-white shadow-sm">
+                        <div class="bg-slate-50 px-4 py-2 border-b border-slate-200 flex font-bold text-xs text-slate-500 uppercase">
+                            <div class="flex-1">Empleado</div>
+                            <div class="w-24 text-right">Base</div>
+                            <div class="w-24 text-right">Bonos</div>
+                            <div class="w-24 text-right">Deducciones</div>
+                            <div class="w-28 text-right font-extrabold text-slate-700">Neto</div>
+                        </div>
+                        
+                        <div class="flex-1 overflow-y-auto divide-y divide-slate-50">
+                            @for (p of previewPayrolls(); track p.id) {
+                                <div class="px-4 py-3 flex items-center hover:bg-slate-50 transition text-sm">
+                                    <div class="flex-1">
+                                        <p class="font-bold text-slate-700">{{ p.employee?.first_name }} {{ p.employee?.last_name }}</p>
+                                        <p class="text-[10px] text-slate-400 font-mono">{{ p.employee?.identification }}</p>
+                                    </div>
+                                    <div class="w-24 text-right text-slate-600">{{ p.base_salary | number:'1.2-2' }}</div>
+                                    <div class="w-24 text-right text-emerald-600 font-medium">
+                                        +{{ (p.total_earnings - p.base_salary) | number:'1.2-2' }}
+                                    </div>
+                                    <div class="w-24 text-right text-rose-500 font-medium">
+                                        -{{ p.total_deductions | number:'1.2-2' }}
+                                    </div>
+                                    <div class="w-28 text-right font-bold text-indigo-900 bg-indigo-50/50 py-1 rounded">
+                                        {{ p.net_pay | currency:'USD' }}
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (step() === 'SUCCESS') {
+                <div class="h-full flex flex-col items-center justify-center text-center animate-in zoom-in-95 duration-500">
+                    <div class="h-24 w-24 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center text-5xl mb-6 shadow-lg shadow-emerald-200">
+                        <i class="fas fa-check"></i>
+                    </div>
+                    <h3 class="text-3xl font-extrabold text-slate-800 mb-2">¡Pagos Procesados!</h3>
+                    <p class="text-slate-500 max-w-md mx-auto mb-8">
+                        Se han generado los asientos contables y se han emitido los comprobantes de pago a {{ totals().count }} empleados correctamente.
+                    </p>
+                    
+                    <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 w-full max-w-sm shadow-sm">
+                        <div class="flex justify-between items-center mb-3 pb-3 border-b border-slate-200">
+                            <span class="text-slate-500 text-sm font-medium">Total Debitado</span>
+                            <span class="text-slate-900 font-bold text-xl">{{ totals().net | currency:'USD' }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-500 text-sm">Fecha Valor</span>
+                            <span class="text-slate-900 font-bold">
+                                {{ previewPayrolls()[0].period_end | date:'mediumDate' }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            }
+
+        </div>
+
+        <div class="p-6 border-t border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
+            
+            @if (step() === 'CONFIG') {
+                <button (click)="onClose.emit()" class="px-6 py-3 border border-slate-300 text-slate-700 rounded-xl font-bold hover:bg-slate-100 transition">Cancelar</button>
+            }
+            @if (step() === 'PREVIEW') {
+                <button (click)="step.set('CONFIG')" class="px-6 py-3 border border-slate-300 text-slate-700 rounded-xl font-bold hover:bg-slate-100 transition">Atrás</button>
+            }
+
+            @if (step() === 'CONFIG') {
+                <button (click)="generateDraft()" 
+                        [disabled]="isLoading() || selectedEmpIds().length === 0"
+                        class="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shadow-lg shadow-indigo-500/20 disabled:opacity-50 transition flex items-center gap-2">
+                    <i *ngIf="isLoading()" class="fas fa-circle-notch fa-spin"></i>
+                    Generar Borrador
+                </button>
+            }
+            @if (step() === 'PREVIEW') {
+                <button (click)="confirmPayment()" 
+                        [disabled]="isLoading()"
+                        class="px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-500/30 disabled:opacity-50 transition flex items-center gap-2">
+                    <i *ngIf="isLoading()" class="fas fa-circle-notch fa-spin"></i>
+                    Confirmar y Pagar
+                </button>
+            }
+            @if (step() === 'SUCCESS') {
+                <div class="flex-1"></div> <button (click)="finish()" class="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shadow-lg transition">
+                    Cerrar y Ver Historial
+                </button>
+            }
+        </div>
+
+    </div>
+</div>

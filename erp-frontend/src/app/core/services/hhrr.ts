@@ -56,7 +56,12 @@ export interface Employee extends EmployeeBase {
 
 export interface PaginatedResponse<T> {
   data: T[];
-  meta: any;
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    total_pages: number;
+  };
 }
 
 export interface EmployeeResponse {
@@ -90,24 +95,47 @@ export interface WorkScheduleCreate {
   sunday_start?: string | null; sunday_end?: string | null;
 }
 
-export interface Payroll {
-  id: number;
-  employee_id: number;
-  period_start: string;
-  period_end: string;
-  base_salary: number;
-  bonuses: number;
-  deductions: number;
-  net_salary: number;
-  status: 'DRAFT' | 'APPROVED' | 'PAID';
-  payment_date?: string;
-  employee?: Employee; // Si el backend hace join
-}
+// --- NÓMINA (PAYROLL) ---
 
 export interface PayrollGenerateParams {
   period_start: string;
   period_end: string;
+  employee_ids?: number[];
 }
+
+export interface Payroll {
+  id: number;
+  tenant_id: number;
+  employee_id: number;
+  period_start: string;
+  period_end: string;
+  
+  // Montos
+  base_salary: number;
+  total_earnings: number;
+  total_deductions: number;
+  net_pay: number;
+  
+  status: 'DRAFT' | 'CALCULATED' | 'PAID' | 'CANCELLED';
+  payment_method?: string;
+  created_at: string;
+  
+  // Relación expandida
+  employee?: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    identification: string;
+  };
+}
+
+export interface PayrollBulkPayParams {
+  payroll_ids: number[];
+  payment_method: string;
+  reference?: string;
+  notes?: string;
+}
+
 
 @Injectable({
   providedIn: 'root'
@@ -163,21 +191,35 @@ export class HhrrService {
 
   // --- NÓMINA ---
 
+  /** Obtener historial con filtros avanzados */
+  getPayrolls(
+    page: number = 1, 
+    limit: number = 20, 
+    search: string = '', 
+    status: string = ''
+  ): Observable<PaginatedResponse<Payroll>> {
+    let params = new HttpParams()
+      .set('page', page)
+      .set('limit', limit);
+
+    if (search) params = params.set('search', search);
+    if (status && status !== 'ALL') params = params.set('status', status);
+
+    return this.http.get<PaginatedResponse<Payroll>>(`${this.API_URL}/payrolls/`, { params });
+  }
+
+  /** Generar Borradores (Calcula montos, no paga) */ 
   generatePayroll(params: PayrollGenerateParams): Observable<Payroll[]> {
     return this.http.post<Payroll[]>(`${this.API_URL}/payrolls/generate`, params);
   }
 
-  getPayrolls(skip: number = 0, limit: number = 100): Observable<Payroll[]> {
-    return this.http.get<Payroll[]>(`${this.API_URL}/payrolls/`, {
-      params: { skip, limit }
-    });
+  /** Paso 2: Pagar Masivamente (Genera asiento contable y marca PAID) */
+  payPayrollBatch(params: PayrollBulkPayParams): Observable<any> {
+    return this.http.post(`${this.API_URL}/payrolls/bulk-pay`, params);
   }
 
-  approvePayroll(id: number): Observable<Payroll> {
-    return this.http.post<Payroll>(`${this.API_URL}/payrolls/${id}/approve`, {});
-  }
-  
-  payPayroll(id: number): Observable<Payroll> {
-    return this.http.post<Payroll>(`${this.API_URL}/payrolls/${id}/pay`, {});
+  /** Eliminar borradores (Para corregir errores antes de pagar) */
+  deletePayrollBatch(ids: number[]): Observable<any> {
+    return this.http.post(`${this.API_URL}/payrolls/bulk-delete`, { payroll_ids: ids });
   }
 }

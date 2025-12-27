@@ -160,6 +160,9 @@ class PayrollBulkPayRequest(BaseModel):
     payment_account_code: Optional[str] = None
     reference: Optional[str] = None
     notes: Optional[str] = None
+
+class PayrollBulkDeleteRequest(BaseModel):
+    payroll_ids: List[int]
     
 class EmployeeSummary(BaseModel):
     """Muestra el empleado dentro de la nómina"""

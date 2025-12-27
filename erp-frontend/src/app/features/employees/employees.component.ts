@@ -7,6 +7,8 @@ import { HhrrService, Employee } from '../../core/services/hhrr';
 import { EmployeeFormComponent } from './components/employee-form/employee-form.component';
 import { EmployeeProfileComponent } from './components/employee-profile/employee-profile.component';
 import { ScheduleManagerComponent } from './components/schedule-manager/schedule-manager.component';
+import { PayrollHistoryComponent } from './components/payroll-history/payroll-history.component';
+import { PayrollGeneratorComponent } from './components/payroll-generator/payroll-generator.component';
 
 type Tab = 'EMPLOYEES' | 'PAYROLL' | 'ACCESS';
 type DrawerMode = 'CREATE' | 'VIEW_PROFILE' | 'EDIT' | 'MANAGE_SCHEDULE';
@@ -14,7 +16,11 @@ type DrawerMode = 'CREATE' | 'VIEW_PROFILE' | 'EDIT' | 'MANAGE_SCHEDULE';
 @Component({
   selector: 'app-employees',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, EmployeeFormComponent, EmployeeProfileComponent, ScheduleManagerComponent],
+  imports: [
+    CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, 
+    EmployeeFormComponent, EmployeeProfileComponent, ScheduleManagerComponent,
+    PayrollHistoryComponent, PayrollGeneratorComponent
+  ],
   templateUrl: './employees.component.html'
 })
 export class EmployeesComponent implements OnInit {
@@ -31,6 +37,9 @@ export class EmployeesComponent implements OnInit {
   isDrawerOpen = signal(false);
   drawerMode = signal<DrawerMode>('CREATE');
   selectedEmployee = signal<Employee | null>(null);
+
+  // Wizard de nómina
+  isPayrollWizardOpen = signal(false);
 
   filteredEmployees = computed(() => {
     const term = this.searchTerm().toLowerCase();
@@ -54,6 +63,12 @@ export class EmployeesComponent implements OnInit {
     this.searchControl.valueChanges
       .pipe(debounceTime(300), distinctUntilChanged())
       .subscribe(val => this.searchTerm.set(val || ''));
+  }
+
+  changeTab(tab: Tab) {
+    this.activeTab.set(tab);
+    this.searchTerm.set('');
+    this.searchControl.setValue('', { emitEvent: false }); 
   }
 
   loadData() {
@@ -83,9 +98,13 @@ export class EmployeesComponent implements OnInit {
   }
 
   openScheduleManager() {
-    this.selectedEmployee.set(null); // No necesitamos empleado seleccionado
+    this.selectedEmployee.set(null); 
     this.drawerMode.set('MANAGE_SCHEDULE');
     this.isDrawerOpen.set(true);
+  }
+
+  openPayrollWizard() {
+    this.isPayrollWizardOpen.set(true);
   }
 
   switchToEdit(employee: Employee) {
@@ -98,8 +117,13 @@ export class EmployeesComponent implements OnInit {
     this.selectedEmployee.set(null);
   }
 
+  closePayrollWizard() {
+    this.isPayrollWizardOpen.set(false);
+    // Opcional: Recargar historial si terminó
+  }
+
   handleSave(employee: Employee) {
-    this.loadData(); // Refrescar lista completa
+    this.loadData(); 
     this.closeDrawer();
   }
 

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
-from sqlalchemy import func, or_, desc
+from sqlalchemy import func, or_, desc, delete
 from typing import Optional
 from .. import schemas
 from app.database import get_db
@@ -113,3 +113,36 @@ async def generate_bulk_payrolls(
     except Exception as e:
         print(f"Error generando nomina masiva: {e}")
         raise HTTPException(status_code=500, detail="Error interno generando nómina.")
+    
+@router.post("/bulk-delete", status_code=status.HTTP_200_OK)
+async def bulk_delete_payrolls(
+    delete_data: schemas.PayrollBulkDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.PAYROLL_PROCESS))
+):
+    """
+    Elimina nóminas en estado borrador (CALCULATED o DRAFT).
+    No permite eliminar nóminas PAGADAS (PAID).
+    Útil para corregir errores y volver a generar.
+    """
+    try:
+        # Ejecutamos un DELETE masivo con filtro de seguridad
+        stmt = delete(Payroll).where(
+            Payroll.id.in_(delete_data.payroll_ids),
+            Payroll.tenant_id == user.tenant_id,
+            Payroll.status != "PAID" 
+        )
+        
+        result = await db.execute(stmt)
+        await db.commit()
+        
+        deleted_count = result.rowcount
+        
+        if deleted_count == 0 and delete_data.payroll_ids:
+            return {"status": "warning", "message": "No se eliminaron registros (verifique que no estén pagados).", "deleted": 0}
+
+        return {"status": "success", "message": f"Se eliminaron {deleted_count} borradores correctamente.", "deleted": deleted_count}
+
+    except Exception as e:
+        print(f"Error borrando nóminas: {e}")
+        raise HTTPException(status_code=500, detail="Error eliminando borradores.")
