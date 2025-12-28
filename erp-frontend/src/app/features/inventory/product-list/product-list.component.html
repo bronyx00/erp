@@ -1,150 +1,135 @@
-<div class="flex flex-col h-full bg-slate-50">
-  
-  <header class="flex items-center justify-between px-8 py-6 bg-white border-b border-slate-200">
-    <div>
-      <h1 class="text-xl font-semibold text-slate-900">Inventario</h1>
-      <p class="text-sm text-slate-500 mt-1">Gestión de productos y existencias.</p>
-    </div>
-    <button (click)="openCreate()" class="px-4 py-2 text-sm font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 flex items-center shadow-sm active:scale-95 transition-all">
-      <i class="fas fa-plus mr-2"></i> Nuevo Producto
-    </button>
-  </header>
-
-  <div class="px-8 py-4 flex items-center justify-between">
-    <div class="relative w-80">
-      <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-        <i class="fas fa-search"></i>
-      </span>
-      <input [formControl]="searchControl" type="text" 
-             class="pl-10 w-full rounded-lg border-slate-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm py-2" 
-             placeholder="Buscar por nombre o SKU...">
-    </div>
-    <div class="text-xs text-slate-500">Total: <span class="font-bold text-slate-900">{{ meta().total }}</span> items</div>
-  </div>
-
-  <div class="flex-1 overflow-auto px-8 pb-8">
-    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-      <table class="min-w-full divide-y divide-slate-100">
-        <thead class="bg-slate-50/50">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Producto</th>
-            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">SKU</th>
-            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Categoría</th>
-            <th class="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Precio</th>
-            <th class="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Stock</th>
-            <th class="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Acciones</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100 bg-white">
-          @for (product of products(); track product.id) {
-            <tr class="hover:bg-slate-50 transition-colors group">
-              
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="flex items-center">
-                  <div class="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-slate-200">
-                    <i class="fas fa-box"></i>
-                  </div>
-                  <div class="ml-4">
-                    <div class="text-sm font-medium text-slate-900">{{ product.name }}</div>
-                    @if (product.description) {
-                      <div class="text-xs text-slate-500 truncate max-w-[200px]" title="{{ product.description }}">
-                        {{ product.description }}
-                      </div>
-                    }
-                  </div>
+<div class="flex h-screen bg-slate-50 overflow-hidden font-sans">
+    <div class="flex-1 flex flex-col min-w-0">
+        
+        <header class="bg-white border-b border-slate-200 px-8 py-6 z-10">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Inventario</h1>
+                    <p class="text-slate-500 mt-1">Gestión de productos y servicios</p>
                 </div>
-              </td>
-              
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span class="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">
-                  {{ product.sku }}
-                </span>
-              </td>
-
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
-                  {{ product.category }}
-                </span>
-              </td>
-
-              <td class="px-6 py-4 whitespace-nowrap text-right">
-                <div class="text-sm font-bold text-slate-900">${{ product.price | number:'1.2-2' }}</div>
-              </td>
-
-              <td class="px-6 py-4 whitespace-nowrap text-center">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border shadow-sm"
-                  [ngClass]="{
-                    'bg-green-100 text-green-700 border-green-200': product.stock > 20,
-                    'bg-yellow-100 text-yellow-700 border-yellow-200': product.stock > 10 && product.stock <= 20,
-                    'bg-orange-100 text-orange-700 border-orange-200': product.stock > 2 && product.stock <= 10,
-                    'bg-red-100 text-red-700 border-red-200 animate-pulse': product.stock <= 2
-                  }">
-                  
-                  @if (product.stock <= 2) {
-                    <i class="fas fa-exclamation-triangle mr-1.5"></i>
-                  } @else if (product.stock <= 10) {
-                    <i class="fas fa-clock mr-1.5"></i>
-                  }
-                  
-                  @if (product.stock <= 0) {
-                    AGOTADO
-                  } @else {
-                    {{ product.stock | number:'1.0-2' }} {{ product.measurementUnit }}
-                  }
-                </span>
-              </td>
-
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button (click)="openEdit(product)" class="text-indigo-600 hover:text-indigo-900 mr-4 p-1 hover:bg-indigo-50 rounded transition-colors">
-                  <i class="fas fa-pen"></i>
+                <button (click)="openCreate()" 
+                        class="px-5 py-2.5 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shadow-lg shadow-slate-900/20 active:scale-95 transition-all flex items-center gap-2">
+                    <i class="fas fa-plus"></i> Nuevo Producto
                 </button>
-                <button (click)="deleteProduct(product.id)" class="text-slate-400 hover:text-red-600 p-1 hover:bg-red-50 rounded transition-colors">
-                  <i class="fas fa-trash"></i>
-                </button>
-              </td>
-            </tr>
-          }
-          
-          @if (products().length === 0 && !isLoading()) {
-            <tr>
-              <td colspan="6" class="px-6 py-12 text-center text-slate-500">
-                <div class="mb-2"><i class="fas fa-search text-2xl opacity-20"></i></div>
-                <p>No se encontraron productos.</p>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>
+            </div>
 
-  <div class="fixed inset-0 overflow-hidden z-[60]" [class.invisible]="!isDrawerOpen()" [class.visible]="isDrawerOpen()">
-    <div class="absolute inset-0 overflow-hidden">
-      <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" 
-           [class.opacity-0]="!isDrawerOpen()" 
-           [class.opacity-100]="isDrawerOpen()" 
-           (click)="isDrawerOpen.set(false)"></div>
-           
-      <div class="fixed inset-y-0 right-0 pl-10 max-w-full flex pointer-events-auto">
-        <div class="w-screen max-w-md transform transition-transform duration-300 bg-white shadow-xl flex flex-col h-full"
-             [class.translate-x-full]="!isDrawerOpen()" 
-             [class.translate-x-0]="isDrawerOpen()">
-           
-           <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-             <h2 class="text-lg font-bold text-slate-800">{{ selectedProduct() ? 'Editar Producto' : 'Nuevo Producto' }}</h2>
-             <button (click)="isDrawerOpen.set(false)" class="text-slate-400 hover:text-slate-600 transition-colors">
-               <i class="fas fa-times"></i>
-             </button>
-           </div>
-           
-           <app-product-form 
-              [product]="selectedProduct()" 
-              (onSave)="onFormSaved()" 
-              (onCancel)="isDrawerOpen.set(false)">
-           </app-product-form>
+            <div class="flex flex-col gap-4">
+                <div class="relative w-full md:w-96">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input [formControl]="searchControl" 
+                           type="text" 
+                           placeholder="Buscar por SKU o nombre..." 
+                           class="w-full pl-10 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white border focus:border-indigo-500 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 transition-all">
+                </div>
 
+                <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    <button (click)="setCategory('Todas')"
+                            [class.bg-slate-800]="currentCategory() === 'Todas'"
+                            [class.text-white]="currentCategory() === 'Todas'"
+                            [class.bg-white]="currentCategory() !== 'Todas'"
+                            class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 whitespace-nowrap transition-colors">
+                        Todas
+                    </button>
+                    @for (cat of categories(); track cat.name) {
+                        <button (click)="setCategory(cat.name)"
+                                [class.bg-slate-800]="currentCategory() === cat.name"
+                                [class.text-white]="currentCategory() === cat.name"
+                                [class.bg-white]="currentCategory() !== cat.name"
+                                class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 whitespace-nowrap transition-colors flex items-center gap-2">
+                            {{ cat.name }}
+                            <span class="bg-slate-100 text-slate-500 px-1.5 rounded text-[10px]">{{ cat.count }}</span>
+                        </button>
+                    }
+                </div>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto px-8 py-6 bg-slate-50">
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                
+                <div class="flex-1 overflow-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                            <tr>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Producto</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Categoría</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">SKU</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Precio</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Stock</th>
+                                <th class="px-6 py-4"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @if(isLoading()) {
+                                <tr>
+                                    <td colspan="6" class="p-0">
+                                        <app-skeleton-table [rows]="10"></app-skeleton-table>
+                                    </td>
+                                </tr>
+                            } @else if (products().length === 0) {
+                                <tr><td colspan="6" class="px-6 py-20 text-center text-slate-400 italic">
+                                    No se encontraron productos.
+                                </td></tr>
+                            } @else {
+                                @for (item of products(); track item.id) {
+                                    <tr class="hover:bg-slate-50 transition group cursor-pointer" (click)="openEdit(item)">
+                                        <td class="px-6 py-4 font-medium text-slate-800">{{ item.name }}</td>
+                                        <td class="px-6 py-4">
+                                            <span class="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold">{{ item.category }}</span>
+                                        </td>
+                                        <td class="px-6 py-4 text-xs font-mono text-slate-500">{{ item.sku }}</td>
+                                        <td class="px-6 py-4 text-right font-mono font-bold text-slate-700">{{ item.price | currency:'USD' }}</td>
+                                        <td class="px-6 py-4 text-right">
+                                            <span [class.text-red-500]="item.stock <= 5" [class.text-emerald-600]="item.stock > 5" class="font-bold text-sm">
+                                                {{ item.stock }}
+                                            </span>
+                                            <span class="text-xs text-slate-400 ml-1">{{ item.measurement_unit }}</span>
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <button (click)="$event.stopPropagation(); deleteProduct(item.id)" class="text-slate-300 hover:text-red-500 p-2 transition opacity-0 group-hover:opacity-100">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs text-slate-500 select-none">
+                    <div>
+                        Mostrando <span class="font-bold text-slate-800">{{ paginationState().start }}</span> - 
+                        <span class="font-bold text-slate-800">{{ paginationState().end }}</span> de 
+                        <span class="font-bold text-slate-800">{{ paginationState().total }}</span> productos
+                    </div>
+                    <div class="flex gap-2">
+                        <button (click)="changePage(currentPage() - 1)" [disabled]="!paginationState().hasPrev"
+                                class="px-3 py-1.5 border border-slate-300 bg-white rounded-lg hover:bg-slate-50 disabled:opacity-50 transition">
+                            Anterior
+                        </button>
+                        <div class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-slate-700">
+                            {{ currentPage() }}
+                        </div>
+                        <button (click)="changePage(currentPage() + 1)" [disabled]="!paginationState().hasNext"
+                                class="px-3 py-1.5 border border-slate-300 bg-white rounded-lg hover:bg-slate-50 disabled:opacity-50 transition">
+                            Siguiente
+                        </button>
+                    </div>
+                </div>
+
+            </div>
         </div>
-      </div>
     </div>
-  </div>
+
+    <div class="absolute inset-0 z-50" *ngIf="isDrawerOpen()">
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" (click)="closeDrawer()"></div>
+        <div class="absolute top-0 right-0 bottom-0 w-[500px] bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            <app-product-form 
+                [product]="selectedProduct()" 
+                (onSave)="handleSave()" 
+                (onCancel)="closeDrawer()">
+            </app-product-form>
+        </div>
+    </div>
 </div>

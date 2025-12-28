@@ -29,17 +29,34 @@
           </div>
       </div>
 
-      <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-        @for (cat of categories(); track cat) {
-          <button (click)="filterByCategory(cat)"
-            class="px-5 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 border"
-            [ngClass]="selectedCategory() === cat 
-              ? 'bg-slate-800 text-white border-slate-800 shadow-md transform scale-105' 
-              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'">
-            {{ cat }}
-          </button>
+      <div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar mb-4">
+        <button (click)="filterByCategory('Todas')" 
+                [class.bg-slate-800]="selectedCategory() === 'Todas'"
+                [class.text-white]="selectedCategory() === 'Todas'"
+                [class.bg-white]="selectedCategory() !== 'Todas'"
+                [class.text-slate-600]="selectedCategory() !== 'Todas'"
+                class="px-4 py-2 rounded-xl border border-slate-200 shadow-sm font-bold text-sm whitespace-nowrap transition-all hover:shadow-md active:scale-95">
+            Todas
+        </button>
+        
+        @for (cat of categories(); track cat.name) {
+            <button (click)="filterByCategory(cat.name)"
+                    [class.bg-slate-800]="selectedCategory() === cat.name"
+                    [class.text-white]="selectedCategory() === cat.name"
+                    [class.bg-white]="selectedCategory() !== cat.name"
+                    [class.text-slate-600]="selectedCategory() !== cat.name"
+                    class="px-4 py-2 rounded-xl border border-slate-200 shadow-sm font-bold text-sm whitespace-nowrap transition-all hover:shadow-md active:scale-95 flex items-center gap-2">
+                {{ cat.name }}
+                <span [class.bg-slate-600]="selectedCategory() === cat.name"
+                      [class.text-white]="selectedCategory() === cat.name"
+                      [class.bg-slate-100]="selectedCategory() !== cat.name"
+                      [class.text-slate-500]="selectedCategory() !== cat.name"
+                      class="px-1.5 py-0.5 rounded-md text-[10px] transition-colors">
+                    {{ cat.count }}
+                </span>
+            </button>
         }
-      </div>
+    </div>
     </header>
 
     <div class="flex-1 overflow-y-auto p-6 bg-slate-100/50">
@@ -76,7 +93,7 @@
                 </div>
                 
                 <span class="text-[10px] uppercase text-slate-400 font-bold bg-slate-100 px-1 rounded mb-0.5">
-                    {{ product.measurementUnit }}
+                    {{ product.measurement_unit }}
                 </span>
               </div>
             </div>
@@ -133,8 +150,8 @@
                 <p class="text-sm font-medium text-slate-800 line-clamp-1 break-words leading-tight">{{ item.product.name }}</p>
                 <div class="flex items-center gap-2 mt-0.5">
                    <p class="text-xs text-slate-400 font-mono">{{ item.product.sku }}</p>
-                   @if(item.product.measurementUnit !== 'UNIT') {
-                     <span class="text-[9px] bg-slate-100 text-slate-500 px-1 rounded uppercase">{{ item.product.measurementUnit }}</span>
+                   @if(item.product.measurement_unit !== 'UNIT') {
+                     <span class="text-[9px] bg-slate-100 text-slate-500 px-1 rounded uppercase">{{ item.product.measurement_unit }}</span>
                    }
                 </div>
             </div>
@@ -290,7 +307,7 @@
                 Cantidad a agregar
             </h3>
             <p class="text-slate-500 text-sm mb-4">
-                {{ pendingProduct()?.name }} <span class="font-mono text-xs bg-slate-100 px-1 rounded">{{ pendingProduct()?.measurementUnit }}</span>
+                {{ pendingProduct()?.name }} <span class="font-mono text-xs bg-slate-100 px-1 rounded">{{ pendingProduct()?.measurement_unit }}</span>
             </p>
 
             <div class="flex gap-2">

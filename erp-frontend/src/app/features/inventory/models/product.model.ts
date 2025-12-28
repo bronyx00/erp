@@ -6,10 +6,11 @@ export interface Product {
     name: string;
     description: string | null;
     category: string;
-    measurementUnit: MeasurementUnit; 
+    measurement_unit: MeasurementUnit; 
     price: number;
     stock: number;
-    isActive: boolean;
+    is_active: boolean;
+    tenant_id: number;
 }
 
 export interface ProductPayload {

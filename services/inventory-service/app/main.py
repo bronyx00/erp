@@ -1,3 +1,4 @@
+from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +36,8 @@ app.add_middleware(
 async def read_products(
     page: int = 1,
     limit: int = 50,
-    search: str = None,
+    search: Optional[str] = None,
+    category: Optional[str] = None,
     db: AsyncSession = Depends(database.get_db),
     user: UserPayload = Depends(RequirePermission(Permissions.PRODUCT_READ))   
 ):
@@ -45,7 +47,7 @@ async def read_products(
     Obtiene el catálogo de productos paginado.
     El filtro `search` busca por Nombre o SKU.
     """
-    return await crud.get_products(db, tenant_id=user.tenant_id, page=page, limit=limit, search=search)
+    return await crud.get_products(db, tenant_id=user.tenant_id, page=page, limit=limit, search=search, category=category)
 
 @app.post("/products", response_model=schemas.ProductResponse, status_code=201)
 async def create_product(
@@ -69,6 +71,14 @@ async def create_product(
         )
     
     return await crud.create_product(db, product, tenant_id=user.tenant_id)
+
+@app.get("/categories", response_model=List[schemas.CategorySummary]) 
+async def get_categories(
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.PRODUCT_READ))
+):
+    """Obtiene lista de categorías con conteo de items."""
+    return await crud.get_categories_summary(db, user.tenant_id)
 
 @app.get("/products/{product_id}", response_model=schemas.ProductResponse)
 async def read_product(

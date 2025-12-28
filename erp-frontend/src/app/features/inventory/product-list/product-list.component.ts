@@ -1,56 +1,106 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { debounceTime, distinctUntilChanged } from 'rxjs';
-import { InventoryService } from '../services/inventory.service';
-import { Product, InventoryMetadata } from '../models/product.model';
+
+import { InventoryService, CategorySummary } from '../services/inventory.service';
+import { Product } from '../models/product.model';
 import { ProductFormComponent } from '../product-form/product-form.component';
+import { SkeletonTableComponent } from '../../../shared/components/skeleton-table/skeleton-table.component';
 
 @Component({
     selector: 'app-product-list',
     standalone: true,
-    imports: [CommonModule, ReactiveFormsModule, ProductFormComponent],
+    imports: [CommonModule, ReactiveFormsModule, ProductFormComponent, SkeletonTableComponent],
     templateUrl: './product-list.component.html'
 })
 export class ProductListComponent implements OnInit {
     private inventoryService = inject(InventoryService);
 
+    // Estados
     products = signal<Product[]>([]);
-    meta = signal<InventoryMetadata>({ total: 0, page: 1, limit: 10, totalPages: 0 });
-    isLoading = this.inventoryService.isLoading;
+    categories = signal<CategorySummary[]>([]);
+    isLoading = signal(true);
 
+    // Filtros 
     searchControl = new FormControl('');
+    currentCategory = signal('Todas');
 
-    // Drawer State
+    // Paginación
+    currentPage = signal(1);
+    pageSize = signal(20);
+    totalItems = signal(0);
+
+    // Drawer / Modal
     isDrawerOpen = signal(false);
     selectedProduct = signal<Product | null>(null);
 
-    ngOnInit() {
-        this.loadData();
-        this.searchControl.valueChanges.pipe(
-            debounceTime(300), 
-            distinctUntilChanged()
-        ).subscribe(() => this.loadData(1));
-    }
+    // Computed para Paginación
+    paginationState = computed(() => {
+        const total = this.totalItems();
+        const current = this.currentPage();
+        const size = this.pageSize();
+        
+        const start = total === 0 ? 0 : (current - 1) * size + 1;
+        const end = Math.min(current * size, total);
+        const totalPages = Math.ceil(total / size);
+        
+        return { start, end, total, totalPages, hasNext: current < totalPages, hasPrev: current > 1 };
+    });
 
-    loadData(page: number = 1) {
-        const term = this.searchControl.value || '';
-        this.inventoryService.getProducts(page, 10, term).subscribe({
-            next: (res) => {
-                this.products.set(res.data);
-                this.meta.set(res.meta);
-            },
-            error: (err) => console.error('Error loading products', err)
+    ngOnInit() {
+        this.loadCategories();
+        this.loadProducts();
+
+        // Buscador
+        this.searchControl.valueChanges
+        .pipe(debounceTime(400), distinctUntilChanged())
+        .subscribe(() => {
+            this.currentPage.set(1);
+            this.loadProducts();
         });
     }
 
-    deleteProduct(id: number) {
-        if(confirm('¿Estás seguro de desactivar este producto?')) {
-            this.inventoryService.deleteProduct(id).subscribe(() => this.loadData(this.meta().page));
-        }
+    loadCategories() {
+        this.inventoryService.getCategories().subscribe(cats => this.categories.set(cats));
     }
 
-    // UI Actions
+    loadProducts() {
+        this.isLoading.set(true);
+        const search = this.searchControl.value || '';
+        
+        this.inventoryService.getProducts(
+            this.currentPage(), 
+            this.pageSize(), 
+            search, 
+            this.currentCategory()
+        ).subscribe({
+            next: (res) => {
+                this.products.set(res.data);
+                this.totalItems.set(res.meta.total);
+                this.isLoading.set(false);
+            },
+            error: () => {
+                this.products.set([]);
+                this.isLoading.set(false);
+            }
+        });
+    }
+
+    // --- Acciones de UI ---
+    setCategory(catName: string) {
+        this.currentCategory.set(catName);
+        this.currentPage.set(1);
+        this.loadProducts();
+    }
+
+    changePage(newPage: number) {
+        if (newPage < 1) return;
+        this.currentPage.set(newPage);
+        this.loadProducts();
+    }
+
+  // --- ACCIONES DEL DRAWER (MODAL) ---
     openCreate() {
         this.selectedProduct.set(null);
         this.isDrawerOpen.set(true);
@@ -61,8 +111,22 @@ export class ProductListComponent implements OnInit {
         this.isDrawerOpen.set(true);
     }
 
-    onFormSaved() {
+    closeDrawer() {
         this.isDrawerOpen.set(false);
-        this.loadData(this.meta().page);
+        this.selectedProduct.set(null);
+    }
+
+    handleSave() {
+        this.closeDrawer();
+        this.loadProducts();
+        this.loadCategories();
+    }
+
+    deleteProduct(id: number) {
+        if(!confirm('¿Estás seguro de eliminar este producto?')) return;
+        this.inventoryService.deleteProduct(id).subscribe(() => {
+            this.loadProducts();
+            this.loadCategories();
+        });
     }
 }

@@ -5,6 +5,13 @@ from sqlalchemy import func, or_
 from . import models
 
 # --- LECTURA ---
+async def get_tenant_me(db: AsyncSession, tenant_id: int):
+    query = select(models.Tenant).filter(models.Tenant.id == tenant_id)
+    result = await db.execute(query)
+    tenant = result.scalars().first()
+    
+    return tenant
+
 async def get_user_by_email(db: AsyncSession, email: str):
     query = (
         select(models.User)

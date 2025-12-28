@@ -54,6 +54,23 @@ async def refresh_token(
 
 # --- ENDPOINTS PROTEGIDOS ---
 
+@app.get("/tenant/me", response_model=schemas.TenantResponse)
+async def get_my_tenant(
+    db: AsyncSession = Depends(db_manager.get_db),
+    current_user: UserPayload = Depends(get_current_user)
+):
+    """
+    Datos de la empresa
+    
+    Retorna la infomación fiscal y configuración de la empresa.
+    """
+    tenant = await crud.get_tenant_me(db, tenant_id=current_user.tenant_id)
+    
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    
+    return tenant
+
 @app.get("/me", response_model=schemas.UserResponse)
 async def read_users_me(current_user: UserPayload = Depends(get_current_user), db: AsyncSession = Depends(db_manager.get_db)):
     return await crud.get_user_by_email(db, email=current_user.sub)

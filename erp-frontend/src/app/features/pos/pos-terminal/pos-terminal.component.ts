@@ -4,14 +4,13 @@ import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { debounceTime, distinctUntilChanged, switchMap, of, catchError } from 'rxjs';
 
 import { CrmService } from '../../crm/services/crm.service';
-import { InventoryService } from '../../inventory/services/inventory.service';
+import { InventoryService, CategorySummary } from '../../inventory/services/inventory.service';
 import { FinanceService, InvoiceCreate, ExchangeRate, PaymentMethod } from '../../../core/services/finance';
 
 import { Customer } from '../../crm/models/customer.model';
 import { Product } from '../../inventory/models/product.model';
-
-import { PaymentModalComponent } from '../payment-modal/payment-modal.component';
 import { ClientFormComponent } from '../../crm/client-form/client-form.component';
+import { PaymentModalComponent } from '../payment-modal/payment-modal.component';
 
 interface CartItem {
     product: Product;
@@ -21,7 +20,7 @@ interface CartItem {
 @Component({
     selector: 'app-pos-terminal',
     standalone: true,
-    imports: [CommonModule, ReactiveFormsModule, PaymentModalComponent, ClientFormComponent],
+    imports: [CommonModule, ReactiveFormsModule, ClientFormComponent, PaymentModalComponent],
     templateUrl: './pos-terminal.component.html',
     styleUrls: ['./pos-terminal.component.scss']
 })
@@ -37,7 +36,7 @@ export class PosTerminalComponent implements OnInit {
 
     // --- ESTADOS ---
     products = signal<Product[]>([]);
-    categories = signal<string[]>([]);
+    categories = signal<CategorySummary[]>([]);
     selectedCategory = signal('Todas');
 
     cart = signal<CartItem[]>([]);
@@ -94,14 +93,11 @@ export class PosTerminalComponent implements OnInit {
     }
 
     loadProducts(search: string = '', category: string = '') {
-        // Si la categoría es 'Todas', no mandamos filtro o mandamos string vacío según backend
-        this.inventoryService.getProducts(1, 50, search).subscribe({
+        const catFilter = category || this.selectedCategory();
+        this.inventoryService.getProducts(1, 20, search, catFilter).subscribe({
             next: (res) => {
-                let filtered = res.data.filter(p => p.isActive);
-                if (category && category !== 'Todas') {
-                    filtered = filtered.filter(p => p.category === category);
-                }
-                this.products.set(filtered);
+                const activeProducts = res.data.filter(p => p.is_active);
+                this.products.set(activeProducts);
             }
         });
     }
@@ -190,19 +186,16 @@ export class PosTerminalComponent implements OnInit {
     filterByCategory(cat: string) {
         this.selectedCategory.set(cat);
         this.loadProducts(this.searchControl.value || '', cat);
-        // Focus back to search for UX
-        this.searchInput.nativeElement.focus();
+        
+        if(this.searchInput) this.searchInput.nativeElement.focus();
     }
 
     // --- CART & CHECKOUT ---
 
     addToCartClick(product: Product) {
-        if (product.stock <= 0 && product.measurementUnit !== 'SERVICE') {
-        // Sonido de error o feedback visual
-        return; 
-    }
+        if (product.stock <= 0 && product.measurement_unit !== 'SERVICE') return;
 
-        if (product.measurementUnit === 'UNIT') {
+        if (product.measurement_unit === 'UNIT') {
         // Si es unitario, flujo directo
             this.processAddToCart(product, 1);
         } else {

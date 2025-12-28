@@ -18,6 +18,11 @@ class PaginatedResponse(BaseModel, Generic[T]):
     data: List[T]
     meta: MetaData
     
+# --- CATEGORIAS ---
+class CategorySummary(BaseModel):
+    name: str
+    count: int
+    
 # --- PRODUCTOS ---
 
 class ProductBase(BaseModel):

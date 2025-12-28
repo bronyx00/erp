@@ -18,7 +18,8 @@ async def get_products(
     tenant_id: int, 
     page: int = 1, 
     limit: int = 50,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    category: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Lista productos con paginación.
@@ -42,6 +43,9 @@ async def get_products(
                 models.Product.sku.ilike(term)
             )
         )
+    
+    if category and category != 'Todas':
+        conditions.append(models.Product.category == category)
         
     # 1. Conteo optimizado
     count_query = select(func.count(models.Product.id)).filter(*conditions)
@@ -104,6 +108,20 @@ async def update_product(db: AsyncSession, product_id: int, updates: schemas.Pro
     await db.commit()
     await db.refresh(db_product)
     return db_product
+
+async def get_categories_summary(db: AsyncSession, tenant_id: int):
+    """
+    Retorna las categorías únicas y el conteo de productos activos en cada una.
+    """
+    query = (
+        select(models.Product.category, func.count(models.Product.id))
+        .filter(models.Product.tenant_id == tenant_id, models.Product.is_active == True)
+        .group_by(models.Product.category)
+        .order_by(models.Product.category.asc())
+    )
+    result = await db.execute(query)
+    # [{"name": "Bebidas", "count": 15}, ...]
+    return [{"name": row[0], "count": row[1]} for row in result.all()]
 
 async def delete_product(db: AsyncSession, product_id: int, tenant_id: int):
     """

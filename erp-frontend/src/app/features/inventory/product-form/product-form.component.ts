@@ -17,12 +17,13 @@ export class ProductFormComponent {
     @Input() set product(value: Product | null) {
         this._product.set(value);
     }
-
     @Output() onSave = new EventEmitter<void>();
     @Output() onCancel = new EventEmitter<void>();
 
     private _product = signal<Product | null>(null);
-    isLoading = this.inventoryService.isLoading;
+
+    isLoading = signal(false);
+
     form!: FormGroup;
     isEditMode = signal(false);
 
@@ -46,7 +47,7 @@ export class ProductFormComponent {
                 name: p.name,
                 sku: p.sku,
                 category: p.category,
-                measurementUnit: p.measurementUnit,
+                measurementUnit: p.measurement_unit,
                 price: p.price,
                 stock: p.stock,
                 description: p.description
