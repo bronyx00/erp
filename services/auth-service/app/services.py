@@ -71,16 +71,55 @@ class AuthService:
             await AuthService._check_hhrr_access(user.email, user.tenant_id)
             
         # 3. Generar Token
-        access_token = security.create_access_token(
+        token_data = {
+            "sub": user.email,
+            "role": user.role,
+            "tenant_id": user.tenant_id,
+            "user_id": user.id
+        }
+        access_token = security.create_access_token(data=token_data)
+        refresh_token = security.create_refresh_token(data=token_data)
+        return {
+            "access_token": access_token, 
+            "refresh_token": refresh_token, 
+            "token_type": "bearer"
+        }
+        
+    @staticmethod
+    async def refresh_access_token(db: AsyncSession, refresh_token: str):
+        """
+        Recibe un Refresh Token válido y devuelve un nuevo Access Token.
+        """
+        # 1. Decodificar y Validar
+        payload = security.decode_token(refresh_token)
+        if not payload or payload.get("type") != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token inválido o expirado"
+            )
+            
+        email = payload.get("sub")
+        
+        # 2. Verificar que el usuario siga existiendo y activo
+        user = await crud.get_user_by_email(db, email)
+        if not user or not user.is_active:
+            raise HTTPException(status_code=401, detail="Usuario inactivo o no encontrado")
+        
+        # 3. Generar Nuevo Access Token (Solo acceso)
+        new_access_token = security.create_access_token(
             data={
                 "sub": user.email,
                 "role": user.role,
                 "tenant_id": user.tenant_id,
-                "user_id": user.id
-            },
-            expires_delta=timedelta(minutes=int(security.ACCESS_TOKEN_EXPIRE_MINUTES))
+                "user_id": user.user_id
+            }
         )
-        return {"access_token": access_token, "token_type": "bearer"}
+        
+        return {
+            "access_token": new_access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer"
+        }
 
     @staticmethod
     async def _check_hhrr_access(email: str, tenant_id: int):

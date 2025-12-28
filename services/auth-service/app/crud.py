@@ -124,3 +124,19 @@ async def archive_user(db: AsyncSession, user: models.User):
     query = select(models.User).options(selectinload(models.User.tenant)).filter(models.User.id == user.id)
     result = await db.execute(query)
     return result.scalars().first()
+
+async def deactivate_user_by_email(db: AsyncSession, email: str, tenant_id: int):
+    """
+    Desactiva un usuario buscando por email y tenant.
+    Usado para sincronización automática desde RRHH.
+    """
+    user = await get_user_by_email(db, email)
+    
+    if not user:
+        return None # No existe usuario para ese empleado, no hacemos nada
+        
+    if user.tenant_id != tenant_id:
+        return None # Seguridad: No tocar usuarios de otros tenants
+        
+    # Reutilizamos la lógica de archivar
+    return await archive_user(db, user)

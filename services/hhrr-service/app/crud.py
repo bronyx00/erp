@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import Optional
 from . import models, schemas
 from datetime import datetime
+import httpx
 
 async def check_employee_access(db: AsyncSession, email: str, tenant_id: int) -> bool:
     """
@@ -77,6 +78,7 @@ async def get_employees(db: AsyncSession, tenant_id: int, page: int = 1, limit: 
     # Consulta de datos
     query = (
         select(models.Employee)
+        .options(selectinload(models.Employee.schedule))
         .filter(*conditions)
         .order_by(models.Employee.last_name.asc())
         .offset(offset)
@@ -186,7 +188,8 @@ async def update_employee (
     db: AsyncSession,
     employee_id: int,
     employee_update: schemas.EmployeeUpdate,
-    tenant_id: int
+    tenant_id: int,
+    auth_token: str = None
 ):
     """Actualiza datos parciales de un empleado."""
     # Busca al empleado existente
@@ -212,10 +215,33 @@ async def update_employee (
     for key, value in update_data.items():
         setattr(db_employee, key, value)
         
+    
     # Guarda los cambios
     db.add(db_employee)
     await db.commit()
     await db.refresh(db_employee)
+    
+    if update_data.get("is_active") is False and auth_token:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "http://auth-service:8000/api/auth/users/sync-deactivation",
+                    json={"email": db_employee.email, "full_name": "ignore"},
+                    headers={
+                        "Authorization": f"Bearer {auth_token}",
+                        "Content-Type": "application/json"
+                    },
+                    timeout=5.0
+                )
+                if response.status_code == 204:
+                    print("✅ Usuario desactivado correctamente en Auth.")
+                else:
+                    print(f"⚠️ Auth Service respondió: {response.status_code} - {response.text}")
+                
+        except Exception as e:
+            print(f"Error sincronizando desactivación con Auth: {e}")
+        
+    
     return db_employee
 
 # --- HORARIOS ---

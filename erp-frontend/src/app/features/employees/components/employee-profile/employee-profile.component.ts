@@ -6,74 +6,74 @@ import { HhrrService, Employee, SupervisorNote } from '../../../../core/services
 type ProfileTab = 'INFO' | 'NOTES';
 
 @Component({
-  selector: 'app-employee-profile',
-  standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule],
-  templateUrl: './employee-profile.component.html',
-  host: {
-    class: 'block h-full overflow-hidden'
-  }
+    selector: 'app-employee-profile',
+    standalone: true,
+    imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule],
+    templateUrl: './employee-profile.component.html',
+    host: {
+        class: 'block h-full overflow-hidden'
+    }
 })
 export class EmployeeProfileComponent implements OnInit {
-  private hhrrService = inject(HhrrService);
+    private hhrrService = inject(HhrrService);
 
-  @Input({ required: true }) employee!: Employee;
-  @Output() onClose = new EventEmitter<void>();
-  @Output() onEdit = new EventEmitter<Employee>();
+    @Input({ required: true }) employee!: Employee;
+    @Output() onClose = new EventEmitter<void>();
+    @Output() onEdit = new EventEmitter<Employee>();
 
-  // Estado de Pestañas
-  activeTab = signal<ProfileTab>('INFO');
+    // Estado de Pestañas
+    activeTab = signal<ProfileTab>('INFO');
 
-  // Estado de Notas
-  notes = signal<SupervisorNote[]>([]);
-  isLoadingNotes = signal(false);
-  
-  // Nueva Nota
-  newNoteContent = signal('');
-  isSavingNote = signal(false);
+    // Estado de Notas
+    notes = signal<SupervisorNote[]>([]);
+    isLoadingNotes = signal(false);
 
-  ngOnInit() {
-    this.loadNotes();
-  }
+    // Nueva Nota
+    newNoteContent = signal('');
+    isSavingNote = signal(false);
 
-  loadNotes() {
-    this.isLoadingNotes.set(true);
-    this.hhrrService.getEmployeeNotes(this.employee.id).subscribe({
-      next: (res) => {
-        this.notes.set(res.data);
-        this.isLoadingNotes.set(false);
-      },
-      error: () => this.isLoadingNotes.set(false)
-    });
-  }
+    ngOnInit() {
+        this.loadNotes();
+    }
 
-  addNote() {
-    if (!this.newNoteContent().trim()) return;
+    loadNotes() {
+        this.isLoadingNotes.set(true);
+        this.hhrrService.getEmployeeNotes(this.employee.id).subscribe({
+            next: (res) => {
+                this.notes.set(res.data);
+                this.isLoadingNotes.set(false);
+            },
+                error: () => this.isLoadingNotes.set(false)
+        });
+    }
 
-    this.isSavingNote.set(true);
-    const payload = {
-      employee_id: this.employee.id,
-      category: 'GENERAL',
-      content: this.newNoteContent(),
-      is_private: false
-    };
+    addNote() {
+        if (!this.newNoteContent().trim()) return;
 
-    this.hhrrService.createNote(payload).subscribe({
-      next: (note) => {
-        // Agregamos la nota al inicio de la lista localmente
-        this.notes.update(current => [note, ...current]);
-        this.newNoteContent.set('');
-        this.isSavingNote.set(false);
-      },
-      error: (err) => {
-        console.error(err);
-        alert('Error al guardar la nota');
-        this.isSavingNote.set(false);
-      }
-    });
-  }
+        this.isSavingNote.set(true);
+        const payload = {
+            employee_id: this.employee.id,
+            category: 'GENERAL',
+            content: this.newNoteContent(),
+            is_private: false
+        };
 
-  getInitials(): string {
-    return (this.employee.first_name.charAt(0) + this.employee.last_name.charAt(0)).toUpperCase();
-  }
+        this.hhrrService.createNote(payload).subscribe({
+            next: (note) => {
+                // Agregamos la nota al inicio de la lista localmente
+                this.notes.update(current => [note, ...current]);
+                this.newNoteContent.set('');
+                this.isSavingNote.set(false);
+            },
+            error: (err) => {
+                console.error(err);
+                alert('Error al guardar la nota');
+                this.isSavingNote.set(false);
+            }
+        });
+    }
+
+    getInitials(): string {
+        return (this.employee.first_name.charAt(0) + this.employee.last_name.charAt(0)).toUpperCase();
+    }
 }

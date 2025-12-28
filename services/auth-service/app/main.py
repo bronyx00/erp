@@ -41,6 +41,16 @@ async def login_swagger(form_data: OAuth2PasswordRequestForm = Depends(), db: As
     return await services.AuthService.authenticate_user(
         db, email=form_data.username, password=form_data.password, check_schedule=False
     )
+    
+@app.post("/refresh", response_model=schemas.Token)
+async def refresh_token(
+    refresh_token: str, # Puede venir en query o body, idealmente en body
+    db: AsyncSession = Depends(db_manager.get_db)
+):
+    """
+    Usa el Refresh Token (larga duración) para obtener un nuevo Access Token.
+    """
+    return await services.AuthService.refresh_access_token(db, refresh_token)
 
 # --- ENDPOINTS PROTEGIDOS ---
 
@@ -69,6 +79,20 @@ async def delete_user(
     await services.AuthService.deactivate_employee(db, user_id, current_user.tenant_id)
     return
 
+@app.post("/users/sync-deactivation", status_code=204)
+async def sync_user_deactivation(
+    payload: schemas.UserBase,
+    db: AsyncSession = Depends(db_manager.get_db),
+    current_user: UserPayload = Depends(RequirePermission(Permissions.USER_MANAGE))
+):
+    """
+    **Endpoint Interno (Webhook)**
+    Llamado por HHRR-Service cuando se desactiva un empleado.
+    Busca si existe un usuario con ese email y lo desactiva.
+    """
+    await crud.deactivate_user_by_email(db, email=payload.email, tenant_id=current_user.tenant_id)
+    return
+
 @app.get("/users", response_model=schemas.PaginatedResponse[schemas.UserResponse])
 async def read_users(
     page: int = 1, limit: int = 10, search: str = None,
@@ -76,3 +100,4 @@ async def read_users(
     current_user: UserPayload = Depends(get_current_user)
 ):
     return await crud.get_users(db, tenant_id=current_user.tenant_id, page=page, limit=limit, search=search)
+

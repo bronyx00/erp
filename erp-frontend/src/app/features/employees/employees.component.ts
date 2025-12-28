@@ -11,6 +11,7 @@ import { EmployeeProfileComponent } from './components/employee-profile/employee
 import { ScheduleManagerComponent } from './components/schedule-manager/schedule-manager.component';
 import { PayrollHistoryComponent } from './components/payroll-history/payroll-history.component';
 import { PayrollGeneratorComponent } from './components/payroll-generator/payroll-generator.component';
+import { UsersService } from '../../core/services/users';
 
 
 type Tab = 'EMPLOYEES' | 'PAYROLL' | 'ACCESS';
@@ -29,6 +30,7 @@ type DrawerMode = 'CREATE' | 'VIEW_PROFILE' | 'EDIT' | 'MANAGE_SCHEDULE' | 'CREA
 })
 export class EmployeesComponent implements OnInit {
     private hhrrService = inject(HhrrService);
+    private usersService = inject(UsersService)
 
     // Referencia para recargar la tabla de usuarios
     @ViewChild(AccessControlComponent) accessControl!: AccessControlComponent;
@@ -37,6 +39,8 @@ export class EmployeesComponent implements OnInit {
     activeTab = signal<Tab>('EMPLOYEES');
     searchControl = new FormControl('');
     searchTerm = signal('');
+    viewMode = signal<'ACTIVE' | 'HISTORY'>('ACTIVE');
+    totalSystemUsers = signal(0);
 
     // Data State
     employees = signal<Employee[]>([]);
@@ -55,12 +59,9 @@ export class EmployeesComponent implements OnInit {
     isPayrollWizardOpen = signal(false);
 
     stats = computed(() => {
-        const all = this.employees();
-        const active = all.filter(e => e.is_active).length;
-
         return { 
-            total: all.length, 
-            active: active,
+            usersWithAccess: this.totalSystemUsers(), 
+            active: this.employees().filter(e => e.is_active).length,
             monthlyPayroll: this.serverPayrollTotal() 
         };
     });
@@ -75,6 +76,17 @@ export class EmployeesComponent implements OnInit {
         const totalPages = Math.ceil(total / size);
 
         return { start, end, total, totalPages, hasNext: current < totalPages, hasPrev: current > 1 };
+    });
+
+    displayedEmployees = computed(() => {
+        const all = this.employees();
+        const mode = this.viewMode();
+        
+        return all.filter(emp => {
+            if (mode === 'ACTIVE') return emp.is_active;
+            if (mode === 'HISTORY') return !emp.is_active;
+            return true;
+        });
     });
 
     ngOnInit() {
@@ -132,6 +144,10 @@ export class EmployeesComponent implements OnInit {
                 this.employees.set([]);
                 this.isLoading.set(false);
             }
+        });
+
+        this.usersService.getUsers(1, 1).subscribe(res => {
+            this.totalSystemUsers.set(res.meta.total)
         });
     }
 
@@ -205,6 +221,42 @@ export class EmployeesComponent implements OnInit {
         }
     }
 
-    
+    deactivateEmployee(employee: Employee, event: Event) {
+    // Evitamos que el click se propague y abra el perfil del empleado
+    event.stopPropagation();
+
+    const confirmMessage = `⚠️ PROCESO DE BAJA (DESPIDO/RENUNCIA)\n\n` +
+        `Estás a punto de dar de baja a: ${employee.first_name} ${employee.last_name}\n\n` +
+        `ACCIONES AUTOMÁTICAS:\n` +
+        `1. Se marcará como INACTIVO en RRHH.\n` +
+        `2. Se REVOCARÁ inmediatamente su acceso al sistema (Usuario eliminado).\n` +
+        `3. Se moverá a la lista de "Histórico".\n\n` +
+        `¿Confirmar baja?`;
+
+    if (!confirm(confirmMessage)) return;
+
+    this.isLoading.set(true);
+
+    // Payload mágico que detona el trigger en el backend
+    const payload = {
+        status: 'Inactive', 
+        is_active: false 
+    };
+
+    // Usamos 'any' en el payload parcial si tu interfaz es estricta, 
+    // o Partial<Employee> si tu servicio lo soporta.
+    this.hhrrService.updateEmployee(employee.id, payload as any).subscribe({
+        next: () => {
+            this.isLoading.set(false);
+            alert(`✅ ${employee.first_name} ha sido dado de baja correctamente.`);
+            this.loadData(); // Recarga la lista -> El empleado se moverá a "Histórico"
+        },
+        error: (err) => {
+            console.error(err);
+            this.isLoading.set(false);
+            alert('❌ Error al procesar la baja. Intente nuevamente.');
+        }
+    });
+  }
     
 }

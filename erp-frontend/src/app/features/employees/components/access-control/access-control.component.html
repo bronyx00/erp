@@ -1,8 +1,8 @@
 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full animate-in fade-in zoom-in-95 duration-300">
     <div class="px-6 py-4 border-b border-slate-100 bg-white flex justify-between items-center sticky top-0 z-20">
         <div class="flex items-center gap-2 text-sm text-slate-500">
-                <i class="fas fa-shield-alt text-indigo-500"></i>
-                <span class="font-medium">Usuarios del Sistema</span>
+            <i class="fas fa-shield-alt text-indigo-500"></i>
+            <span class="font-medium">Usuarios del Sistema</span>
         </div>
         <button (click)="onCreate.emit()" 
                 class="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 shadow-sm transition flex items-center gap-2 active:scale-95">
@@ -14,10 +14,10 @@
         <table class="w-full text-left">
             <thead class="bg-slate-50 sticky top-0 z-10 border-b border-slate-200 shadow-sm">
                 <tr>
-                    <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Usuario</th>
-                    <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Rol</th>
+                    <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Usuario / Email</th>
+                    <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Rol Asignado</th>
                     <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase text-center">Estado</th>
-                    <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Tenant ID</th>
+                    <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase text-right">Acciones</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -27,38 +27,41 @@
                     </td></tr>
                 } @else if (users().length === 0) {
                     <tr><td colspan="4" class="px-6 py-20 text-center text-slate-400 italic">
-                        No se encontraron usuarios que coincidan con la búsqueda.
+                        No se encontraron usuarios.
                     </td></tr>
                 } @else {
                     @for (u of users(); track u.id) {
                         <tr class="hover:bg-slate-50 transition group">
                             <td class="px-6 py-4">
                                 <div class="flex items-center gap-3">
-                                    <div class="h-9 w-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-bold uppercase border border-slate-200 shadow-sm">
-                                        {{ u.full_name ? u.full_name.charAt(0) : u.email.charAt(0) }}
+                                    <div class="h-9 w-9 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-sm font-bold border border-indigo-100">
+                                        {{ u.full_name ? u.full_name.charAt(0).toUpperCase() : '?' }}
                                     </div>
                                     <div>
                                         <p class="font-bold text-slate-800 text-sm">{{ u.full_name || 'Sin Nombre' }}</p>
-                                        <p class="text-xs text-slate-500 flex items-center gap-1 font-mono">
-                                            {{ u.email }}
-                                        </p>
+                                        <p class="text-xs text-slate-500 font-mono">{{ u.email }}</p>
                                     </div>
                                 </div>
                             </td>
                             <td class="px-6 py-4">
-                                <span class="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase border bg-slate-50 border-slate-200 text-slate-600 tracking-wide">
+                                <span class="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase border tracking-wide"
+                                      [ngClass]="getRoleBadgeClass(u.role)">
                                     {{ u.role.replace('_', ' ') }}
                                 </span>
                             </td>
                             <td class="px-6 py-4 text-center">
-                                <span [class]="u.is_active ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-rose-100 text-rose-700 border-rose-200'"
+                                <span [class]="u.is_active ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'"
                                         class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border inline-flex items-center gap-1">
-                                    <span class="w-1.5 h-1.5 rounded-full" [class]="u.is_active ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                                    <span class="w-1.5 h-1.5 rounded-full" [class]="u.is_active ? 'bg-emerald-500' : 'bg-slate-400'"></span>
                                     {{ u.is_active ? 'Activo' : 'Inactivo' }}
                                 </span>
                             </td>
-                            <td class="px-6 py-4 text-xs text-slate-400 font-mono">
-                                #{{ u.tenant_id }}
+                            <td class="px-6 py-4 text-right">
+                                <button (click)="deleteUser(u)" 
+                                        class="text-slate-300 hover:text-rose-600 transition p-2 opacity-0 group-hover:opacity-100" 
+                                        title="Eliminar Acceso">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
                             </td>
                         </tr>
                     }

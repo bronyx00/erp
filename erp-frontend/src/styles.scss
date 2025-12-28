@@ -5,3 +5,21 @@ html, body {
   height: 100%;
   background-color: #f8fafc; /* Slate-50 */
 }
+
+@layer components {
+  .role-card {
+    @apply flex flex-col justify-center p-3 border border-slate-200 rounded-xl cursor-pointer transition-all bg-white hover:border-slate-300 hover:shadow-sm h-full;
+    
+    &.active {
+      @apply border-indigo-500 bg-indigo-50/50 ring-1 ring-indigo-500;
+      
+      .icon-box {
+        @apply bg-indigo-100 text-indigo-600;
+      }
+    }
+  }
+
+  .icon-box {
+    @apply h-8 w-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center transition-colors;
+  }
+}

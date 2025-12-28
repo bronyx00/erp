@@ -1,5 +1,6 @@
 from typing import List
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
@@ -17,6 +18,8 @@ from app.routers import payrolls
 # Configuración de Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hhrr-service")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -108,10 +111,17 @@ async def update_employee(
     employee_id: int,
     employee_update: schemas.EmployeeUpdate,
     db: AsyncSession = Depends(database.get_db),
-    user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_MANAGE))
+    user: UserPayload = Depends(RequirePermission(Permissions.EMPLOYEE_MANAGE)),
+    token: str = Depends(oauth2_scheme)
 ):
     """Actualiza datos del empleado."""
-    updated_employee = await crud.update_employee(db, employee_id, employee_update, user.tenant_id)
+    updated_employee = await crud.update_employee(
+        db, 
+        employee_id=employee_id, 
+        employee_update=employee_update, 
+        tenant_id=user.tenant_id,
+        auth_token=token
+    )
     if not update_employee:
         raise HTTPException(status_code=404, detail="Empleado no encontrado")
     return updated_employee

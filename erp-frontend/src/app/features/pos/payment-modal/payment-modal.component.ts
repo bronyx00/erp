@@ -4,17 +4,17 @@ import { FormsModule } from '@angular/forms';
 import type { PaymentMethod } from '../../../core/services/finance';
 
 interface PaymentOption {
-  id: PaymentMethod;
-  label: string;
-  icon: string;
-  color: string;
+    id: PaymentMethod;
+    label: string;
+    icon: string;
+    color: string;
 }
 
 @Component({
-  selector: 'app-payment-modal',
-  standalone: true,
-  imports: [CommonModule, FormsModule, CurrencyPipe],
-  template: `
+    selector: 'app-payment-modal',
+    standalone: true,
+    imports: [CommonModule, FormsModule, CurrencyPipe],
+    template: `
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
@@ -89,93 +89,93 @@ interface PaymentOption {
   `
 })
 export class PaymentModalComponent {
-  @Input({ required: true }) totalAmount!: number;
-  @Input() exchangeRate: number = 0;
-  @Output() onConfirm = new EventEmitter<{ method: PaymentMethod; amount: number }>();
-  @Output() onCancel = new EventEmitter<void>();
+    @Input({ required: true }) totalAmount!: number;
+    @Input() exchangeRate: number = 0;
+    @Output() onConfirm = new EventEmitter<{ method: PaymentMethod; amount: number }>();
+    @Output() onCancel = new EventEmitter<void>();
 
-  @ViewChildren('amountInput') amountInputs!: QueryList<ElementRef>;
-  @ViewChildren('methodBtn') methodBtns!: QueryList<ElementRef>;
+    @ViewChildren('amountInput') amountInputs!: QueryList<ElementRef>;
+    @ViewChildren('methodBtn') methodBtns!: QueryList<ElementRef>;
 
-  selectedMethod = signal<PaymentMethod | null>(null);
-  paymentAmount = 0;
-  focusedIndex = 0;
+    selectedMethod = signal<PaymentMethod | null>(null);
+    paymentAmount = 0;
+    focusedIndex = 0;
 
-  methods: PaymentOption[] = [
-    { id: 'MOBILE_PAYMENT', label: 'Pago Móvil', icon: 'fas fa-mobile-alt', color: 'bg-purple-500' },
-    { id: 'BIO_PAYMENT', label: 'Bio Pago', icon: 'fas fa-fingerprint', color: 'bg-blue-500' },
-    { id: 'DEBIT_CARD', label: 'Tarjeta Débito/Crédito', icon: 'far fa-credit-card', color: 'bg-emerald-500' },
-    { id: 'TRANSFER', label: 'Transferencia', icon: 'fas fa-university', color: 'bg-slate-600' },
-    { id: 'OTHER', label: 'Otros / Mixto', icon: 'fas fa-wallet', color: 'bg-orange-500' },
-  ];
+    methods: PaymentOption[] = [
+        { id: 'MOBILE_PAYMENT', label: 'Pago Móvil', icon: 'fas fa-mobile-alt', color: 'bg-purple-500' },
+        { id: 'BIO_PAYMENT', label: 'Bio Pago', icon: 'fas fa-fingerprint', color: 'bg-blue-500' },
+        { id: 'DEBIT_CARD', label: 'Tarjeta Débito/Crédito', icon: 'far fa-credit-card', color: 'bg-emerald-500' },
+        { id: 'TRANSFER', label: 'Transferencia', icon: 'fas fa-university', color: 'bg-slate-600' },
+        { id: 'OTHER', label: 'Otros / Mixto', icon: 'fas fa-wallet', color: 'bg-orange-500' },
+    ];
 
-  ngAfterViewInit() {
-    // Foco inicial al primer elemento
-    setTimeout(() => this.focusOption(0), 100);
-  }
-
-  // --- KEYBOARD NAVIGATION ---
-  @HostListener('window:keydown', ['$event'])
-  handleKeyboardEvents(event: KeyboardEvent) {
-    // Si el foco está en el input de monto, no interferimos con las flechas
-    if (document.activeElement?.tagName === 'INPUT') return;
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      this.focusOption((this.focusedIndex + 1) % this.methods.length);
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      // Lógica para volver al último si estamos en el primero
-      const nextIndex = (this.focusedIndex - 1 + this.methods.length) % this.methods.length;
-      this.focusOption(nextIndex);
-    } else if (event.key === 'Escape') {
-        this.onCancel.emit();
+    ngAfterViewInit() {
+        // Foco inicial al primer elemento
+        setTimeout(() => this.focusOption(0), 100);
     }
-  }
 
-  focusOption(index: number) {
-    this.focusedIndex = index;
-    const buttonArray = this.methodBtns.toArray();
-    if (buttonArray[index]) {
-      buttonArray[index].nativeElement.focus();
+    // --- KEYBOARD NAVIGATION ---
+    @HostListener('window:keydown', ['$event'])
+    handleKeyboardEvents(event: KeyboardEvent) {
+        // Si el foco está en el input de monto, no interferimos con las flechas
+        if (document.activeElement?.tagName === 'INPUT') return;
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+                this.focusOption((this.focusedIndex + 1) % this.methods.length);
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                // Lógica para volver al último si estamos en el primero
+                const nextIndex = (this.focusedIndex - 1 + this.methods.length) % this.methods.length;
+                this.focusOption(nextIndex);
+            } else if (event.key === 'Escape') {
+                this.onCancel.emit();
+            }
     }
-  }
 
-  // --- LÓGICA DE SELECCIÓN ---
+    focusOption(index: number) {
+        this.focusedIndex = index;
+        const buttonArray = this.methodBtns.toArray();
+        if (buttonArray[index]) {
+            buttonArray[index].nativeElement.focus();
+        }
+    }
 
-  selectMethod(method: PaymentMethod) {
-    // Si ya está seleccionado, no hacemos nada para no resetear el input
-    if (this.selectedMethod() === method) return;
+    // --- LÓGICA DE SELECCIÓN ---
 
-    this.selectedMethod.set(method);
-    // UX: Al hacer click, no pre-llenamos el monto, dejamos que el usuario escriba
-    this.focusAmountInput();
-  }
+    selectMethod(method: PaymentMethod) {
+        // Si ya está seleccionado, no hacemos nada para no resetear el input
+        if (this.selectedMethod() === method) return;
 
-  onEnterOnMethod(method: PaymentMethod, event: Event) {
-    event.preventDefault();
-    this.selectedMethod.set(method);
-    this.paymentAmount = this.totalAmount; // UX: Enter pre-llena el monto total
-    this.focusAmountInput(true); // True para seleccionar el texto
-  }
+        this.selectedMethod.set(method);
+        // UX: Al hacer click, no pre-llenamos el monto, dejamos que el usuario escriba
+        this.focusAmountInput();
+    }
 
-  focusAmountInput(selectAll: boolean = false) {
-    setTimeout(() => {
-      const input = this.amountInputs.first;
-      if (input) {
-          input.nativeElement.focus();
-          if (selectAll) input.nativeElement.select();
-      }
-    }, 50);
-  }
+    onEnterOnMethod(method: PaymentMethod, event: Event) {
+        event.preventDefault();
+        this.selectedMethod.set(method);
+        this.paymentAmount = this.totalAmount; // UX: Enter pre-llena el monto total
+        this.focusAmountInput(true); // True para seleccionar el texto
+    }
+
+    focusAmountInput(selectAll: boolean = false) {
+        setTimeout(() => {
+            const input = this.amountInputs.first;
+            if (input) {
+                input.nativeElement.focus();
+                if (selectAll) input.nativeElement.select();
+            }
+        }, 50);
+    }
 
     confirmPayment(event: Event) {
         event.stopPropagation();
         if (this.paymentAmount > 0 && this.selectedMethod()) {
             this.onConfirm.emit({
-            method: this.selectedMethod()!,
-            amount: this.paymentAmount
-        });
+                method: this.selectedMethod()!,
+                amount: this.paymentAmount
+            });
         }
     }
 }
