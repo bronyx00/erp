@@ -1,11 +1,11 @@
 import { Component, OnInit, inject, signal, Input, computed, Output, EventEmitter } from '@angular/core';
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { UsersService, User } from '../../../../core/services/users';
 
 @Component({
     selector: 'app-access-control',
     standalone: true,
-    imports: [CommonModule, DatePipe],
+    imports: [CommonModule],
     templateUrl: './access-control.component.html' // Referencia al archivo externo
 })
 export class AccessControlComponent implements OnInit {

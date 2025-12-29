@@ -19,7 +19,7 @@ from .events import publish_event
 
 # Imports Comunes
 from erp_common.security import oauth2_scheme, RequirePermission, Permissions, UserPayload
-from .schemas import PaginatedResponse, InvoiceSummary, SalesTotalResponse, FinanceSettingsRead, InvoiceResponse
+from .schemas import (PaginatedResponse, InvoiceSummary, SalesTotalResponse, FinanceSettingsRead, InvoiceResponse)
 from .utils.pdf_generator import generate_invoice_pdf
 
 # Logging
@@ -199,6 +199,28 @@ async def create_payment(
             publish_event("invoice.paid", event_data)
         
         return new_payment
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+# --- CIERRE DE CAJA ---
+@app.post("/cash-close", response_model=schemas.CashCloseResponse)
+async def perform_cash_close(
+    close_data: schemas.CashCloseCreate,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_CREATE))
+):
+    """
+    Realiza Cierre de Caja
+    
+    1. Agrupa todas las facturas abiertas/pendientes de cierre.
+    2. Calcula los totales en USD y VES según los pagos registrados.
+    3. Compara con el efectivo declarado por el usuario.
+    4. Genera el asiento contable global.
+    """
+    try:
+        user_id_int = int(user.user_id) if user.user_id else 0
+        
+        return await crud.create_cash_close(db, close_data, user.tenant_id, user_id_int)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

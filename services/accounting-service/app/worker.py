@@ -31,60 +31,92 @@ async def get_payroll_config(db, tenant_id: int):
     result = await db.execute(select(PayrollAccountingConfig).where(PayrollAccountingConfig.tenant_id == tenant_id))
     return result.scalars().first()
 
-async def process_invoice_created(data: dict):
-    status = data.get("status", "ISSUED") 
-    inv_id = data.get("id")
-    tenant_id = data.get("tenant_id", 1)
+async def process_cash_close(data: dict):
+    """
+    Genera un asiento contable por todo el turno/dia.
+    """
+    summary = data.get("summary", {})
+    tenant_id = data.get("tenant_id")
+    close_id = data.get("cash_close_id")
     
-    print(f" [x] 📥 Procesando Factura #{inv_id} ({status})...", flush=True)
+    print(f" [x] 💰 Procesando Cierre de Caja #{close_id}...", flush=True)
     
     db = AsyncSessionLocal()
     try:
-        amount = Decimal(str(data.get("total_amount") or 0))
-
-        # --- LÓGICA INTELIGENTE ---
-        if status == "PAID":
-            # VENTA DE CONTADO (Directo): Caja vs Ventas
-            # Asumimos que entra a Caja Principal por defecto
-            debit_code = "1.01.01.001" # Caja
-            credit_code = "4.01.01.001" # Ventas Contado
-            desc = f"Venta Contado Fac. {inv_id}"
-        else:
-            # VENTA A CRÉDITO: CxC vs Ventas
-            debit_code = "1.01.03.001" # Clientes (CxC)
-            credit_code = "4.01.01.002" # Ventas Crédito
-            desc = f"Venta Crédito Fac. {inv_id}"
-
-        debit_acc = await get_account_id_by_code(db, debit_code, tenant_id)
-        credit_acc = await get_account_id_by_code(db, credit_code, tenant_id)
-
-        if not debit_acc or not credit_acc:
-            print(f" [!] ❌ Cuentas no configuradas ({debit_code}/{credit_code}).", flush=True)
-            return
+        # Convierte a Decimal
+        total_sales_base = Decimal(str(summary.get("total_sales_usd", 0)))  # Venta neta (sin IVA)
+        total_tax = Decimal(str(summary.get("total_tax_usd", 0)))           # IVA
         
-        # Crear Asiento Único
+        # Efectivo (USD Real + VES convertido a USD)
+        cash_usd_real = Decimal(str(summary.get("collected_cash_usd", 0)))
+        cash_ves_equiv = Decimal(str(summary.get("collected_cash_ves_equiv", 0)))
+        total_cash_debit = cash_usd_real + cash_ves_equiv
+
+        # Banco (USD Real + VES convertido a USD)
+        bank_usd_real = Decimal(str(summary.get("collected_bank_usd", 0)))
+        bank_ves_equiv = Decimal(str(summary.get("collected_bank_ves_equiv", 0)))
+        total_bank_debit = bank_usd_real + bank_ves_equiv
+        
+        sales_on_credit = Decimal(str(summary.get("sales_on_credit_usd", 0)))
+        
+        # Validación básica de balance
+        total_debits = total_cash_debit + total_bank_debit + sales_on_credit
+        total_credits = total_sales_base + total_tax
+        
+        # Crear Encabezado
         entry = LedgerEntry(
             tenant_id=tenant_id,
             transaction_date=datetime.now().date(),
-            description=desc,
-            reference=f"INV-{inv_id}",
-            total_amount=amount
+            description=f"Cierre de Caja Global #{close_id}",
+            reference=f"CLOSE-{close_id}",
+            total_amount=total_debits 
         )
         db.add(entry)
         await db.flush()
+        
+        # --- OBTENER CUENTAS ---
+        # 1. ACTIVO
+        acc_cash = await get_account_id_by_code(db, "1.01.01.001", tenant_id) # Caja Principal
+        acc_bank = await get_account_id_by_code(db, "1.01.01.003", tenant_id) # Banco Nacional
+        acc_ar   = await get_account_id_by_code(db, "1.01.03.001", tenant_id) # Cuentas por Cobrar Clientes
+        
+        # 2. INGRESOS Y PASIVOS
+        acc_sales = await get_account_id_by_code(db, "4.01.01.001", tenant_id) # Ventas Mercancía
+        acc_vat   = await get_account_id_by_code(db, "2.01.02.001", tenant_id) # Débito Fiscal IVA
+        
+        lines = []
+        
+        # --- GENERAR LINEAS (DEBE) ---
+        if total_cash_debit > 0 and acc_cash:
+            lines.append(LedgerLine(entry_id=entry.id, account_id=acc_cash, debit=total_cash_debit, credit=0))
+            
+        if total_bank_debit > 0 and acc_bank:
+            lines.append(LedgerLine(entry_id=entry.id, account_id=acc_bank, debit=total_bank_debit, credit=0))
+            
+        if sales_on_credit > 0 and acc_ar:
+            lines.append(LedgerLine(entry_id=entry.id, account_id=acc_ar, debit=sales_on_credit, credit=0))
 
-        db.add(LedgerLine(entry_id=entry.id, account_id=debit_acc, debit=amount, credit=0))
-        db.add(LedgerLine(entry_id=entry.id, account_id=credit_acc, debit=0, credit=amount))
-        
-        await db.commit()
-        print(f" [v] ✅ Asiento #{entry.id} creado.", flush=True)
-        
+        # --- GENERAR LINEAS (HABER) ---
+        if total_sales_base > 0 and acc_sales:
+            lines.append(LedgerLine(entry_id=entry.id, account_id=acc_sales, debit=0, credit=total_sales_base))
+            
+        if total_tax > 0 and acc_vat:
+            lines.append(LedgerLine(entry_id=entry.id, account_id=acc_vat, debit=0, credit=total_tax))
+            
+        if lines:
+            db.add_all(lines)
+            await db.commit()
+            print(f" [v] ✅ Asiento Global de Cierre #{entry.id} creado.", flush=True)
+        else:
+            print(" [!] ⚠️ Cierre sin movimientos financieros.", flush=True)
+            await db.rollback()
+
     except Exception as e:
-        print(f" [!] Error creación: {e}", flush=True)
+        print(f" [!] Error creación Asiento Cierre: {e}", flush=True)
         await db.rollback()
     finally:
         await db.close()
-
+        
 async def process_payroll_calculated(data: dict):
     """
     Gestiona el evento 'payroll.calculated' del servicio RRHH. 
@@ -280,7 +312,6 @@ async def process_payroll_batch_event(payload):
             print(f"❌ Error en asiento contable: {e}")
             await db.rollback()
             
-            
 
 async def process_message(message: aio_pika.IncomingMessage):
     async with message.process():
@@ -289,16 +320,12 @@ async def process_message(message: aio_pika.IncomingMessage):
             routing_key = message.routing_key
             print(f"📥 [Accounting] Evento recibido: {routing_key}", flush=True)
 
-            if routing_key == "invoice.created":
-                # Asegúrate de importar process_invoice_created
-                from app.worker import process_invoice_created 
-                await process_invoice_created(data)
-            elif routing_key == "payroll.calculated":
-                # Asegúrate de importar process_payroll_calculated
-                from app.worker import process_payroll_calculated
+            if routing_key == "payroll.calculated":
                 await process_payroll_calculated(data)
             elif routing_key == "payroll.batch_paid":
                 await process_payroll_batch_event(data)
+            elif routing_key == "finance.cash_close_created":
+                await process_cash_close(data)
                 
         except Exception as e:
             print(f"❌ Error procesando mensaje: {e}", flush=True)
@@ -310,8 +337,7 @@ async def main():
         exchange = await channel.declare_exchange("erp_events", aio_pika.ExchangeType.TOPIC, durable=True)
         queue = await channel.declare_queue("accounting_queue", durable=True)
         
-        await queue.bind(exchange, routing_key="invoice.created")
-        await queue.bind(exchange, routing_key="invoice.paid")
+        await queue.bind(exchange, routing_key="finance.cash_close_created")
         await queue.bind(exchange, routing_key="payroll.calculated")
         await queue.bind(exchange, routing_key="payroll.batch_paid")
         

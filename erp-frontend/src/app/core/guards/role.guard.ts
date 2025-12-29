@@ -17,7 +17,7 @@ export const roleGuard = (allowedRoles: string[]): CanActivateFn => {
     }
 
     // 2. Verificar Rol
-    const userRole = auth.currentUserRole(); // Ej: 'CASHIER'
+    const userRole = auth.currentUser(); // Ej: 'CASHIER'
     
     if (allowedRoles.includes(userRole)) {
       return true; // Acceso concedido

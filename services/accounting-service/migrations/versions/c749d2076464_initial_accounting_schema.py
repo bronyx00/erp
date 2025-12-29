@@ -1,8 +1,8 @@
-"""add_payroll_mapping
+"""Initial Accounting Schema
 
-Revision ID: dbb840a2cc5c
-Revises: add_unique_constraint
-Create Date: 2025-12-16 22:41:04.425302
+Revision ID: c749d2076464
+Revises: 
+Create Date: 2025-12-29 00:28:34.125737
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'dbb840a2cc5c'
-down_revision: Union[str, Sequence[str], None] = 'add_unique_constraint'
+revision: str = 'c749d2076464'
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

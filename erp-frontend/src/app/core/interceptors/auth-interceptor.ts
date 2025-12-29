@@ -1,26 +1,72 @@
-import { HttpInterceptorFn } from '@angular/common/http';
+import { HttpInterceptorFn, HttpErrorResponse, HttpRequest, HttpHandlerFn, HttpEvent } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { AuthService } from '../services/auth';
+import { catchError, switchMap, throwError, BehaviorSubject, filter, take, Observable } from 'rxjs';
 
-export const authInterceptor: HttpInterceptorFn = (req, next) => {
+let isRefreshing = false;
+let refreshTokenSubject: BehaviorSubject<string | null> = new BehaviorSubject<string | null>(null);
+
+export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, next: HttpHandlerFn): Observable<HttpEvent<unknown>> => {
   const authService = inject(AuthService);
-  const token = authService.getToken();
+  const token = localStorage.getItem('access_token');
 
-  // Lista de URLs que NO necesitan token (Login y Registro)
-  const excludedUrls = ['/api/auth/login', '/api/auth/register'];
-
-  // Si la perición va a una URL exluida, pasarla sin tocar
-  const isExcluded = excludedUrls.some(url => req.url.includes(url));
-
-  if (token && !isExcluded) {
-    // CLONAR la petición y agregarle el header Authorization
-    const clonedReq = req.clone({
-      setHeaders: {
-        Authorization: `Bearer ${token}`
-      }
+  let authReq = req;
+  if (token) {
+    authReq = req.clone({
+      headers: req.headers.set('Authorization', `Bearer ${token}`)
     });
-    return next(clonedReq);
   }
 
-  return next(req);
+  return next(authReq).pipe(
+    catchError((error) => {
+      if (
+          error instanceof HttpErrorResponse && 
+          error.status === 401 && 
+          !req.url.includes('/login') && 
+          !req.url.includes('/refresh')
+      ) {
+        return handle401Error(authReq, next, authService);
+      }
+      return throwError(() => error);
+    })
+  );
+};
+
+const handle401Error = (
+  request: HttpRequest<unknown>, 
+  next: HttpHandlerFn, 
+  authService: AuthService
+): Observable<HttpEvent<unknown>> => {
+  
+  if (!isRefreshing) {
+    isRefreshing = true;
+    refreshTokenSubject.next(null);
+
+    return authService.refreshToken().pipe(
+      switchMap((tokenResponse: any) => {
+        isRefreshing = false;
+        refreshTokenSubject.next(tokenResponse.access_token);
+        
+        return next(request.clone({
+          setHeaders: { Authorization: `Bearer ${tokenResponse.access_token}` }
+        }));
+      }),
+      catchError((err) => {
+        isRefreshing = false;
+        authService.logout();
+        return throwError(() => err);
+      })
+    );
+  } else {
+    // Si ya estamos refrescando, esperamos a que el Subject tenga valor
+    return refreshTokenSubject.pipe(
+      filter(token => token != null),
+      take(1),
+      switchMap(jwt => {
+        return next(request.clone({
+          setHeaders: { Authorization: `Bearer ${jwt}` }
+        }));
+      })
+    );
+  }
 };

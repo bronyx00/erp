@@ -1,95 +1,71 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { map, tap } from 'rxjs/operators';
-import { jwtDecode } from 'jwt-decode';
+import { Router } from '@angular/router';
+import { Observable, tap, of, throwError } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
-// Define la interfaz de la respuesta del Login
-interface TokenResponse {
+export interface AuthResponse {
   access_token: string;
+  refresh_token: string;
   token_type: string;
-}
-
-interface UserDecoded {
-  sub: string; // email
-  role: string;
-  tenant_id: number;
-  exp: number; // expiración
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
-  // URL de nuestra API Gateway (Traefik)
-  private readonly API_URL = 'http://localhost:80/api/auth';
-  private readonly TOKEN_KEY = 'erp_token';
+  private http = inject(HttpClient);
+  private router = inject(Router);
+  private apiUrl = `${environment.apiUrl}/auth`;
 
-  // Signal para saber si el usuario está logueado
-  currentUser = signal<string | null>(null);
-  currentUserRole = signal<string>('');
+  // Signals para estado reactivo
+  currentUser = signal<any>(null);
+  isAuthenticated = signal<boolean>(!!localStorage.getItem('access_token'));
 
-  constructor(private http: HttpClient) {
-    // Al iniciar, verificamos si hay un token guardado
-    this.loadToken();
-  }
-
-  login(email: string, password: string) {
-    // En FastAPI OAuth2, los datos se envían como Form Data, no JSON
+  login(credentials: any): Observable<AuthResponse> {  
     const formData = new FormData();
-    formData.append('username', email); // FastAPI espera 'username' aunque sea un email
-    formData.append('password', password);
+    formData.append('username', credentials.email);
+    formData.append('password', credentials.password);
 
-    return this.http.post<TokenResponse>(`${this.API_URL}/login`, formData).pipe(
-      tap(response => this.saveToken(response.access_token))
+    return this.http.post<AuthResponse>(`${this.apiUrl}/login`, formData).pipe(
+      tap(response => this.setSession(response))
     );
   }
 
-  logout() {
-    localStorage.removeItem(this.TOKEN_KEY);
-    this.currentUser.set(null);
+  register(data: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/register`, data);
   }
 
-  private saveToken(token: string) {
-    localStorage.setItem(this.TOKEN_KEY, token);
-    this.loadToken();
-  }
-
-  private loadToken() {
-    const token = localStorage.getItem(this.TOKEN_KEY);
-    if (token) {
-      try {
-        const decoded = jwtDecode<UserDecoded>(token);
-        // Verificar si expiró 
-        const isExpired = decoded.exp * 1000 < Date.now();
-
-        if (!isExpired) {
-          this.currentUser.set(decoded.sub);
-          this.currentUserRole.set(decoded.role)
-        } else {
-          this.logout();
-        }
-      } catch (e) {
+  // Refresh Token
+  refreshToken(): Observable<AuthResponse> {
+    const refreshToken = localStorage.getItem('refresh_token');
+    
+    if (!refreshToken) {
+        // Si no hay refresh token, no podemos renovar. Logout forzado.
         this.logout();
-      }
+        return throwError(() => new Error('No refresh token'));
     }
+
+    return this.http.post<AuthResponse>(`${this.apiUrl}/refresh`, {
+      refresh_token: refreshToken
+    }).pipe(
+        tap(response => this.setSession(response))
+    );
   }
 
-  // Helper para verificar permisos
-  hasRole(allowedRoles: string[]): boolean {
-    return allowedRoles.includes(this.currentUserRole())
+  private setSession(authResult: AuthResponse) {
+    localStorage.setItem('access_token', authResult.access_token);
+    // Solo guardamos refresh si viene en la respuesta (a veces solo viene access)
+    if (authResult.refresh_token) {
+        localStorage.setItem('refresh_token', authResult.refresh_token);
+    }
+    this.isAuthenticated.set(true);
   }
 
-  // Login auxiliar apra el Model de Supervisor (NO guardar en localStorage)
-  supervisorLogin(email: string, password: string) {
-    const formData = new FormData();
-    formData.append('username', email);
-    formData.append('password', password);
-    return this.http.post<TokenResponse>(`${this.API_URL}/login`, formData);
-  }
-
-  // Método para obtener el token crudo
-  getToken(): string | null {
-    return localStorage.getItem(this.TOKEN_KEY);
+  logout() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    this.isAuthenticated.set(false);
+    this.router.navigate(['/login']);
   }
 }
-

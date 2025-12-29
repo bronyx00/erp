@@ -78,6 +78,7 @@ class PaymentResponse(BaseModel):
     amount: Decimal
     payment_method: str
     created_at: datetime
+    currency: str
     model_config = ConfigDict(from_attributes=True)
 
 class InvoiceResponse(BaseModel):
@@ -106,6 +107,35 @@ class InvoiceResponse(BaseModel):
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+    
+# --- CIERRE DE CAJA ---
+class CashCloseCreate(BaseModel):
+    # El usuario solo envía lo que contó fisicamente y notas
+    declared_cash_usd: Decimal = Field(default=0, ge=0)
+    declared_cash_ves: Decimal = Field(default=0, ge=0)
+    notes: Optional[str] = None
+    
+class CashCloseResponse(BaseModel):
+    id: int
+    period_start: datetime
+    period_end: datetime
+    
+    # Totales Sistema
+    total_sales_usd: Decimal
+    total_sales_ves: Decimal
+    
+    # Arqueo
+    declared_cash_usd: Decimal
+    declared_cash_ves: Decimal
+    
+    # Diferencias
+    difference_usd: Decimal
+    difference_ves: Decimal
+    
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+    
     
 # --- Cotizaciones ---
 class QuoteItemCreate(BaseModel):

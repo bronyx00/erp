@@ -44,7 +44,7 @@ async def login_swagger(form_data: OAuth2PasswordRequestForm = Depends(), db: As
     
 @app.post("/refresh", response_model=schemas.Token)
 async def refresh_token(
-    refresh_token: str, # Puede venir en query o body, idealmente en body
+    refresh_token: schemas.RefreshTokenRequest,
     db: AsyncSession = Depends(db_manager.get_db)
 ):
     """

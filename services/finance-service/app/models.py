@@ -16,6 +16,53 @@ class FinanceSettings(Base):
     default_currency = Column(String, default="USD")
     tax_rate = Column(Numeric(5, 2), default=16.00) # IVA por defecto
     
+class CashClose(Base):
+    """
+    Representa el Cierre de Caja diario o por turno.
+    Agrupa todas las transacciones financieras para generar un asiento global.
+    """
+    __tablename__ = "cash_closes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, index=True, nullable=False)
+    user_id = Column(Integer, nullable=False)                   # Quién hizo el cierre
+    
+    # Fechas del periodo que abarca el cierre
+    period_start = Column(DateTime(timezone=True), nullable=False)
+    period_end = Column(DateTime(timezone=True), nullable=False)
+    
+    # --- RESUMEN DEL SISTEMA (USD) ---
+    total_sales_usd = Column(Numeric(12, 2), default=0)         # Total Venta Neta
+    total_tax_usd = Column(Numeric(12, 2), default=0)           # Total IVA
+    total_discount_usd = Column(Numeric(12, 2), default=0)
+    
+    # --- RESUMEN DEL SISTEMA (VES) ---
+    total_sales_ves = Column(Numeric(20, 2), default=0)        
+    total_tax_ves = Column(Numeric(20, 2), default=0)           
+    
+    # --- DESGLOSE POR MÉTODO (USD) ---
+    total_cash_usd = Column(Numeric(12, 2), default=0)          # Efectivo (Caja)
+    total_debit_card_usd = Column(Numeric(12, 2), default=0)    # Punto de Venta / Zelle
+    total_transfer_usd = Column(Numeric(12, 2), default=0)      # Transferencia
+    total_credit_sales_usd = Column(Numeric(12, 2), default=0)  # Ventas a Crédito (CxC)
+
+    # --- DESGLOSE POR MÉTODO (VES) ---
+    total_cash_ves = Column(Numeric(20, 2), default=0)          # Efectivo Bs
+    total_debit_card_ves = Column(Numeric(20, 2), default=0)    # Punto de Venta Bs
+    total_transfer_ves = Column(Numeric(20, 2), default=0)      # Pago Movil / Transf Bs
+    total_credit_sales_ves = Column(Numeric(20, 2), default=0)  # Ventas a Crédito
+
+    # --- ARQUEO REAL ---
+    declared_cash_usd = Column(Numeric(12, 2), default=0)
+    declared_cash_ves = Column(Numeric(12, 2), default=0)
+    
+    # --- DIFERENCIA ---
+    difference_usd = Column(Numeric(12, 2), default=0)          # declared - system_cash
+    difference_ves = Column(Numeric(12, 2), default=0)
+    
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class Invoice(Base):
     """
@@ -65,6 +112,8 @@ class Invoice(Base):
     # --- AUDITORIA ---
     created_by_role = Column(String, nullable=True)                 # Rol al momento de crear
     
+    cash_close_id = Column(Integer, ForeignKey("cash_closes.id"), nullable=True, index=True) # Vincula la factura a un cierre específico.
+    
     # Relaciones
     items = relationship("InvoiceItem", back_populates="invoice")
     payments = relationship("Payment", back_populates="invoice")
@@ -111,6 +160,8 @@ class ExchangeRate(Base):
     rate = Column(Numeric(20, 6), nullable=False)       # Tasa (ej. 36.543210)
     source = Column(String, default="BCV")              # Fuente (BCV)
     acquired_at = Column(DateTime(timezone=True), server_default=func.now()) # Cuándo la guardamos
+    
+
     
 class Quote(Base):
     """Cotizaciones / Presupuestos."""

@@ -495,6 +495,167 @@ async def set_invoice_void(db: AsyncSession, invoice: models.Invoice):
     await db.refresh(invoice)
     return invoice   
 
+async def create_cash_close(
+    db: AsyncSession,
+    close_data: schemas.CashCloseCreate,
+    tenant_id: int,
+    user_id: int,
+) -> models.CashClose:
+    """
+    Genera el Cierre de Caja.
+    1. Busca facturas PAGADAS o PARCIALMENTE PAGADAS de la empresa que NO tengan cash_close_id.
+    2. Suma los pagos asociados a esas facturas para calcular el 'Sistema'.
+    3. Compara contra lo 'Declarado' por el usuario.
+    4. Cierra las facturas asignándoles el ID del cierre.
+    """
+    
+    # 1. Buscar Facturas Pendientes de Cierre
+    # Incluimos ISSUED para cerrar ventas a crédito del día.
+    
+    stm_invoices = select(models.Invoice).options(
+        selectinload(models.Invoice.payments)
+    ).filter(
+        models.Invoice.tenant_id == tenant_id,
+        models.Invoice.status.in_(["PAID", "PARTIALLY_PAID", "ISSUED"]),
+        models.Invoice.cash_close_id.is_(None),
+        models.Invoice.status != "VOID"
+    )
+    
+    result = await db.execute(stm_invoices)
+    invoices = result.scalars().all()
+    
+    if not invoices:
+        raise ValueError("No hay movimientos pendientes para cerrar caja.")
+    
+    # 2. Inicializar Acumuladores
+    summary = {
+        "sales_usd": Decimal(0), "tax_usd": Decimal(0),
+        "sales_ves": Decimal(0), "tax_ves": Decimal(0),
+        
+        "cash_usd": Decimal(0), "card_usd": Decimal(0), "transfer_usd": Decimal(0),
+        "cash_ves": Decimal(0), "card_ves": Decimal(0), "transfer_ves": Decimal(0),
+        
+        "cash_ves_equiv": Decimal(0),      
+        "card_ves_equiv": Decimal(0),
+        "transfer_ves_equiv": Decimal(0),
+        
+        "credit_usd": Decimal(0), "credit_ves": Decimal(0)
+    }
+    
+    min_date = datetime.utcnow()
+    max_date = datetime.utcnow()
+    
+    if invoices:
+        min_date = invoices[-1].created_at
+        max_date = invoices[0].created_at
+        
+    for inv in invoices:
+        # Sumar ventas (Base + IVA) para reporte
+        
+        summary["sales_usd"] += inv.subtotal_usd
+        summary["tax_usd"] += inv.tax_amount_usd
+        
+        rate = inv.exchange_rate or 1
+        summary["sales_ves"] += (inv.subtotal_usd * rate)
+        summary["tax_ves"] += (inv.tax_amount_usd * rate)
+        
+        paid_amount_usd_accum = Decimal(0)
+        
+        for p in inv.payments:
+            # Clasificar por Moneda y Método
+            if p.currency == "USD":
+                paid_amount_usd_accum += p.amount
+                if p.payment_method == "CASH": summary["cash_usd"] += p.amount
+                elif p.payment_method in ["ZELLE", "USDT"]: summary["transfer_usd"] += p.amount
+                else: summary["card_usd"] += p.amount
+            
+            if p.currency == "VES":
+                if p.payment_method == "CASH": 
+                    summary["cash_ves"] += (p.amount * rate)
+                    summary["cash_ves_equiv"] += p.amount
+                elif p.payment_method in ["DEBIT_CARD", "BIOPAGO"]: 
+                    summary["card_ves"] += (p.amount * rate)
+                    summary["card_ves_equiv"] += p.amount
+                else: 
+                    summary["transfer_ves"] += (p.amount * rate) 
+                    summary["transfer_ves_equiv"] += p.amount
+                
+        # Calcular Crédito 
+        # Si la factura no está pagada totalmente, el remanente es CxC
+        total_paid_usd = paid_amount_usd_accum
+        
+        if inv.status != "PAID":
+            if not inv.payments:
+                summary["credit_usd"] += inv.total_usd
+                summary["credit_ves"] += (inv.total_usd * rate)
+        
+    # 3. Crear Objeto Cierre
+    cash_close = models.CashClose(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        period_start=min_date,
+        period_end=max_date,
+        
+        # Totales Sistema USD
+        total_sales_usd=summary["sales_usd"],
+        total_tax_usd=summary["tax_usd"],
+        total_cash_usd=summary["cash_usd"],
+        total_debit_card_usd=summary["card_usd"],
+        total_transfer_usd=summary["transfer_usd"],
+        total_credit_sales_usd=summary["credit_usd"],
+        
+        # Totales Sistema USD
+        total_sales_ves=summary["sales_ves"],
+        total_tax_ves=summary["tax_ves"],
+        total_cash_ves=summary["cash_ves"],
+        total_debit_card_ves=summary["card_ves"],
+        total_transfer_ves=summary["transfer_ves"],
+        total_credit_sales_ves=summary["credit_ves"],
+        
+        # Declarado
+        declared_cash_usd=close_data.declared_cash_usd,
+        declared_cash_ves=close_data.declared_cash_ves,
+        
+        # Diferencias
+        # Solo calcula diferencia en EFECTIVO
+        difference_usd=close_data.declared_cash_usd - summary["cash_usd"],
+        difference_ves=close_data.declared_cash_ves - summary["cash_ves"],
+        
+        notes=close_data.notes
+    )
+    
+    db.add(cash_close)
+    await db.flush()
+    
+    # 4. Actualizar Facturas
+    for inv in invoices:
+        inv.cash_close_id = cash_close.id
+        db.add(inv)
+        
+    await db.commit()
+    await db.refresh(cash_close)
+    
+    # 5. Evento para Contabilidad
+    event_payload = {
+        "tenant_id": tenant_id,
+        "cash_close_id": cash_close.id,
+        "date": str(cash_close.created_at),
+        "summary": {
+            # Enviamos ambos para que contabilidad decida
+            "total_sales_usd": float(cash_close.total_sales_usd),
+            "total_tax_usd": float(cash_close.total_tax_usd),
+            "collected_cash_usd": float(cash_close.total_cash_usd),
+            "collected_bank_usd": float(cash_close.total_debit_card_usd + cash_close.total_transfer_usd),
+            "collected_cash_ves_equiv": float(summary["cash_ves_equiv"]),
+            "collected_bank_ves_equiv": float(summary["card_ves_equiv"] + summary["transfer_ves_equiv"]),
+            "sales_on_credit_usd": float(cash_close.total_credit_sales_usd)
+        }
+    }
+    
+    publish_event("finance.cash_close_created", event_payload)
+    
+    return cash_close
+
 # --- GESTION DE COTIZACIONES ---
 async def get_next_quote_number(db: AsyncSession, tenant_id: int) -> str:
     """Genera el siguiente número correlativo para cotizaciones (Ej: COT-00005)."""

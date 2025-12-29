@@ -1,5 +1,5 @@
 import { Component, OnInit, inject, signal, computed, ViewChild } from '@angular/core';
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule, CurrencyPipe } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { debounceTime, distinctUntilChanged } from 'rxjs';
 
@@ -21,7 +21,7 @@ type DrawerMode = 'CREATE' | 'VIEW_PROFILE' | 'EDIT' | 'MANAGE_SCHEDULE' | 'CREA
     selector: 'app-employees',
     standalone: true,
     imports: [
-        CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, 
+        CommonModule, ReactiveFormsModule, CurrencyPipe,
         EmployeeFormComponent, EmployeeProfileComponent, ScheduleManagerComponent,
         PayrollHistoryComponent, PayrollGeneratorComponent, AccessControlComponent,
         UserFormComponent

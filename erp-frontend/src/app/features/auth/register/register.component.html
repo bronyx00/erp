@@ -1,0 +1,91 @@
+<div class="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+        
+        <div class="bg-white px-8 pt-8 pb-4 text-center">
+            <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Crear Nueva Organización</h1>
+            <p class="text-slate-500 mt-1 text-sm">Comienza a gestionar tu negocio hoy mismo.</p>
+            
+            <div class="flex items-center justify-center gap-2 mt-6">
+                <div class="h-2 w-8 rounded-full transition-all duration-300" [class.bg-indigo-600]="step() >= 1" [class.bg-slate-200]="step() < 1"></div>
+                <div class="h-2 w-8 rounded-full transition-all duration-300" [class.bg-indigo-600]="step() >= 2" [class.bg-slate-200]="step() < 2"></div>
+            </div>
+        </div>
+
+        <div class="p-8 pt-4">
+            <form [formGroup]="form" (ngSubmit)="onSubmit()">
+                
+                <div [class.hidden]="step() !== 1" class="space-y-4 animate-in slide-in-from-right duration-300">
+                    <h3 class="text-sm font-bold text-indigo-600 uppercase tracking-wider mb-4">1. Datos del Administrador</h3>
+                    
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Nombre Completo</label>
+                        <input formControlName="full_name" type="text" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm transition" placeholder="Juan Pérez">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Correo Electrónico</label>
+                        <input formControlName="email" type="email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm transition" placeholder="juan@empresa.com">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Contraseña</label>
+                            <input formControlName="password" type="password" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm transition" placeholder="******">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Confirmar</label>
+                            <input formControlName="confirmPassword" type="password" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm transition" placeholder="******">
+                        </div>
+                    </div>
+                    
+                    <button type="button" (click)="nextStep()" class="w-full mt-6 bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                        Siguiente <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+
+                <div [class.hidden]="step() !== 2" class="space-y-4 animate-in slide-in-from-right duration-300">
+                    <h3 class="text-sm font-bold text-indigo-600 uppercase tracking-wider mb-4">2. Datos de la Empresa</h3>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Nombre Comercial</label>
+                        <input formControlName="company_name" type="text" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm transition" placeholder="Mi Tienda C.A.">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Razón Social</label>
+                            <input formControlName="company_business_name" type="text" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm transition" placeholder="Inversiones X">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">RIF / ID Fiscal</label>
+                            <input formControlName="company_rif" type="text" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm transition" placeholder="J-12345678-9">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Dirección Fiscal</label>
+                        <textarea formControlName="company_address" rows="2" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm transition resize-none" placeholder="Av. Principal..."></textarea>
+                    </div>
+
+                    <div class="flex gap-3 mt-6">
+                        <button type="button" (click)="prevStep()" class="flex-1 border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-white transition">
+                            Atrás
+                        </button>
+                        <button type="submit" [disabled]="form.invalid || isLoading()" class="flex-1 bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 transition disabled:opacity-70 flex items-center justify-center gap-2">
+                            <i *ngIf="isLoading()" class="fas fa-circle-notch fa-spin"></i>
+                            Finalizar Registro
+                        </button>
+                    </div>
+                </div>
+
+            </form>
+        </div>
+
+        <div class="bg-slate-50 p-4 text-center border-t border-slate-100">
+            <p class="text-sm text-slate-500">
+                ¿Ya tienes cuenta? 
+                <a routerLink="/login" class="font-bold text-indigo-600 hover:underline">Inicia Sesión</a>
+            </p>
+        </div>
+    </div>
+</div>

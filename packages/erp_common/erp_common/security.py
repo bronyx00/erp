@@ -162,10 +162,11 @@ ROLE_PERMISSIONS = {
 
 # --- DEPENDENCIAS FASTAPI ---
 class UserPayload:
-    def __init__(self, sub: str, role: str, tenant_id: int):
+    def __init__(self, sub: str, role: str, tenant_id: int, user_id: int):
         self.sub = sub
         self.role = role
         self.tenant_id = tenant_id
+        self.user_id = user_id
         self.permissions = ROLE_PERMISSIONS.get(role, [])
 
     def has_permission(self, required_perm: str) -> bool:
@@ -183,11 +184,12 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPayload:
         email: str = payload.get("sub")
         role: str = payload.get("role")
         tenant_id: int = payload.get("tenant_id")
+        user_id: int = payload.get("user_id")
         
         if email is None or tenant_id is None:
             raise credentials_exception
             
-        return UserPayload(sub=email, role=role, tenant_id=tenant_id)
+        return UserPayload(sub=email, role=role, tenant_id=tenant_id, user_id=user_id)
     except JWTError:
         raise credentials_exception
 
