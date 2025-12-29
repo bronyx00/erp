@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from decimal import Decimal
 from datetime import datetime, date
 from typing import List, Optional, Generic, TypeVar
@@ -122,7 +122,16 @@ class CashCloseResponse(BaseModel):
     
     # Totales Sistema
     total_sales_usd: Decimal
+    total_tax_usd: Decimal
+    
+    # --- CAMPO CALCULADO ---
+    @computed_field
+    def total_system_income_usd(self) -> Decimal:
+        """Retorna la suma de Base + IVA (Ej: 1.00 + 0.16 = 1.16)"""
+        return self.total_sales_usd + self.total_tax_usd
+
     total_sales_ves: Decimal
+    total_tax_ves: Decimal
     
     # Arqueo
     declared_cash_usd: Decimal

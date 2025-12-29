@@ -516,6 +516,7 @@ async def create_cash_close(
         selectinload(models.Invoice.payments)
     ).filter(
         models.Invoice.tenant_id == tenant_id,
+        models.Invoice.created_by_user_id == user_id,
         models.Invoice.status.in_(["PAID", "PARTIALLY_PAID", "ISSUED"]),
         models.Invoice.cash_close_id.is_(None),
         models.Invoice.status != "VOID"
@@ -551,7 +552,6 @@ async def create_cash_close(
         
     for inv in invoices:
         # Sumar ventas (Base + IVA) para reporte
-        
         summary["sales_usd"] += inv.subtotal_usd
         summary["tax_usd"] += inv.tax_amount_usd
         
