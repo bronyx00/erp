@@ -4,6 +4,15 @@ import { Router } from '@angular/router';
 import { Observable, tap, of, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
+export interface User {
+  id: number;
+  email: string;
+  full_name: string;
+  role: string;
+  is_active: boolean;
+  tenant_id: number;
+}
+
 export interface AuthResponse {
   access_token: string;
   refresh_token: string;
@@ -19,7 +28,7 @@ export class AuthService {
   private apiUrl = `${environment.apiUrl}/auth`;
 
   // Signals para estado reactivo
-  currentUser = signal<any>(null);
+  currentUser = signal<User | null>(null);
   isAuthenticated = signal<boolean>(!!localStorage.getItem('access_token'));
 
   login(credentials: any): Observable<AuthResponse> {  
@@ -29,6 +38,12 @@ export class AuthService {
 
     return this.http.post<AuthResponse>(`${this.apiUrl}/login`, formData).pipe(
       tap(response => this.setSession(response))
+    );
+  }
+
+  me(): Observable<User> {
+    return this.http.get<User>(`${this.apiUrl}/me`).pipe(
+      tap(user => this.currentUser.set(user))
     );
   }
 
@@ -66,6 +81,7 @@ export class AuthService {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     this.isAuthenticated.set(false);
+    this.currentUser.set(null);
     this.router.navigate(['/login']);
   }
 }

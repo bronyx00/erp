@@ -2,14 +2,13 @@ import { Routes } from '@angular/router';
 import { LoginComponent } from './features/auth/login/login';
 import { RegisterComponent } from './features/auth/register/register.component';
 import { AppLayoutComponent } from './core/layout/app-layout.component';
-import { roleGuard } from './core/guards/role.guard';
 
 export const routes: Routes = [
   { path: 'login', 
     component: LoginComponent ,
     title: 'ERP - Iniciar Sesión'
   },
-  { path: 'sign-up', 
+  { path: 'register', 
     component: RegisterComponent ,
     title: 'ERP - Crea tu cuenta'
   },
@@ -20,8 +19,7 @@ export const routes: Routes = [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       {
         path: 'settings',
-        loadComponent: () => import('./features/settings/settings').then(m => m.Settings),
-        canActivate: [roleGuard(['OWNER'])]
+        loadComponent: () => import('./features/settings/settings').then(m => m.Settings)
       },
       {
         path: 'hhrr',
@@ -42,7 +40,7 @@ export const routes: Routes = [
       // --- INVENTARIO ---
       // Requiere permisos de gestión o almacén
       {
-        path: 'inventory/products',
+        path: 'inventory',
         loadComponent: () => import('./features/inventory/product-list/product-list.component').then(m => m.ProductListComponent)
       },
       // --- CONTABILIDAD ---

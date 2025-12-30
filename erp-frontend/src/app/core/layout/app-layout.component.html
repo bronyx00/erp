@@ -1,0 +1,142 @@
+<div class="flex h-screen bg-slate-50 font-sans overflow-hidden text-slate-600">
+
+    <div *ngIf="isMobileMenuOpen()" 
+         class="fixed inset-0 bg-slate-900/20 z-40 lg:hidden backdrop-blur-sm transition-opacity"
+         (click)="toggleMobileMenu()">
+    </div>
+
+    <aside [class.w-72]="!isSidebarCollapsed()" 
+           [class.w-20]="isSidebarCollapsed()"
+           [class.-translate-x-full]="!isMobileMenuOpen()"
+           class="fixed lg:static inset-y-0 left-0 z-50 bg-white border-r border-slate-200 transition-all duration-300 ease-in-out flex flex-col lg:translate-x-0">
+        
+        <div class="h-20 flex items-center px-6 border-b border-slate-50">
+            <div *ngIf="!isSidebarCollapsed()" class="flex items-center gap-3 animate-in fade-in duration-300">
+                <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 text-white">
+                    <i class="fas fa-cube text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-slate-800 text-lg leading-tight">Nexus ERP</h1>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Enterprise</p>
+                </div>
+            </div>
+
+            <div *ngIf="isSidebarCollapsed()" class="w-full flex justify-center animate-in fade-in zoom-in duration-300">
+                <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md">
+                    <i class="fas fa-cube text-lg"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto py-6 px-4 custom-scrollbar space-y-1">
+            
+            <p *ngIf="!isSidebarCollapsed()" class="px-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 mt-2">Principal</p>
+
+            @for (item of menuItems(); track item.label) {
+                
+                @if (item.children) {
+                    <div class="group">
+                        <button (click)="toggleSubmenu(item)"
+                                [class.justify-center]="isSidebarCollapsed()"
+                                [class.bg-slate-50]="item.isOpen && !isSidebarCollapsed()"
+                                class="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 hover:bg-slate-50 text-slate-600 hover:text-indigo-600 group-hover:shadow-sm border border-transparent">
+                            
+                            <i [class]="item.icon" class="text-xl transition-colors duration-200" [class.text-indigo-500]="item.isOpen"></i>
+                            
+                            <span *ngIf="!isSidebarCollapsed()" class="text-sm font-semibold flex-1 text-left">{{ item.label }}</span>
+                            
+                            <i *ngIf="!isSidebarCollapsed()" 
+                               class="fas fa-chevron-right text-xs text-slate-300 transition-transform duration-300"
+                               [class.rotate-90]="item.isOpen"></i>
+                        </button>
+
+                        <div *ngIf="item.isOpen && !isSidebarCollapsed()" 
+                             class="mt-1 ml-4 pl-4 border-l-2 border-slate-100 space-y-1 animate-in slide-in-from-top-1">
+                            @for (subItem of item.children; track subItem.label) {
+                                <a [routerLink]="subItem.route" 
+                                   routerLinkActive="text-indigo-600 bg-indigo-50 font-bold"
+                                   class="block px-3 py-2 rounded-lg text-sm text-slate-500 hover:text-indigo-600 hover:bg-slate-50 transition-all">
+                                    {{ subItem.label }}
+                                </a>
+                            }
+                        </div>
+                    </div>
+                } 
+                @else {
+                    <a [routerLink]="item.route" 
+                       routerLinkActive="bg-indigo-50 text-indigo-700 shadow-sm border-indigo-100"
+                       [class.justify-center]="isSidebarCollapsed()"
+                       class="flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 hover:bg-slate-50 text-slate-600 hover:text-indigo-600 border border-transparent mb-1 group relative">
+                        
+                        <div class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-indigo-600 rounded-r-full opacity-0 transition-opacity"
+                             routerLinkActive="opacity-100"></div>
+
+                        <i [class]="item.icon" class="text-xl group-hover:scale-110 transition-transform duration-200"
+                           routerLinkActive="text-indigo-600"></i>
+                        
+                        <span *ngIf="!isSidebarCollapsed()" class="text-sm font-semibold">
+                            {{ item.label }}
+                        </span>
+                    </a>
+                }
+            }
+        </div>
+
+        <div class="p-4 border-t border-slate-100">
+            <div class="bg-slate-50 rounded-2xl p-3 flex items-center gap-3 transition-all hover:bg-white hover:shadow-md border border-slate-100 cursor-pointer group"
+                 [class.justify-center]="isSidebarCollapsed()">
+                
+                <img [src]="'https://ui-avatars.com/api/?name=' + (currentUser()?.full_name || 'User') + '&background=6366f1&color=fff&size=128'" 
+                     class="h-10 w-10 rounded-xl object-cover border border-slate-200" 
+                     [alt]="currentUser()?.full_name">
+                
+                <div *ngIf="!isSidebarCollapsed()" class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-slate-800 truncate" [title]="currentUser()?.full_name">
+                        {{ currentUser()?.full_name }}
+                    </p>
+                    <div class="flex items-center gap-1">
+                        <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                        <p class="text-xs text-slate-400 truncate font-medium">
+                            {{ getRoleLabel(currentUser()?.role) }}
+                        </p>
+                    </div>
+                </div>
+                
+                <button *ngIf="!isSidebarCollapsed()" (click)="logout()" 
+                        class="h-8 w-8 rounded-full text-slate-300 hover:bg-rose-50 hover:text-rose-500 transition flex items-center justify-center"
+                        title="Cerrar Sesión">
+                    <i class="fas fa-power-off"></i>
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <div class="flex-1 flex flex-col min-w-0 transition-all duration-300">
+        
+        <header class="h-20 flex items-center justify-between px-8 z-30">
+            <div class="flex items-center gap-4">
+                <button (click)="toggleSidebar()" class="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                    <i class="fas fa-indent text-xl" [class.fa-outdent]="isSidebarCollapsed()"></i>
+                </button>
+
+            </div>
+
+            <div class="flex items-center gap-4">
+                <div class="hidden md:flex items-center bg-white border border-slate-200 rounded-full px-4 py-2 shadow-sm focus-within:ring-2 ring-indigo-100 transition-all">
+                    <i class="fas fa-search text-slate-400 text-sm"></i>
+                    <input type="text" placeholder="Buscar..." class="bg-transparent border-none outline-none text-sm ml-2 w-48 text-slate-600 placeholder:text-slate-300">
+                </div>
+
+                <button class="h-10 w-10 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 shadow-sm flex items-center justify-center transition relative">
+                    <i class="far fa-bell"></i>
+                    <span class="absolute top-0 right-0 h-2.5 w-2.5 bg-rose-500 rounded-full border-2 border-white"></span>
+                </button>
+            </div>
+        </header>
+
+        <main class="flex-1 overflow-auto px-8 pb-8">
+            <router-outlet></router-outlet>
+        </main>
+
+    </div>
+</div>

@@ -44,13 +44,13 @@ async def login_swagger(form_data: OAuth2PasswordRequestForm = Depends(), db: As
     
 @app.post("/refresh", response_model=schemas.Token)
 async def refresh_token(
-    refresh_token: schemas.RefreshTokenRequest,
+    payload: schemas.RefreshTokenRequest,
     db: AsyncSession = Depends(db_manager.get_db)
 ):
     """
     Usa el Refresh Token (larga duración) para obtener un nuevo Access Token.
     """
-    return await services.AuthService.refresh_access_token(db, refresh_token)
+    return await services.AuthService.refresh_access_token(db, payload.refresh_token)
 
 # --- ENDPOINTS PROTEGIDOS ---
 

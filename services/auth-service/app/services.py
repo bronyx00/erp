@@ -74,8 +74,7 @@ class AuthService:
         token_data = {
             "sub": user.email,
             "role": user.role,
-            "tenant_id": user.tenant_id,
-            "user_id": user.id
+            "tenant_id": user.tenant_id
         }
         access_token = security.create_access_token(data=token_data)
         refresh_token = security.create_refresh_token(data=token_data)
@@ -111,7 +110,7 @@ class AuthService:
                 "sub": user.email,
                 "role": user.role,
                 "tenant_id": user.tenant_id,
-                "user_id": user.user_id
+                "user_id": user.id
             }
         )
         

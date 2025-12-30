@@ -1,88 +1,142 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
-
+import { Component, OnInit, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet, NavigationEnd } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { filter } from 'rxjs';
+
+interface MenuItem {
+  label: string;
+  icon: string;
+  route?: string;
+  children?: MenuItem[];
+  isOpen?: boolean; // Para controlar el sub-menú
+}
 
 @Component({
-  selector: 'app-layout',
+  selector: 'app-app-layout',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
-  template: `
-    <div class="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
-      
-      <aside class="bg-slate-900 text-white flex flex-col transition-all duration-300 w-64">
-        <div class="h-16 flex items-center px-6 border-b border-slate-800">
-          <span class="font-bold text-xl tracking-tight">ERP Cloud</span>
-        </div>
-
-        <nav class="flex-1 py-6 px-3 space-y-1">
-          <a routerLink="/dashboard" routerLinkActive="bg-blue-600 text-white" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-             Dashboard
-          </a>
-          <a routerLink="/hhrr" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-             Detalles de Empleados
-          </a>
-          <a routerLink="/hhrr/employees" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-             Recursos Humanos
-          </a>
-          <a routerLink="/accounting" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-             Contabilidad y Finanzas
-          </a>
-          <a routerLink="/accounting/books" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-             Libros Contables
-          </a>
-          <a routerLink="/accounting/expenses" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-              Gastos
-          </a>
-          <a routerLink="/crm" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-             CRM
-          </a>
-          <a routerLink="/pos" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-             Punto de Venta
-          </a>
-          <a routerLink="/inventory/products" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-             Inventario
-          </a>
-          <a routerLink="/inventory/products/new" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-             Crear Producto
-          </a>
-          <a routerLink="/reports/daily-sales" 
-             class="flex items-center px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-             Cierre de Caja
-          </a>
-          </nav>
-
-        <div class="p-4 border-t border-slate-800">
-          <button (click)="logout()" class="text-sm text-slate-400 hover:text-white">Cerrar Sesión</button>
-        </div>
-      </aside>
-
-      <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm">
-          <h2 class="text-lg font-medium text-slate-800">Bienvenido</h2>
-          <div class="h-8 w-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
-            U
-          </div>
-        </header>
-
-        <main class="flex-1 overflow-auto p-8">
-          <router-outlet></router-outlet>
-        </main>
-      </div>
-    </div>
-  `
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
+  templateUrl: './app-layout.component.html',
+  styleUrls: ['./app-layout.component.scss'] 
 })
-export class AppLayoutComponent {
-  constructor(private auth: AuthService) {}
-  logout() { this.auth.logout(); }
+export class AppLayoutComponent implements OnInit {
+  private authService = inject(AuthService);
+  private router = inject(Router);
+
+  // Estado del Sidebar
+  isSidebarCollapsed = signal(false);
+  isMobileMenuOpen = signal(false);
+  
+  currentUser = this.authService.currentUser;
+  
+  // Título de la página actual 
+  pageTitle = signal('Dashboard');
+
+  // --- CONFIGURACIÓN DEL MENÚ ---
+  menuItems = signal<MenuItem[]>([
+    { 
+      label: 'Dashboard', 
+      icon: 'fas fa-chart-pie', 
+      route: '/dashboard' 
+    },
+    { 
+      label: 'Punto de Venta', 
+      icon: 'fas fa-cash-register', 
+      route: '/pos' 
+    },
+    { 
+      label: 'Inventario', 
+      icon: 'fas fa-boxes-stacked', 
+      route: '/inventory' 
+    },
+    { 
+      label: 'Clientes (CRM)', 
+      icon: 'fas fa-users', 
+      route: '/crm' 
+    },
+    { 
+      label: 'Recursos Humanos', 
+      icon: 'fas fa-user-tie', 
+      children: [
+        { label: 'Empleados', icon: 'fas fa-id-card', route: '/hhrr' },
+        { label: 'Nómina', icon: 'fas fa-file-invoice-dollar', route: '/hhrr/payroll' },
+        { label: 'Asistencia', icon: 'fas fa-clock', route: '/hhrr/attendance' }
+      ]
+    },
+    { 
+      label: 'Finanzas', 
+      icon: 'fas fa-coins', 
+      children: [
+        { label: 'Facturas', icon: 'fas fa-file-invoice', route: '/finance/invoices' },
+        { label: 'Gastos', icon: 'fas fa-receipt', route: '/expenses' },
+        { label: 'Cierres de Caja', icon: 'fas fa-wallet', route: '/finance/cash-close' }
+      ]
+    },
+    { 
+      label: 'Configuración', 
+      icon: 'fas fa-cogs', 
+      route: '/settings' 
+    }
+  ]);
+  
+  ngOnInit() {
+    if (this.authService.isAuthenticated() && !this.currentUser()) {
+        this.authService.me().subscribe({
+            error: () => this.authService.logout() // Si falla (token invalido), logout
+        });
+    }
+  }
+
+  getRoleLabel(role: string | undefined): string {
+      const roles: any = {
+          'OWNER': 'Dueño',
+          'ADMIN': 'Administrador',
+          'SALES_AGENT': 'Vendedor',
+          'RRHH_MANAGER': 'Gerente RRHH',
+          'WAREHOUSE_SUPERVISOR': 'Supervisor Almacén'
+      };
+      return role ? (roles[role] || role) : 'Usuario';
+  }
+
+  constructor() {
+    // Detectar cambios de ruta para actualizar título o cerrar menú móvil
+    this.router.events.pipe(
+      filter(event => event instanceof NavigationEnd)
+    ).subscribe(() => {
+      this.isMobileMenuOpen.set(false);
+      this.updateTitle();
+    });
+  }
+
+  toggleSidebar() {
+    this.isSidebarCollapsed.update(v => !v);
+  }
+
+  toggleMobileMenu() {
+    this.isMobileMenuOpen.update(v => !v);
+  }
+
+  toggleSubmenu(item: MenuItem) {
+    if (!this.isSidebarCollapsed()) {
+      item.isOpen = !item.isOpen;
+    } else {
+      // Si está colapsado y hacen click, expandimos para mostrar el submenú
+      this.isSidebarCollapsed.set(false);
+      item.isOpen = true;
+    }
+  }
+
+  logout() {
+    if(confirm('¿Cerrar sesión?')) {
+      this.authService.logout();
+    }
+  }
+
+  private updateTitle() {
+    // Lógica simple para obtener título basado en la URL
+    const url = this.router.url.split('/')[1];
+    if (url) {
+      this.pageTitle.set(url.charAt(0).toUpperCase() + url.slice(1));
+    }
+  }
 }
