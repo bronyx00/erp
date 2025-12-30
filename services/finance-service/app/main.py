@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from contextlib import asynccontextmanager
 from typing import Optional
-from datetime import date
+from datetime import date, datetime, time
 import logging
 
 # Scheduler
@@ -80,16 +80,60 @@ async def read_invoices(
     limit: int = 50,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    start_date: date = None,
+    end_date: date = None,
     db: AsyncSession = Depends(database.get_db), 
     user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_READ))
 ):
     """
-    **Listado de Facturas**
-    
-    Muestra el historial de facturas emitidas.
+    Lista facturas con visibilidad basada en roles.
     """
-    return await crud.get_invoices(db, tenant_id=user.tenant_id, page=page, limit=limit, status=status, search=search)
+    # Definir Roles con privilegios
+    MANAGERS = ["OWNER", "ADMIN", "SALES_SUPERVISOR"]
+    
+    filter_user_id = None
+    filter_pending_close = False
+    filter_start = None
+    filter_end = None
+    
+    if user.role in MANAGERS:
+        if not start_date and not search:
+            today = datetime.utcnow().date()
+            filter_start = datetime.combine(today, time.min)
+            filter_end = datetime.combine(today, time.max)
+        elif start_date:
+             filter_start = datetime.combine(start_date, time.min)
+             end_d = end_date if end_date else start_date
+             filter_end = datetime.combine(end_d, time.max)
+    else:
+        # EMPLEADO: Solo ve SUS facturas ABIERTAS (Sin cierre de caja)
+        filter_user_id = user.user_id
+        filter_pending_close = True
+        # No restringimos fecha porque pueden tener una factura abierta de ayer
+    
+    return await crud.get_invoices(
+        db, 
+        tenant_id=user.tenant_id, 
+        page=page, 
+        limit=limit, 
+        status=status, 
+        search=search,
+        created_by_id=filter_user_id,
+        only_pending_close=filter_pending_close,
+        date_start=filter_start or start_date,
+        date_end=filter_end or end_date
+    )
 
+@app.get("/invoices/{invoice_id}", response_model=schemas.InvoiceResponse)
+async def get_invoice_by_id(
+    invoice_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.INVOICE_READ))
+):
+    """
+    Obtiene factura por su ID
+    """
+    return await crud.get_invoice_by_id(db, invoice_id=invoice_id, tenant_id=user.tenant_id)
 
 @app.post("/invoices", response_model=InvoiceResponse, status_code=201)
 async def create_invoice(

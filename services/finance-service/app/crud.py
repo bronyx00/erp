@@ -194,7 +194,11 @@ async def get_invoices(
     page: int = 1,
     limit: int = 50,
     status: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    created_by_id: Optional[int] = None,
+    only_pending_close: bool = False,
+    date_start: Optional[datetime] = None,
+    date_end: Optional[datetime] = None
 ) -> Dict[str, Any]:
     """
     Lista facturas con paginación y búsqueda.
@@ -202,6 +206,21 @@ async def get_invoices(
     """
     offset = (page - 1) * limit
     conditions = [models.Invoice.tenant_id == tenant_id]
+    
+    # Filtros de seguridad y negocio
+    if created_by_id:
+        conditions.append(models.Invoice.created_by_user_id == created_by_id)
+        
+    if only_pending_close:
+        conditions.append(models.Invoice.cash_close_id.is_(None))
+        
+    if date_start:
+        start_dt = datetime.combine(date_start, datetime.min.time()) if isinstance(date_start, date) else date_start
+        conditions.append(models.Invoice.created_at >= start_dt)
+    
+    if date_end:
+        end_dt = datetime.combine(date_end, datetime.max.time()) if isinstance(date_end, date) else date_end
+        conditions.append(models.Invoice.created_at <= end_dt)
     
     # Filtros Dinámicos
     if status:

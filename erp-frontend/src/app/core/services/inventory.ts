@@ -17,14 +17,6 @@ export interface Product {
   // UNIDAD O POR KILO Y VARIAR EL PRECIO DEPENDIENDO DE ESO.
 }
 
-const MOCK_PRODUCTS: Product[] = [
-  { id: 101, name: 'Laptop Pro X', sku: 'LTPRX1', price: 1250.00, stock: 15, status: 'ACTIVE', category: 'Electrónica', },
-  { id: 102, name: 'Monitor 27" 4K', sku: 'MON4K7', price: 350.00, stock: 5, status: 'LOW_STOCK', category: 'Electrónica', },
-  { id: 103, name: 'Mouse Inalámbrico', sku: 'MOUWIR', price: 25.50, stock: 200, status: 'ACTIVE', category: 'Accesorios', },
-  { id: 104, name: 'Teclado Mecánico', sku: 'TECKME', price: 89.99, stock: 75, status: 'DISCONTINUED', category: 'Accesorios', },
-  { id: 105, name: 'Cable USB-C 2M', sku: 'CABLEC', price: 8.00, stock: 500, status: 'ACTIVE', category: 'Accesorios', },
-];
-
 export interface ProductCreate {
   sku: string;
   name: string;

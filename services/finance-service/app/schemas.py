@@ -34,6 +34,8 @@ class InvoiceSummary(BaseModel):
     control_number: Optional[str] = None
     status: str
     total_usd: Decimal
+    amount_ves: Decimal
+    exchange_rate: Decimal
     salesperson_id: Optional[int] = None
     customer_name: Optional[str] = None
     customer_rif: Optional[str] = None
@@ -95,10 +97,16 @@ class InvoiceResponse(BaseModel):
     exchange_rate: Optional[Decimal] = None
     amount_ves: Optional[Decimal] = None
     
+    # Datos de la Empresa
+    company_name: Optional[str] = None
+    company_rif: Optional[str] = None
+    company_address: Optional[str] = None
+    
     # Datos Cliente
     customer_name: Optional[str] = None
     customer_rif: Optional[str] = None
     customer_email: Optional[str] = None
+    customer_address: Optional[str] = None
     
     salesperson_id: Optional[int] = None
     

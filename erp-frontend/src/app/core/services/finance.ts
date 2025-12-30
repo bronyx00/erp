@@ -1,9 +1,19 @@
 import { Injectable, inject, Inject } from '@angular/core';
-import { HttpClient } from "@angular/common/http";
+import { HttpClient, HttpParams } from "@angular/common/http";
 import { Observable, of } from "rxjs";
 import { environment } from '../../../environments/environment';
 
 export type PaymentMethod = 'MOBILE_PAYMENT' | 'BIO_PAYMENT' | 'DEBIT_CARD' | 'TRANSFER' | 'CASH' | 'OTHER';
+
+export interface PaginatedResponse<T> {
+    data: T[];
+    meta: {
+        total: number;
+        page: number;
+        limit: number;
+        total_pages: number;
+    };
+}
 
 // Modelo de un Item de Pago Individual
 export interface PaymentDetail {
@@ -44,24 +54,43 @@ export interface InvoiceCreate {
 export interface Invoice {
   id: number;
   invoice_number: number;
-  control_number?: number
-  status: string;
-
+  control_number?: string;
+  status: 'ISSUED' | 'PAID' | 'PARTIALLY_PAID' | 'VOID';
+  
+  // Totales
   subtotal_usd: number;
   tax_amount_usd: number;
   total_usd: number;
-
+  
   currency: string;
-  amount_ves?: number;
-  exchange_rate: number;
+  exchange_rate?: number;
+  amount_ves?: number; 
 
+  // Datos Cliente
   customer_name?: string;
   customer_rif?: string;
   customer_email?: string;
+  customer_address?: string; 
+  customer_phone?: string;   
 
-  created_at?: string;
+  // Datos Empresa 
+  company_name?: string;     
+  company_rif?: string;      
+  company_address?: string;  
+
+  salesperson_id?: number;
+  
   items?: InvoiceItem[];
-  payments?: any[];
+  payments?: Payment[];
+  created_at: string;
+}
+
+export interface Payment {
+    id: number;
+    amount: number;
+    payment_method: string;
+    created_at: string;
+    currency: string;
 }
 
 export interface ExchangeRate {
@@ -87,8 +116,17 @@ export class FinanceService {
   private readonly API_URL = `${environment.apiUrl}/finance`;
 
   // --- FACTURACIÓN ---
-  getInvoices(limit: number = 50, page: number = 1): Observable<any> {
-    return this.http.get<any>(`${this.API_URL}/invoices`, { params: { limit, page }});
+  getInvoices(page: number = 1, limit: number = 20, search?: string, status?: string, startDate?: string, endDate?: string): Observable<PaginatedResponse<Invoice>> {
+    let params = new HttpParams()
+      .set('page', page)
+      .set('limit', limit);
+
+    if (search) params = params.set('search', search);
+    if (status) params = params.set('status', status);
+    if (startDate) params = params.set('start_date', startDate);
+    if (endDate) params = params.set('end_date', endDate);
+
+    return this.http.get<PaginatedResponse<Invoice>>(`${this.API_URL}/invoices`, { params });
   }
 
   getInvoiceById(id: number): Observable<Invoice> {

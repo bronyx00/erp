@@ -45,6 +45,12 @@ export const routes: Routes = [
       },
       // --- CONTABILIDAD ---
       // Requiere permisos de gestión o contabilidad
+
+      // --- FINANZAS ---
+      {
+        path: 'finance/invoices',
+        loadComponent: () => import('./features/finance/invoices/invoice-list/invoice-list.component').then(m => m.InvoiceListComponent)
+      }
     ]
   },
   { path: '**', redirectTo: 'login' }
