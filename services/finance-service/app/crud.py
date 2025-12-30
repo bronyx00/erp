@@ -566,7 +566,7 @@ async def create_cash_close(
             if p.currency == "USD":
                 paid_amount_usd_accum += p.amount
                 if p.payment_method == "CASH": summary["cash_usd"] += p.amount
-                elif p.payment_method in ["ZELLE", "USDT"]: summary["transfer_usd"] += p.amount
+                elif p.payment_method in ["ZELLE", "USDT", "PAYPAL"]: summary["transfer_usd"] += p.amount
                 else: summary["card_usd"] += p.amount
             
             if p.currency == "VES":

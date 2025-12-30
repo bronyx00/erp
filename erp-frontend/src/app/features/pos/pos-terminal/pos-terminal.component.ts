@@ -29,6 +29,10 @@ export class PosTerminalComponent implements OnInit {
     private inventoryService = inject(InventoryService);
     private financeService = inject(FinanceService);
 
+    private round(value: number): number {
+        return Math.round((value + Number.EPSILON) * 100) / 100;
+    }
+
     // --- UI Referencias ---
     @ViewChild('searchInput') searchInput!: ElementRef;
     @ViewChild('clientSearchInput') clientSearchInput!: ElementRef;
@@ -64,10 +68,13 @@ export class PosTerminalComponent implements OnInit {
     quantityControl = new FormControl(1, [Validators.required, Validators.min(0.001)]); // Control para el input decimal
 
     // --- COMPUTED ---
-    subtotal = computed(() => this.cart().reduce((acc, item) => acc + (item.product.price * item.quantity), 0));
-    tax = computed(() => this.subtotal() * 0.16);
-    total = computed(() => this.subtotal() + this.tax());
-    totalVes = computed(() => this.total() * (this.exchangeRate() || 0));
+    subtotal = computed(() => {
+        const sum = this.cart().reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
+        return this.round(sum);
+    });
+    tax = computed(() => this.round(this.subtotal() * 0.16));
+    total = computed(() => this.round(this.subtotal() + this.tax()));
+    totalVes = computed(() => this.round(this.total() * (this.exchangeRate() || 0)));
 
     ngOnInit() {
         this.loadInitialData();
@@ -193,50 +200,104 @@ export class PosTerminalComponent implements OnInit {
     // --- CART & CHECKOUT ---
 
     addToCartClick(product: Product) {
-        if (product.stock <= 0 && product.measurement_unit !== 'SERVICE') return;
+        if (product.stock <= 0 && product.measurement_unit !== 'SERVICE'){ alert('Producto Agotado'); return};
 
-        if (product.measurement_unit === 'UNIT') {
-        // Si es unitario, flujo directo
-            this.processAddToCart(product, 1);
-        } else {
-            // Si es pesable/medible, abrimos modal
-            this.pendingProduct.set(product);
-            this.quantityControl.setValue(1); // Reset a 1 como sugerencia
-            this.isQuantityModalOpen.set(true);
+        this.pendingProduct.set(product);
+        this.quantityControl.setValue(1); // Por defecto sugiere 1
+        this.isQuantityModalOpen.set(true);
 
-            // Foco automático al input de cantidad
-            setTimeout(() => {
-                if(this.quantityInput) {
-                    this.quantityInput.nativeElement.focus();
-                    this.quantityInput.nativeElement.select();
-                }
-            }, 100);
-        }
+        // 3. Foco automático al input de cantidad
+        // Esto permite que el cajero solo presione 'Enter' para aceptar el 1,
+        // o escriba '5' + 'Enter' rápidamente.
+        setTimeout(() => {
+            if(this.quantityInput) {
+                this.quantityInput.nativeElement.focus();
+                this.quantityInput.nativeElement.select();
+            }
+        }, 100);
     }
 
     /** Acción del pequeño modal de cantidad */
     confirmQuantityToAdd() {
         if(this.quantityControl.invalid || !this.pendingProduct()) return;
 
-        const qty = this.quantityControl.value || 1;
-        this.processAddToCart(this.pendingProduct()!, qty);
-        this.isQuantityModalOpen.set(false);
-        this.pendingProduct.set(null);
-        // Devolver foco al buscador principal
-        this.searchInput.nativeElement.focus();
+        let qty = this.quantityControl.value || 1;
+        const product = this.pendingProduct()!;
+
+        if (product.measurement_unit === 'UNIT') {
+            if (!Number.isInteger(qty)) {
+                qty = Math.round(qty);
+                if (qty < 1) qty = 1;
+            }
+        }
+
+        const success = this.processAddToCart(product, qty);
+
+        if (success) {
+            // Solo si se agregó (hay stock), cerramos el modal y limpiamos
+            this.isQuantityModalOpen.set(false);
+            this.pendingProduct.set(null);
+            this.quantityControl.setValue(1); // Reset control
+            if(this.searchInput) this.searchInput.nativeElement.focus();
+        } else {
+            // Si falló (ej. stock insuficiente), mantenemos el modal abierto
+            // y seleccionamos el input para que corrija rápido
+            this.quantityControl.setValue(product.stock); // Opcional: Sugerir el máximo
+            setTimeout(() => this.quantityInput.nativeElement.select(), 100);
+        }
     }
 
-    /** Lógica real de modificación del carrito */
-    processAddToCart(product: Product, qtyToAdd: number) {
-        this.cart.update(items => {
-            const existing = items.find(i => i.product.id === product.id);
-            if (existing) {
-                // Si existe, sumamos la nueva cantidad (puede ser decimal)
-                return items.map(i => i.product.id === product.id ? { ...i, quantity: i.quantity + qtyToAdd } : i);
+    /** 
+     * Lógica real de modificación del carrito 
+     * 
+     * Maneja validación de stock, redondeo y eliminación si llega a 0.
+     */
+    processAddToCart(product: Product, qtyToAdd: number): boolean {
+        // 1. Obtener cantidad actual
+        const currentItem = this.cart().find(i => i.product.id === product.id);
+        const currentQty = currentItem ? currentItem.quantity : 0;
+        
+        // 2. Calcular final con precisión para evitar "-0.0000001"
+        let finalQty = currentQty + qtyToAdd;
+        
+        // Redondeo de seguridad (3 decimales para KG/M, enteros para UNIT)
+        if (product.measurement_unit === 'UNIT') {
+            finalQty = Math.round(finalQty);
+        } else {
+            finalQty = Math.round(finalQty * 1000) / 1000;
+        }
+
+        // 3. CASO: ELIMINAR DEL CARRITO
+        // Si la cantidad resultante es 0 o negativa, sacamos el producto.
+        if (finalQty <= 0) {
+            this.removeFromCart(product.id);
+            this.searchInput.nativeElement.focus();
+            return true; // Operación exitosa (eliminación es válida)
+        }
+
+        // 4. CASO: VALIDACIÓN DE STOCK (Solo si estamos SUMANDO)
+        // Si qtyToAdd es negativo, siempre dejamos pasar (estamos devolviendo stock)
+        if (qtyToAdd > 0 && product.measurement_unit !== 'SERVICE') {
+            if (finalQty > product.stock) {
+                const availableToAdd = product.stock - currentQty;
+                const msg = availableToAdd > 0 
+                    ? `⚠️ Stock insuficiente.\nSolo puedes agregar ${availableToAdd} más.`
+                    : `⚠️ Has alcanzado el límite de stock disponible (${product.stock}).`;
+                
+                alert(msg);
+                return false; // Bloqueamos la acción
             }
-            // Si no, lo agregamos
-            return [...items, { product, quantity: qtyToAdd }];
+        }
+
+        // 5. ACTUALIZAR CARRITO
+        this.cart.update(items => {
+            if (currentItem) {
+                return items.map(i => i.product.id === product.id ? { ...i, quantity: finalQty } : i);
+            }
+            return [...items, { product, quantity: finalQty }];
         });
+
+        return true;
     }
 
     openPaymentModal() {
@@ -258,7 +319,7 @@ export class PosTerminalComponent implements OnInit {
         this.cart.update(items => items.filter(i => i.product.id !== productId))
     }
 
-    handlePaymentConfirm(event: { method: PaymentMethod, amount: number }) {
+    handlePaymentConfirm(event: { method: string, amount: number, currency: string, reference?: string }) {
         if (!this.selectedCustomer()) {
             alert('Error: Debe asignar un cliente (F4)'); 
             this.isPaymentModalOpen.set(false);
@@ -268,15 +329,15 @@ export class PosTerminalComponent implements OnInit {
         const invoicePayload: InvoiceCreate = {
             customer_tax_id: this.selectedCustomer()!.taxId || 'V-00000000',
             salesperson_id: 1, // TODO: Obtener del AuthService user.id
-            currency: 'USD',
+            currency: event.currency,
             items: this.cart().map(item => ({
                 product_id: item.product.id,
                 quantity: item.quantity
             })),
             payment: {
                 amount: event.amount,
-                payment_method: event.method,
-                reference: `POS-${Date.now().toString().slice(-4)}`,
+                payment_method: event.method as PaymentMethod,
+                reference: event.reference || `POS-${Date.now().toString().slice(-4)}`,
                 notes: 'Venta POS Terminal'
             }
         };
@@ -342,8 +403,9 @@ export class PosTerminalComponent implements OnInit {
             this.openPaymentModal();
         }
         if (event.key === 'F2') {
+            if (this.isPaymentModalOpen()) return;
             event.preventDefault();
-            this.searchInput.nativeElement.focus();
+            if(this.searchInput) this.searchInput.nativeElement.focus();
         }
         if (event.key === 'F4') {
             event.preventDefault();
