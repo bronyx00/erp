@@ -15,12 +15,6 @@ export interface PaginatedResponse<T> {
     };
 }
 
-// Modelo de un Item de Pago Individual
-export interface PaymentDetail {
-  method: any;
-  amount: number;
-}
-
 // Modelo de ítem de Factura
 export interface InvoiceItem {
   product_name: string;
@@ -103,9 +97,57 @@ export interface ExchangeRate {
 export interface PaymentCreate {
   invoice_id: number;
   amount: number;
-  payment_method: PaymentMethod;
+  currency: string;
+  payment_method: string;
   reference?: string; 
   notes?: string;
+}
+
+// --- COTIZACIONES ---
+export interface Quote {
+  id: number;
+  quote_number: string;
+  status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'INVOICED';
+  company_name: string;
+  company_rif: string;
+  company_address: string;
+  customer_name: string;
+  customer_rif: string;
+  customer_email?: string;
+  customer_address?: string;
+  customer_phone?: string;
+  date_issued: string;
+  date_expires: string;
+  currency: string;
+  subtotal: number;
+  tax_amount: number;
+  total: number;
+  notes?: string;
+  terms?: string;
+  items: QuoteItem[];
+}
+
+export interface QuoteItem {
+  product_id: number;
+  product_name: string; // Para visualización
+  description?: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
+export interface QuoteCreate {
+  customer_tax_id: string; 
+  date_expires: string;
+  currency: string;
+  items: {
+    product_id: number;
+    quantity: number;
+    unit_price?: number;
+    description?: string;
+  }[];
+  notes?: string;
+  terms?: string;
 }
 
 @Injectable({
@@ -141,7 +183,7 @@ export class FinanceService {
     return this.http.get<ExchangeRate>(`${this.API_URL}/exchange-rate`);
   }
 
-  createPayment(payment: PaymentCreate): Observable<any> {
+  registerPayment(payment: PaymentCreate): Observable<any> {
     return this.http.post(`${this.API_URL}/payments`, payment);
   }
 
@@ -155,5 +197,21 @@ export class FinanceService {
       headers = { 'X-Supervisor-Token': supervisorToken };
     }
     return this.http.post(`${this.API_URL}/invoices/${id}/void`, {}, { headers });
+  }
+
+  // --- COTIZACIONES ---
+  getQuotes(page: number = 1, limit: number = 20, search?: string, status?: string): Observable<any> {
+    let params = new HttpParams().set('page', page).set('limit', limit);
+    if (search) params = params.set('search', search);
+    if (status) params = params.set('status', status);
+    return this.http.get(`${this.API_URL}/quotes`, { params });
+  }
+
+  createQuote(data: QuoteCreate): Observable<Quote> {
+    return this.http.post<Quote>(`${this.API_URL}/quotes`, data);
+  }
+
+  convertQuoteToInvoice(quoteId: number): Observable<any> {
+    return this.http.post(`${this.API_URL}/quotes/${quoteId}/convert`, {});
   }
 }

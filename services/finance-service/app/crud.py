@@ -150,19 +150,36 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     if not invoice:
         raise ValueError("Factura no encontrada o acceso denegado")
     
-    # Calcular saldo
-    total_paid = sum(p.amount for p in invoice.payments)
-    balance_due = invoice.total_usd - total_paid
+    # Obtener tasa
+    rate_q = select(models.ExchangeRate).order_by(desc(models.ExchangeRate.acquired_at)).limit(1)
+    rate_obj = (await db.execute(rate_q)).scalar_one_or_none()
+    current_rate = rate_obj.rate if rate_obj else Decimal(1)
     
-    payment_amount_rounded = round_money(payment.amount)
+    # Calcular saldos
+    payment_val_usd = payment.amount
+    if payment.currency == "VES" and invoice.currency == "USD":
+        payment_val_usd = payment.amount / current_rate
+    elif payment.currency == "USD" and invoice.currency == "VES":
+        payment_val_usd = payment.amount * current_rate
+        
+    # Vaidar contra Saldo pendiente
+    total_paid_usd = Decimal(0)
+    for p in invoice.payments:
+        amount_usd = p.amount
+        if p.currency == "VES" and invoice.currency == "USD":
+            amount_usd = p.amount / current_rate
+        total_paid_usd += amount_usd
     
-    if payment_amount_rounded > balance_due + Decimal("0.01"):
-        raise ValueError(f"El monto excede la deuda. Saldo pendiente: {balance_due}")
+    balance_due = invoice.total_usd - total_paid_usd
+    
+    # Margen de error por decimales (0.05 USD)
+    if payment_val_usd > (balance_due + Decimal("0.05")):
+        raise ValueError(f"El monto excede la deuda. Restan: ${balance_due:.2f}")
     
     # Crear Pago
     db_payment = models.Payment(
         invoice_id=payment.invoice_id,
-        amount=payment_amount_rounded,
+        amount=round_money(payment.amount),
         currency=invoice.currency,
         payment_method=payment.payment_method,
         reference=payment.reference,
@@ -171,10 +188,11 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     db.add(db_payment)
     
     # Actualizar Status de la Factura
-    new_total_paid = total_paid + payment_amount_rounded
+    new_total_paid = total_paid_usd + payment_val_usd
+    
     is_fully_paid = False # Bandera para saber si debemos emitir evento
     
-    if new_total_paid >= invoice.total_usd:
+    if new_total_paid >= (invoice.total_usd - Decimal("0.05")):
         invoice.status = "PAID"
         is_fully_paid = True
     else:
@@ -699,6 +717,13 @@ async def create_quote(db: AsyncSession, quote_in: schemas.QuoteCreate, tenant_i
         # Fallback si no existe.( Cambiar a la creacion )
         customer = {"name": "Cliente Nuevo", "rif": quote_in.customer_tax_id, "email": "", "address": "", "phone": ""}
         
+    # Obtener Configuracién Fiscal
+    settings_q = select(models.FinanceSettings).filter(models.FinanceSettings.tenant_id == tenant_id)
+    settings = (await db.execute(settings_q)).scalar_one_or_none()
+    
+    tax_percentage = settings.tax_rate if settings else Decimal(16.00)    
+    tax_rate = tax_percentage / 100    
+    
     # Procesar Items (Precios y Totales)
     import asyncio
     product_tasks = [get_product_details(item.product_id, token) for item in quote_in.items]
@@ -707,7 +732,6 @@ async def create_quote(db: AsyncSession, quote_in: schemas.QuoteCreate, tenant_i
     
     db_items = []
     total_base = Decimal(0)
-    tax_rate = Decimal(tenant_data.get('tax_rate', 16)) // 100 if tenant_data.get('tax_active') else Decimal(0)
     
     for item in quote_in.items:
         product = product_map.get(item.product_id)
@@ -745,6 +769,12 @@ async def create_quote(db: AsyncSession, quote_in: schemas.QuoteCreate, tenant_i
         quote_number=next_num,
         status="SENT",
         
+        # Snapshot Empresa 
+        company_name=tenant_data.get('name'),
+        company_rif=tenant_data.get('rif'),
+        company_address=tenant_data.get('address'),
+        
+        # Snapshot Cliente
         customer_id=customer.get('id'),
         customer_name=customer.get('name'),
         customer_rif=customer.get('tax_id') or quote_in.customer_tax_id,
@@ -784,11 +814,15 @@ async def get_quotes(
     tenant_id: int,
     page: int = 1,
     limit: int = 20,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    status: Optional[str] = None
 ):
     """Lista las cotizaciones con filtros."""
     offset = (page - 1) * limit
     conditions = [models.Quote.tenant_id == tenant_id]
+    
+    if status:
+        conditions.append(models.Quote.status == status)
     
     if search:
         search_term = f"%{search}%"
@@ -799,6 +833,7 @@ async def get_quotes(
                 cast(models.Quote.quote_number, String).ilike(search_term)
             )
         )
+        
     
     # Contar Rapido
     count_query = select(func.count(models.Quote.id)).filter(*conditions)
@@ -843,7 +878,7 @@ async def convert_quote_to_invoice(db: AsyncSession, quote_in: int, tenant_id: i
     
     # Prepara objeto basado en la Cotización
     invoice_items = [
-        schemas.InvoiceItemCreate(product_id=i.product_id, quantity=i.quantity)
+        schemas.InvoiceItemCreate(product_id=i.product_id, quantity=i.quantity, unit_price=i.unit_price)
         for i in quote.items
     ]
     

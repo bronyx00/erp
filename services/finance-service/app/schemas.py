@@ -53,6 +53,7 @@ class InvoicePaymentCreate(BaseModel):
 class InvoiceItemCreate(BaseModel):
     product_id: int = Field(..., description="ID del producto")
     quantity: Decimal = Field(..., gt=0, description="Cantidad (soporta decimales para Kg/Mts)")
+    unit_price: Optional[Decimal] = None
     
 class InvoiceItemResponse(BaseModel):
     product_name: str
@@ -70,6 +71,7 @@ class InvoiceCreate(BaseModel):
 
 class PaymentCreate(BaseModel):
     invoice_id: int
+    currency: str
     amount: Decimal
     payment_method: str # Zelle, Cash, Transferencia
     reference: Optional[str] = None
@@ -182,15 +184,29 @@ class QuoteResponse(BaseModel):
     id: int
     quote_number: str
     status: str
-    customer_name: str
     date_issued: date
     date_expires: date
-    total: Decimal
+    
+    # Datos de la Empresa
+    company_name: Optional[str] = None
+    company_rif: Optional[str] = None
+    company_address: Optional[str] = None
+    
+    # Datos Cliente
+    customer_name: Optional[str] = None
+    customer_rif: Optional[str] = None
+    customer_email: Optional[str] = None
+    customer_address: Optional[str] = None
+    
     currency: str
+    subtotal: Decimal
+    tax_amount: Decimal
+    total: Decimal
+    
     items: List[QuoteItemResponse]
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
-
+    
 # --- REPORTES ---
 class DailySales(BaseModel):
     date: datetime

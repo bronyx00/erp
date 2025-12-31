@@ -288,6 +288,8 @@ async def create_quote_endpoint(
 async def list_quotes(
     page: int = 1,
     limit: int = 20,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
     db: AsyncSession = Depends(database.get_db),
     user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_READ))
 ):
@@ -296,7 +298,7 @@ async def list_quotes(
     
     Muestra el historial de presupuestos emitidos.
     """
-    return await crud.get_quotes(db, tenant_id=user.tenant_id, page=page, limit=limit)
+    return await crud.get_quotes(db, tenant_id=user.tenant_id, page=page, limit=limit, search=search, status=status)
 
 @app.post("/quotes/{quote_id}/convert", response_model=schemas.InvoiceResponse)
 async def convert_quote(

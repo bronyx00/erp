@@ -161,7 +161,16 @@ export class PaymentModalComponent implements AfterViewInit {
     }
 
     setCurrency(curr: 'VES' | 'USD') {
+        this.currency.set(curr);
         
+        // Recalcular monto sugerido según la moneda seleccionada
+        const rawAmount = curr === 'VES' ? this.amountVes : this.amountUsd;
+        this.paymentAmount = Math.round((rawAmount + Number.EPSILON) * 100) / 100;
+        
+        // Reset visual
+        this.selectedMethod.set('');
+        this.focusedIndex = 0;
+        setTimeout(() => this.focusOption(0), 50);
     }
 
     // --- NAVEGACIÓN POR TECLADO ---

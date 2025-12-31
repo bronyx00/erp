@@ -50,6 +50,14 @@ export const routes: Routes = [
       {
         path: 'finance/invoices',
         loadComponent: () => import('./features/finance/invoices/invoice-list/invoice-list.component').then(m => m.InvoiceListComponent)
+      },
+      {
+        path: 'quotes',
+        loadComponent: () => import('./features/finance/quotes/quote-list/quote-list.component').then(m => m.QuoteListComponent),
+      },
+      {
+        path: 'quotes/new',
+        loadComponent: () => import('./features/finance/quotes/quote-form/quote-form.component').then(m => m.QuoteFormComponent),
       }
     ]
   },

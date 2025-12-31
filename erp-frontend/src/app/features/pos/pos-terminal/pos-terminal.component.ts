@@ -4,11 +4,10 @@ import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { debounceTime, distinctUntilChanged, switchMap, of, catchError } from 'rxjs';
 
 import { CrmService } from '../../crm/services/crm.service';
-import { InventoryService, CategorySummary } from '../../inventory/services/inventory.service';
+import { InventoryService, CategorySummary, Product } from '../../inventory/services/inventory.service';
 import { FinanceService, InvoiceCreate, ExchangeRate, PaymentMethod } from '../../../core/services/finance';
 
 import { Customer } from '../../crm/models/customer.model';
-import { Product } from '../../inventory/models/product.model';
 import { ClientFormComponent } from '../../crm/client-form/client-form.component';
 import { PaymentModalComponent } from '../payment-modal/payment-modal.component';
 

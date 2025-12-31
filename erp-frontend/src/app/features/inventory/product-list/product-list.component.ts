@@ -3,8 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { debounceTime, distinctUntilChanged } from 'rxjs';
 
-import { InventoryService, CategorySummary } from '../services/inventory.service';
-import { Product } from '../models/product.model';
+import { InventoryService, CategorySummary, Product } from '../services/inventory.service';
 import { ProductFormComponent } from '../product-form/product-form.component';
 import { SkeletonTableComponent } from '../../../shared/components/skeleton-table/skeleton-table.component';
 

@@ -182,6 +182,11 @@ class Quote(Base):
     customer_address = Column(Text, nullable=True)
     customer_phone = Column(String, nullable=True)
     
+    # Empresa
+    company_name = Column(String)
+    company_rif = Column(String)
+    company_address = Column(String)
+    
     # Fechas
     date_issued = Column(Date, nullable=False)
     date_expires = Column(Date, nullable=False)

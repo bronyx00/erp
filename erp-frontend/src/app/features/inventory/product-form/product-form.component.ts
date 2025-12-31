@@ -1,8 +1,7 @@
 import { Component, EventEmitter, Input, Output, inject, effect, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { InventoryService } from '../services/inventory.service';
-import { Product, ProductPayload } from '../models/product.model';
+import { InventoryService, Product, ProductPayload } from '../services/inventory.service';
 
 @Component({
     selector: 'app-product-form',
