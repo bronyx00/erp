@@ -58,8 +58,6 @@ async def process_message(message: aio_pika.IncomingMessage):
             if items:
                 if routing_key == "invoice.paid":
                     update_stock(items, action="decrease")
-                elif routing_key == "invoice.voided":
-                    update_stock(items, action="increase")
         except Exception as e:
             print(f"❌ Error procesando mensaje: {e}", flush=True)
 
@@ -71,7 +69,6 @@ async def main():
         queue = await channel.declare_queue('inventory_stock_updates', durable=True)
         
         await queue.bind(exchange, routing_key='invoice.paid')
-        await queue.bind(exchange, routing_key='invoice.voided')
         
         print("🎧 [Inventory] Escuchando eventos...", flush=True)
         await queue.consume(process_message)

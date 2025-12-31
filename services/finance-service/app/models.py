@@ -142,6 +142,7 @@ class Payment(Base):
     
     amount = Column(Numeric(10, 2), nullable=False) # Monto pagado
     currency = Column(String(3), default="USD")     # Moneda del pago
+    exchange_rate = Column(Numeric(12, 4), default=1)
     payment_method = Column(String)
     reference = Column(String, nullable=True)
     notes = Column(String, nullable=True)

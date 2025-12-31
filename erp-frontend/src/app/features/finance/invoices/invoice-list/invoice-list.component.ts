@@ -41,7 +41,7 @@ export class InvoiceListComponent implements OnInit {
     // Filtros
     searchControl = new FormControl('');
     statusFilter = signal<string>(''); 
-    dateFilter = signal<string>(this.getLocalDate());
+    dateFilter = signal<string>('');
 
     // Paginación
     currentPage = signal(1);
@@ -90,6 +90,18 @@ export class InvoiceListComponent implements OnInit {
         });
     }
 
+    voidInvoice(invoice: Invoice) {
+        if (!confirm(`¿Está seguro de ANULAR la factura #${invoice.invoice_number}? Esta acción es irreversible.`)) return;
+
+        this.financeService.voidInvoice(invoice.id).subscribe({
+            next: () => {
+                alert('Factura anulada correctamente.');
+                this.loadInvoices();
+            },
+            error: (err) => alert('Error: ' + (err.error?.detail || 'No se pudo anular'))
+        });
+    }
+
     openDetail(invoice: Invoice) {
         this.isLoading.set(true);
         this.financeService.getInvoiceById(invoice.id).subscribe({
@@ -120,19 +132,47 @@ export class InvoiceListComponent implements OnInit {
 
     // Abrir Modal de Pago con datos de la deuda
     openPayment(invoice: Invoice) {
-        const totalPaid = invoice.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
-        const pending = Number(invoice.total_usd) - totalPaid;
-        
-        if (pending <= 0.01) {
-            alert('Esta factura ya está pagada.');
-            return;
-        }
+        console.log('💳 Abriendo pago para factura:', invoice.invoice_number);
 
-        // Configurar datos para el modal del POS
-        this.paymentInvoice.set(invoice);
-        this.amountToPayUsd.set(pending);
-        // Calculamos su equivalente en Bs a tasa actual
-        this.amountToPayVes.set(pending * this.currentExchangeRate());
+      // 1. Calcular Saldo Pendiente (Prioridad: Backend > Cálculo Local)
+      let pendingUSD = 0;
+
+      // Intentar leer del backend (si implementaste los computed fields)
+      if ((invoice as any).balance_due !== undefined) {
+          pendingUSD = Number((invoice as any).balance_due);
+      } else {
+          // Fallback: Calcular restando pagos
+          const totalPaid = invoice.payments?.reduce((acc, p) => {
+              // Usar amount_in_usd si existe, o convertir si es USD
+              let val = 0;
+              if ((p as any).amount_in_usd) val = Number((p as any).amount_in_usd);
+              else if (p.currency === 'USD') val = Number(p.amount);
+              // Si es VES y no tiene amount_in_usd, ignoramos o estimamos (mejor ignorar para no errar)
+              return acc + val;
+          }, 0) || 0;
+          
+          pendingUSD = Number(invoice.total_usd) - totalPaid;
+      }
+
+      // Limpieza de decimales y negativos
+      pendingUSD = Math.max(0, Math.round((pendingUSD + Number.EPSILON) * 100) / 100);
+
+      if (pendingUSD <= 0.01) {
+          alert('✅ Esta factura ya está pagada.');
+          return;
+      }
+
+      // 2. Preparar Datos para el Modal
+      // Aseguramos tasa (si no ha cargado, usamos 1 para evitar NaN)
+      const rate = this.currentExchangeRate() || 1; 
+
+      this.amountToPayUsd.set(pendingUSD);
+      this.amountToPayVes.set(pendingUSD * rate); // Sugerencia en VES
+      
+      console.log('🧮 Deuda Calculada:', { USD: pendingUSD, Tasa: rate, VES: pendingUSD * rate });
+
+      // 3. Abrir Modal (Activando el @if)
+      this.paymentInvoice.set(invoice);
     }
 
     // Versión BLINDADA para depuración

@@ -83,6 +83,15 @@ class PaymentResponse(BaseModel):
     payment_method: str
     created_at: datetime
     currency: str
+    reference: Optional[str] = None
+    exchange_rate: Decimal
+    
+    @computed_field
+    def amount_in_usd(self) -> Decimal:
+        if self.currency == 'USD': return self.amount
+        if not self.exchange_rate or self.exchange_rate == 0: return 0
+        return self.amount / self.exchange_rate
+    
     model_config = ConfigDict(from_attributes=True)
 
 class InvoiceResponse(BaseModel):
@@ -115,6 +124,18 @@ class InvoiceResponse(BaseModel):
     items: List[InvoiceItemResponse] # Devuelve el detalle}
     payments: List[PaymentResponse] = []
     created_at: datetime
+    
+    @computed_field
+    def total_paid(self) -> Decimal:
+        """Suma de todos los pagos normalizados a USD"""
+        return sum(p.amount_in_usd for p in self.payments)
+
+    @computed_field
+    def balance_due(self) -> Decimal:
+        """Saldo Pendiente"""
+        # Si está pagada, forzamos 0 para evitar residuos decimales
+        if self.status == 'PAID': return Decimal(0)
+        return self.total_usd - self.total_paid
     
     model_config = ConfigDict(from_attributes=True)
     

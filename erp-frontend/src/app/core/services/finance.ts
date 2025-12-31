@@ -76,6 +76,9 @@ export interface Invoice {
   
   items?: InvoiceItem[];
   payments?: Payment[];
+
+  total_paid: number;
+  balance_due: number;
   created_at: string;
 }
 
@@ -84,7 +87,10 @@ export interface Payment {
     amount: number;
     payment_method: string;
     created_at: string;
+    exchange_rate: number;
     currency: string;
+    amount_in_usd: number;
+    reference?: string;
 }
 
 export interface ExchangeRate {
@@ -191,12 +197,8 @@ export class FinanceService {
     return this.http.get(`${this.API_URL}/invoices/${id}/pdf`, { responseType: 'blob' });
   }
 
-  voidInvoice(id: number, supervisorToken?: string): Observable<any> {
-    let headers = {};
-    if (supervisorToken) {
-      headers = { 'X-Supervisor-Token': supervisorToken };
-    }
-    return this.http.post(`${this.API_URL}/invoices/${id}/void`, {}, { headers });
+  voidInvoice(id: number): Observable<any> {
+    return this.http.post(`${this.API_URL}/invoices/${id}/void`, {});
   }
 
   // --- COTIZACIONES ---

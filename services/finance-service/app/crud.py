@@ -157,30 +157,36 @@ async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate, tenan
     
     # Calcular saldos
     payment_val_usd = payment.amount
-    if payment.currency == "VES" and invoice.currency == "USD":
+    
+    # Si el pago es en VES, convertimos a USD usando la tasa del DIA
+    if payment.currency == "VES":
         payment_val_usd = payment.amount / current_rate
-    elif payment.currency == "USD" and invoice.currency == "VES":
-        payment_val_usd = payment.amount * current_rate
         
     # Vaidar contra Saldo pendiente
     total_paid_usd = Decimal(0)
     for p in invoice.payments:
-        amount_usd = p.amount
-        if p.currency == "VES" and invoice.currency == "USD":
-            amount_usd = p.amount / current_rate
-        total_paid_usd += amount_usd
+        
+        p_val = p.amount
+        if p.currency == "VES":
+            hist_rate = p.exchange_rate if p.exchange_rate else Decimal(1)
+            p_val = p.amount / hist_rate
+        total_paid_usd += p_val
     
     balance_due = invoice.total_usd - total_paid_usd
     
     # Margen de error por decimales (0.05 USD)
     if payment_val_usd > (balance_due + Decimal("0.05")):
-        raise ValueError(f"El monto excede la deuda. Restan: ${balance_due:.2f}")
+        raise ValueError(
+            f"El pago (${payment_val_usd:.2f}) excede la deuda (${balance_due:.2f}). "
+            f"Tasa usada: {current_rate}"
+        )
     
     # Crear Pago
     db_payment = models.Payment(
         invoice_id=payment.invoice_id,
         amount=round_money(payment.amount),
-        currency=invoice.currency,
+        currency=payment.currency,
+        exchange_rate=current_rate if payment.currency == "VES" else 1,
         payment_method=payment.payment_method,
         reference=payment.reference,
         notes=payment.notes
@@ -225,6 +231,21 @@ async def get_invoices(
     offset = (page - 1) * limit
     conditions = [models.Invoice.tenant_id == tenant_id]
     
+    # Filtros Dinámicos
+    if status:
+        conditions.append(models.Invoice.status == status)
+        
+    if search:
+        search_term = f"%{search}%"
+        conditions.append(
+            or_(
+                models.Invoice.customer_name.ilike(search_term),
+                models.Invoice.customer_rif.ilike(search_term),
+                cast(models.Invoice.invoice_number, String).ilike(search_term),
+                models.Invoice.control_number.ilike(search_term)
+            )
+        )
+    
     # Filtros de seguridad y negocio
     if created_by_id:
         conditions.append(models.Invoice.created_by_user_id == created_by_id)
@@ -240,20 +261,6 @@ async def get_invoices(
         end_dt = datetime.combine(date_end, datetime.max.time()) if isinstance(date_end, date) else date_end
         conditions.append(models.Invoice.created_at <= end_dt)
     
-    # Filtros Dinámicos
-    if status:
-        conditions.append(models.Invoice.status == status)
-        
-    if search:
-        search_term = f"%{search}%"
-        conditions.append(
-            or_(
-                models.Invoice.customer_name.ilike(search_term),
-                models.Invoice.customer_rif.ilike(search_term),
-                cast(models.Invoice.invoice_number, String).ilike(search_term),
-                models.Invoice.control_number.ilike(search_term)
-            )
-        )
     
     # Contar Rapido
     count_query = select(func.count(models.Invoice.id)).filter(*conditions)
@@ -370,9 +377,14 @@ async def create_invoice(
         
         # Precio unitario
         try:
-            unit_price = Decimal(str(product.get('price', 0)))
+            system_price = Decimal(str(product.get('price', 0)))
         except:
-            unit_price = Decimal(0)
+            system_price = Decimal(0)
+            
+        if item.unit_price is not None and item.unit_price > 0:
+            unit_price = item.unit_price
+        else: 
+            unit_price = system_price
         
         line_total = unit_price * item.quantity
         total_base += line_total
@@ -522,13 +534,27 @@ async def get_invoice_by_id(db: AsyncSession, invoice_id: int, tenant_id: int):
     result = await db.execute(query)
     return result.scalars().first()
 
-async def set_invoice_void(db: AsyncSession, invoice: models.Invoice):
+async def set_invoice_void(db: AsyncSession, invoice_id: int, tenant_id: int):
     """Marca la factura como anulada y guarda en DB."""
-    invoice.status = "VOID"
-    db.add(invoice)
-    await db.commit()
+    query = (
+        select(models.Invoice)
+        .filter(models.Invoice.tenant_id == tenant_id, models.Invoice.id == invoice_id)
+        .options(
+            selectinload(models.Invoice.items),
+            selectinload(models.Invoice.payments)
+            )
     
-    # Recargamos para devolver el objeto actualizado y limpio
+    ) 
+    invoice = (await db.execute(query)).scalar_one_or_none()
+    
+    if not invoice:
+        raise ValueError("Factura no encontrada")
+        
+    if invoice.status == 'PAID' or invoice.status == 'PARTIALLY_PAID':
+        raise ValueError("No se puede anular una factura que ya tiene pagos. Debe realizar una Nota de Crédito.")
+        
+    invoice.status = 'VOID'
+    await db.commit()
     await db.refresh(invoice)
     return invoice   
 

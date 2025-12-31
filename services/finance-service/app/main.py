@@ -96,20 +96,18 @@ async def read_invoices(
     filter_start = None
     filter_end = None
     
-    if user.role in MANAGERS:
-        if not start_date and not search:
-            today = datetime.utcnow().date()
-            filter_start = datetime.combine(today, time.min)
-            filter_end = datetime.combine(today, time.max)
-        elif start_date:
-             filter_start = datetime.combine(start_date, time.min)
-             end_d = end_date if end_date else start_date
-             filter_end = datetime.combine(end_d, time.max)
-    else:
-        # EMPLEADO: Solo ve SUS facturas ABIERTAS (Sin cierre de caja)
+    if start_date:
+        filter_start = datetime.combine(start_date, time.min)
+        
+    if end_date:
+        filter_end = datetime.combine(end_date, time.max)
+    elif start_date:
+        filter_end = datetime.combine(start_date, time.max)
+
+    if user.role not in MANAGERS:
+        # Empleados solo ven sus facturas abiertas
         filter_user_id = user.user_id
         filter_pending_close = True
-        # No restringimos fecha porque pueden tener una factura abierta de ayer
     
     return await crud.get_invoices(
         db, 
@@ -120,8 +118,8 @@ async def read_invoices(
         search=search,
         created_by_id=filter_user_id,
         only_pending_close=filter_pending_close,
-        date_start=filter_start or start_date,
-        date_end=filter_end or end_date
+        date_start=filter_start,
+        date_end=filter_end
     )
 
 @app.get("/invoices/{invoice_id}", response_model=schemas.InvoiceResponse)
@@ -199,22 +197,18 @@ async def void_invoice(
     Marca una factura como ANULADA (VOID) y dispara un evento para revertir
     el inventario y la contabilidad.
     """
-    invoice = await crud.get_invoice_by_id(db, invoice_id, user.tenant_id)
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Factura no encontrada")
-    
-    if invoice.status == "VOID":
-        raise HTTPException(status_code=400, detail="La factura ya está anulada")
+    try: 
+        invoice = await crud.set_invoice_void(db, invoice_id, user.tenant_id)
         
-    invoice = await crud.set_invoice_void(db, invoice)
-    
-    event_data = {
-        "invoice_id": invoice.id,
-        "tenant_id": user.tenant_id,
-        "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in invoice.items]
-    }
-    publish_event("invoice.voided", event_data)
-    return invoice
+        event_data = {
+            "invoice_id": invoice.id,
+            "tenant_id": user.tenant_id,
+            "items": [{"product_id": i.product_id, "quantity": i.quantity} for i in invoice.items]
+        }
+        publish_event("invoice.voided", event_data)
+        return invoice
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # --- PAGOS ---
 @app.post("/payments", response_model=schemas.PaymentResponse)
