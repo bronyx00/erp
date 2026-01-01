@@ -144,6 +144,8 @@ class CashCloseCreate(BaseModel):
     # El usuario solo envía lo que contó fisicamente y notas
     declared_cash_usd: Decimal = Field(default=0, ge=0)
     declared_cash_ves: Decimal = Field(default=0, ge=0)
+    declared_card_usd: Decimal = Field(decimal=0, ge=0)
+    declared_card_ves: Decimal = Field(decimal=0, ge=0)
     notes: Optional[str] = None
     
 class CashCloseResponse(BaseModel):
@@ -155,18 +157,31 @@ class CashCloseResponse(BaseModel):
     total_sales_usd: Decimal
     total_tax_usd: Decimal
     
+    total_sales_ves: Decimal
+    total_tax_ves: Decimal
+    
     # --- CAMPO CALCULADO ---
     @computed_field
     def total_system_income_usd(self) -> Decimal:
         """Retorna la suma de Base + IVA (Ej: 1.00 + 0.16 = 1.16)"""
         return self.total_sales_usd + self.total_tax_usd
 
-    total_sales_ves: Decimal
-    total_tax_ves: Decimal
+    # Desglose Sistema
+    total_cash_usd: Decimal
+    total_debit_card_usd: Decimal
+    total_transfer_usd: Decimal
+    total_credit_sales_usd: Decimal
     
-    # Arqueo
+    total_debit_card_ves: Decimal
+    total_transfer_ves: Decimal
+    total_cash_ves: Decimal
+    total_debit_card_ves: Decimal
+    
+    # Declarado
     declared_cash_usd: Decimal
     declared_cash_ves: Decimal
+    declared_card_usd: Decimal
+    declared_card_ves: Decimal
     
     # Diferencias
     difference_usd: Decimal

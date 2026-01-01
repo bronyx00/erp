@@ -186,7 +186,7 @@
 
         <div class="bg-white border-t border-slate-200 p-6 flex items-center justify-between shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
             <div class="flex gap-4">
-                <button routerLink="/quotes" class="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition">Cancelar</button>
+                <button routerLink="/finance/quotes" class="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition">Cancelar</button>
                 <button (click)="saveQuote()" 
                         [disabled]="isSaving || !customerName || items().length === 0"
                         class="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-black transition shadow-lg shadow-slate-900/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">

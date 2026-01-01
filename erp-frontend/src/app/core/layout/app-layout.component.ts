@@ -68,8 +68,7 @@ export class AppLayoutComponent implements OnInit {
       icon: 'fas fa-coins', 
       children: [
         { label: 'Facturas', icon: 'fas fa-file-invoice', route: '/finance/invoices' },
-        { label: 'Cotizaciones', icon: 'fas fa-receipt', route: '/quotes' },
-        { label: 'Cierres de Caja', icon: 'fas fa-wallet', route: '/finance/cash-close' }
+        { label: 'Cotizaciones', icon: 'fas fa-receipt', route: '/finance/quotes' }
       ]
     },
     { 

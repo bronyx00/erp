@@ -10,6 +10,7 @@ import { FinanceService, InvoiceCreate, ExchangeRate, PaymentMethod } from '../.
 import { Customer } from '../../crm/models/customer.model';
 import { ClientFormComponent } from '../../crm/client-form/client-form.component';
 import { PaymentModalComponent } from '../payment-modal/payment-modal.component';
+import { CashCloseModalComponent } from '../../finance/cash-close-modal/cash-close-modal.component';
 
 interface CartItem {
     product: Product;
@@ -19,7 +20,7 @@ interface CartItem {
 @Component({
     selector: 'app-pos-terminal',
     standalone: true,
-    imports: [CommonModule, ReactiveFormsModule, ClientFormComponent, PaymentModalComponent],
+    imports: [CommonModule, ReactiveFormsModule, ClientFormComponent, PaymentModalComponent, CashCloseModalComponent],
     templateUrl: './pos-terminal.component.html',
     styleUrls: ['./pos-terminal.component.scss']
 })
@@ -41,6 +42,7 @@ export class PosTerminalComponent implements OnInit {
     products = signal<Product[]>([]);
     categories = signal<CategorySummary[]>([]);
     selectedCategory = signal('Todas');
+    showCashClose = signal(false);
 
     cart = signal<CartItem[]>([]);
     selectedCustomer = signal<Customer | null>(null);
@@ -325,6 +327,12 @@ export class PosTerminalComponent implements OnInit {
             return;
         }
 
+        let finalAmount = event.amount;
+
+        if (event.currency === 'VES') {
+            finalAmount = event.amount * this.exchangeRate();
+        }
+
         const invoicePayload: InvoiceCreate = {
             customer_tax_id: this.selectedCustomer()!.taxId || 'V-00000000',
             salesperson_id: 1, // TODO: Obtener del AuthService user.id
@@ -334,7 +342,7 @@ export class PosTerminalComponent implements OnInit {
                 quantity: item.quantity
             })),
             payment: {
-                amount: event.amount,
+                amount: finalAmount,
                 payment_method: event.method as PaymentMethod,
                 reference: event.reference || `POS-${Date.now().toString().slice(-4)}`,
                 notes: 'Venta POS Terminal'
@@ -359,6 +367,15 @@ export class PosTerminalComponent implements OnInit {
                 alert('Error al crear factura. Revise consola.');
             }
         });
+    }
+
+    // --- CIERRE DE CAJA ---
+    handleCashClose(success: boolean) {
+        this.showCashClose.set(false);
+        if (success) {
+            // Opcional: Redirigir a login o limpiar pantalla
+            alert('Caja cerrada correctamente.');
+        }
     }
 
     // --- CLIENT MANAGEMENT ---

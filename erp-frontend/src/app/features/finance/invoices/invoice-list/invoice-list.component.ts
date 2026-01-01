@@ -7,6 +7,7 @@ import { FinanceService, Invoice, PaymentCreate, PaymentMethod } from '../../../
 import { SkeletonTableComponent } from '../../../../shared/components/skeleton-table/skeleton-table.component';
 import { InvoiceDetailModalComponent } from '../invoice-detail-modal/invoice-detail-modal.component';
 import { PaymentModalComponent } from '../../../pos/payment-modal/payment-modal.component';
+import { CashCloseModalComponent } from '../../cash-close-modal/cash-close-modal.component';
 
 @Component({
     selector: 'app-invoice-list',
@@ -14,7 +15,8 @@ import { PaymentModalComponent } from '../../../pos/payment-modal/payment-modal.
     imports: [
         CommonModule, ReactiveFormsModule, FormsModule, 
         CurrencyPipe, DatePipe, SkeletonTableComponent,
-        InvoiceDetailModalComponent, PaymentModalComponent
+        InvoiceDetailModalComponent, PaymentModalComponent,
+        CashCloseModalComponent
     ],
     templateUrl: './invoice-list.component.html'
 })
@@ -31,6 +33,7 @@ export class InvoiceListComponent implements OnInit {
     invoices = signal<Invoice[]>([]);
     selectedInvoice = signal<Invoice | null>(null);
     isLoading = signal(true);
+    showCashCloseModal = signal(false);
 
     // Estado para el Modal de Pago
     paymentInvoice = signal<Invoice | null>(null);
@@ -168,19 +171,13 @@ export class InvoiceListComponent implements OnInit {
 
       this.amountToPayUsd.set(pendingUSD);
       this.amountToPayVes.set(pendingUSD * rate); // Sugerencia en VES
-      
-      console.log('🧮 Deuda Calculada:', { USD: pendingUSD, Tasa: rate, VES: pendingUSD * rate });
 
       // 3. Abrir Modal (Activando el @if)
       this.paymentInvoice.set(invoice);
     }
 
-    // Versión BLINDADA para depuración
     handlePosPayment(event: { method?: string, amount?: number, currency?: string, reference?: string }) { 
-        console.log('🚀 EVENTO RECIBIDO DEL MODAL:', event);
-
         if (!this.paymentInvoice()) {
-            console.error('❌ Error: No hay factura seleccionada en paymentInvoice');
             return;
         }
         
@@ -188,7 +185,6 @@ export class InvoiceListComponent implements OnInit {
         
         // Validación estricta antes de llamar al servicio
         if (!event?.method || !event?.amount || !event?.currency) {
-            console.error('❌ Datos incompletos:', event);
             alert('Error: Datos de pago incompletos');
             return;
         }
@@ -211,20 +207,24 @@ export class InvoiceListComponent implements OnInit {
 
         this.financeService.registerPayment(invoicePayload).subscribe({
             next: (res) => {
-                console.log('✅ Factura pagada:', res);
                 alert('Pago registrado correctamente');
                 this.paymentInvoice.set(null); 
                 this.loadInvoices(); 
                 this.isLoading.set(false);
             },
             error: (err) => {
-                console.error('❌ ERROR BACKEND:', err);
-                // Mostrar el mensaje real del backend (ej: "Monto excede la deuda")
                 const msg = err.error?.detail || err.message || 'Error desconocido';
                 alert('No se pudo procesar el pago: ' + msg);
                 this.isLoading.set(false);
             }
         })
+    }
+
+    handleCashClose(success: boolean) {
+        this.showCashCloseModal.set(false);
+        if (success) {
+            this.loadInvoices(); // Recargar facturas 
+        }
     }
 
     // Helpers de UI

@@ -23,6 +23,13 @@
             </div>
           </div>
 
+          
+          <div  class="hidden md:flex text-white flex-col items-end justify-center px-4 bg-slate-800 border border-slate-200 rounded-xl min-w-[40px] hover:bg-black transition cursor-pointer"
+                (click)="showCashClose.set(true)" 
+                title="Cierre de Caja">
+              <i class="fas fa-cash-register"></i>
+          </div>
+
           <div class="hidden md:flex flex-col items-end justify-center px-4 bg-slate-50 border border-slate-200 rounded-xl min-w-[120px]">
               <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tasa {{ exchangeSource() }}</span>
               <span class="text-lg font-bold text-slate-700">Bs. {{ exchangeRate() | number:'1.2-2' }}</span>
@@ -212,6 +219,7 @@
         <span>Cobrar</span>
         <span class="bg-white/20 px-2 py-0.5 rounded text-sm font-mono">F9</span>
       </button>
+      
     </div>
   </div>
 
@@ -337,4 +345,9 @@
         </div>
     </div>
   }
+
+  @if (showCashClose()) {
+    <app-cash-close-modal (onClose)="handleCashClose($event)"></app-cash-close-modal>
+  }
 </div>
+

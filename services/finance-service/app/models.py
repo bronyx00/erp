@@ -55,6 +55,8 @@ class CashClose(Base):
     # --- ARQUEO REAL ---
     declared_cash_usd = Column(Numeric(12, 2), default=0)
     declared_cash_ves = Column(Numeric(12, 2), default=0)
+    declared_card_usd = Column(Numeric(14, 2), default=0)
+    declared_card_ves = Column(Numeric(14, 2), default=0)
     
     # --- DIFERENCIA ---
     difference_usd = Column(Numeric(12, 2), default=0)          # declared - system_cash
@@ -161,8 +163,6 @@ class ExchangeRate(Base):
     rate = Column(Numeric(20, 6), nullable=False)       # Tasa (ej. 36.543210)
     source = Column(String, default="BCV")              # Fuente (BCV)
     acquired_at = Column(DateTime(timezone=True), server_default=func.now()) # Cuándo la guardamos
-    
-
     
 class Quote(Base):
     """Cotizaciones / Presupuestos."""

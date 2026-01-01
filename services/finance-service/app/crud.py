@@ -12,7 +12,7 @@ from decimal import Decimal
 from . import models, schemas
 from .events import publish_event
 from jose import jwt
-from erp_common.security import SECRET_KEY, ALGORITHM
+from erp_common.security import SECRET_KEY, ALGORITHM, UserPayload
 from .models import FinanceSettings
 
 logger = logging.getLogger(__name__)
@@ -296,7 +296,9 @@ async def create_invoice(
     db: AsyncSession, 
     invoice_data: schemas.InvoiceCreate, 
     tenant_id: int, 
-    token: str
+    token: str,
+    user_id: int,
+    user_role: str
 ) -> models.Invoice:
     """
     Emite una nueva factura de venta.
@@ -351,9 +353,6 @@ async def create_invoice(
     rate_q = select(models.ExchangeRate).order_by(desc(models.ExchangeRate.acquired_at)).limit(1)
     rate_obj = (await db.execute(rate_q)).scalar_one_or_none()
     exchange_rate = rate_obj.rate if rate_obj else Decimal(1)
-    
-    # Obtener datos del usuario
-    user_sub, user_role, _ = get_user_from_token(token)
     
     # 3. Procesar Items y Totales
     total_base = Decimal(0)
@@ -414,12 +413,20 @@ async def create_invoice(
     if invoice_data.payment and invoice_data.payment.amount > 0:
         paid_amount = invoice_data.payment.amount
         
-        # Caso A: Pagó todo
-        if paid_amount >= total_usd:
-            status = "PAID"
-            paid_amount = total_usd
+        # A. Calculamos el valor del pago en USD para comparar contra la deuda
+        payment_val_usd = paid_amount
+        if invoice_data.currency == "VES":
+            payment_val_usd = paid_amount / exchange_rate
         
-        # Caso B: Pagó una parte (Abono / Adelanto)
+        # B. Comparamos USD con USD
+        if payment_val_usd >= (total_usd - Decimal("0.05")):
+            status = "PAID"
+            
+            # C. Si está pagada total, ajustamos el monto al total exacto SEGÚN LA MONEDA
+            if invoice_data.currency == "VES":
+                paid_amount = total_ves # Asignamos el total en Bs (Ej: 1747.95)
+            else:
+                paid_amount = total_usd # Asignamos el total en USD (Ej: 5.80)
         else:
             status = "PARTIALLY_PAID"
             
@@ -442,7 +449,7 @@ async def create_invoice(
     new_invoice = models.Invoice(
         tenant_id=tenant_id,
         salesperson_id=invoice_data.salesperson_id,
-        created_by_user_id=user_sub,
+        created_by_user_id=user_id,
         created_by_role=user_role,
         
         # Datos Fiscales
@@ -559,28 +566,21 @@ async def set_invoice_void(db: AsyncSession, invoice_id: int, tenant_id: int):
     return invoice   
 
 async def create_cash_close(
-    db: AsyncSession,
-    close_data: schemas.CashCloseCreate,
-    tenant_id: int,
-    user_id: int,
+    db: AsyncSession, 
+    close_data: schemas.CashCloseCreate, 
+    tenant_id: int, 
+    user_id: int
 ) -> models.CashClose:
     """
-    Genera el Cierre de Caja.
-    1. Busca facturas PAGADAS o PARCIALMENTE PAGADAS de la empresa que NO tengan cash_close_id.
-    2. Suma los pagos asociados a esas facturas para calcular el 'Sistema'.
-    3. Compara contra lo 'Declarado' por el usuario.
-    4. Cierra las facturas asignándoles el ID del cierre.
+    Genera el Cierre de Caja (Z) pulido.
     """
     
-    # 1. Buscar Facturas Pendientes de Cierre
-    # Incluimos ISSUED para cerrar ventas a crédito del día.
-    
+    # 1. Buscar Facturas Pendientes
     stm_invoices = select(models.Invoice).options(
         selectinload(models.Invoice.payments)
     ).filter(
         models.Invoice.tenant_id == tenant_id,
-        models.Invoice.created_by_user_id == user_id,
-        models.Invoice.status.in_(["PAID", "PARTIALLY_PAID", "ISSUED"]),
+        models.Invoice.status.in_(["PAID", "PARTIALLY_PAID", "ISSUED"]), 
         models.Invoice.cash_close_id.is_(None),
         models.Invoice.status != "VOID"
     )
@@ -590,7 +590,7 @@ async def create_cash_close(
     
     if not invoices:
         raise ValueError("No hay movimientos pendientes para cerrar caja.")
-    
+
     # 2. Inicializar Acumuladores
     summary = {
         "sales_usd": Decimal(0), "tax_usd": Decimal(0),
@@ -599,10 +599,11 @@ async def create_cash_close(
         "cash_usd": Decimal(0), "card_usd": Decimal(0), "transfer_usd": Decimal(0),
         "cash_ves": Decimal(0), "card_ves": Decimal(0), "transfer_ves": Decimal(0),
         
+        # Equivalentes para contabilidad (USD)
         "cash_ves_equiv": Decimal(0),      
         "card_ves_equiv": Decimal(0),
         "transfer_ves_equiv": Decimal(0),
-        
+
         "credit_usd": Decimal(0), "credit_ves": Decimal(0)
     }
     
@@ -610,49 +611,73 @@ async def create_cash_close(
     max_date = datetime.utcnow()
     
     if invoices:
-        min_date = invoices[-1].created_at
+        min_date = invoices[-1].created_at 
         max_date = invoices[0].created_at
-        
+
     for inv in invoices:
-        # Sumar ventas (Base + IVA) para reporte
+        # --- A. VENTAS ---
         summary["sales_usd"] += inv.subtotal_usd
         summary["tax_usd"] += inv.tax_amount_usd
         
-        rate = inv.exchange_rate or 1
+        # Calculamos el valor teórico en Bs de la venta usando la tasa de la factura
+        rate = inv.exchange_rate or Decimal(1)
         summary["sales_ves"] += (inv.subtotal_usd * rate)
         summary["tax_ves"] += (inv.tax_amount_usd * rate)
-        
-        paid_amount_usd_accum = Decimal(0)
+
+        # --- B. COBROS ---
+        paid_amount_usd_accum = Decimal(0) # Para calcular crédito restante
         
         for p in inv.payments:
-            # Clasificar por Moneda y Método
+            
+            # --- PAGOS EN DOLARES ---
             if p.currency == "USD":
                 paid_amount_usd_accum += p.amount
-                if p.payment_method == "CASH": summary["cash_usd"] += p.amount
-                elif p.payment_method in ["ZELLE", "USDT", "PAYPAL"]: summary["transfer_usd"] += p.amount
-                else: summary["card_usd"] += p.amount
-            
-            if p.currency == "VES":
-                if p.payment_method == "CASH": 
-                    summary["cash_ves"] += (p.amount * rate)
-                    summary["cash_ves_equiv"] += p.amount
-                elif p.payment_method in ["DEBIT_CARD", "BIOPAGO"]: 
-                    summary["card_ves"] += (p.amount * rate)
-                    summary["card_ves_equiv"] += p.amount
-                else: 
-                    summary["transfer_ves"] += (p.amount * rate) 
-                    summary["transfer_ves_equiv"] += p.amount
                 
-        # Calcular Crédito 
-        # Si la factura no está pagada totalmente, el remanente es CxC
-        total_paid_usd = paid_amount_usd_accum
+                if p.payment_method == "CASH": 
+                    summary["cash_usd"] += p.amount
+                elif p.payment_method in ["ZELLE", "USDT", "PAYPAL", "TRANSFER"]: 
+                    summary["transfer_usd"] += p.amount
+                else: 
+                    summary["card_usd"] += p.amount
+            
+            # --- PAGOS EN BOLIVARES ---
+            elif p.currency == "VES":
+                # Calculamos cuánto representa esto en USD para restar a la deuda y para Contabilidad
+                # Usamos la tasa guardada en el pago, si no existe, la de la factura
+                p_rate = p.exchange_rate if p.exchange_rate else rate
+                val_in_usd = p.amount / p_rate
+                
+                paid_amount_usd_accum += val_in_usd
+                
+                if p.payment_method == "CASH": 
+                    summary["cash_ves"] += p.amount # Suma directa de Bs
+                    summary["cash_ves_equiv"] += val_in_usd # Equivalente $
+                elif p.payment_method in ["DEBIT_CARD", "BIOPAGO", "PAGO_MOVIL"]: 
+                    summary["card_ves"] += p.amount
+                    summary["card_ves_equiv"] += val_in_usd
+                else: 
+                    summary["transfer_ves"] += p.amount
+                    summary["transfer_ves_equiv"] += val_in_usd
+
+        # --- C. CREDITO (CUENTAS POR COBRAR) ---
+        # El crédito es el Total Factura - Lo que se ha logrado pagar (convertido a base USD)
+        remaining_balance = inv.total_usd - paid_amount_usd_accum
         
-        if inv.status != "PAID":
-            if not inv.payments:
-                summary["credit_usd"] += inv.total_usd
-                summary["credit_ves"] += (inv.total_usd * rate)
-        
-    # 3. Crear Objeto Cierre
+        # Pequeño margen de tolerancia por decimales (0.05)
+        if remaining_balance > Decimal("0.05"):
+            summary["credit_usd"] += remaining_balance
+            summary["credit_ves"] += (remaining_balance * rate)
+
+    # 3. Calcular Diferencias (Sobrante / Faltante)
+    # Dolares
+    total_system_cash_usd = summary["cash_usd"]
+    diff_usd = close_data.declared_cash_usd - total_system_cash_usd
+    
+    # Bolivares
+    total_system_cash_ves = summary["cash_ves"]
+    diff_ves = close_data.declared_cash_ves - total_system_cash_ves
+
+    # 4. Crear Objeto Cierre
     cash_close = models.CashClose(
         tenant_id=tenant_id,
         user_id=user_id,
@@ -662,35 +687,38 @@ async def create_cash_close(
         # Totales Sistema USD
         total_sales_usd=summary["sales_usd"],
         total_tax_usd=summary["tax_usd"],
+        
         total_cash_usd=summary["cash_usd"],
         total_debit_card_usd=summary["card_usd"],
         total_transfer_usd=summary["transfer_usd"],
         total_credit_sales_usd=summary["credit_usd"],
         
-        # Totales Sistema USD
+        # Totales Sistema VES
         total_sales_ves=summary["sales_ves"],
         total_tax_ves=summary["tax_ves"],
+        
         total_cash_ves=summary["cash_ves"],
         total_debit_card_ves=summary["card_ves"],
         total_transfer_ves=summary["transfer_ves"],
         total_credit_sales_ves=summary["credit_ves"],
         
-        # Declarado
+        # Declarado (Lo que contó el cajero)
         declared_cash_usd=close_data.declared_cash_usd,
         declared_cash_ves=close_data.declared_cash_ves,
+        declared_card_usd=close_data.declared_card_usd,
+        declared_card_ves=close_data.declared_card_ves,
         
         # Diferencias
-        # Solo calcula diferencia en EFECTIVO
-        difference_usd=close_data.declared_cash_usd - summary["cash_usd"],
-        difference_ves=close_data.declared_cash_ves - summary["cash_ves"],
+        difference_usd=diff_usd,
+        difference_ves=diff_ves,
         
         notes=close_data.notes
     )
     
     db.add(cash_close)
-    await db.flush()
+    await db.flush() # Genera el ID
     
-    # 4. Actualizar Facturas
+    # 5. Actualizar Facturas (Cerrarlas)
     for inv in invoices:
         inv.cash_close_id = cash_close.id
         db.add(inv)
@@ -698,19 +726,25 @@ async def create_cash_close(
     await db.commit()
     await db.refresh(cash_close)
     
-    # 5. Evento para Contabilidad
+    # 6. Evento para Contabilidad
     event_payload = {
         "tenant_id": tenant_id,
         "cash_close_id": cash_close.id,
         "date": str(cash_close.created_at),
         "summary": {
-            # Enviamos ambos para que contabilidad decida
             "total_sales_usd": float(cash_close.total_sales_usd),
             "total_tax_usd": float(cash_close.total_tax_usd),
+            
+            # Caja Física
             "collected_cash_usd": float(cash_close.total_cash_usd),
+            
+            # Bancos (Tarjetas + Transferencias + Zelle)
             "collected_bank_usd": float(cash_close.total_debit_card_usd + cash_close.total_transfer_usd),
+            
+            # Equivalentes de lo cobrado en Bs (Para sumar al Debe en Libros USD)
             "collected_cash_ves_equiv": float(summary["cash_ves_equiv"]),
             "collected_bank_ves_equiv": float(summary["card_ves_equiv"] + summary["transfer_ves_equiv"]),
+            
             "sales_on_credit_usd": float(cash_close.total_credit_sales_usd)
         }
     }
@@ -889,12 +923,14 @@ async def get_quotes(
         }
     } 
 
-async def convert_quote_to_invoice(db: AsyncSession, quote_in: int, tenant_id: int, token: str):
+async def convert_quote_to_invoice(db: AsyncSession, quote_in: int, user: UserPayload, token: str):
     """Convierte una Cotización en Factura Real"""
     # Buscar Cotización
-    query = select(models.Quote).filter(models.Quote.id == quote_in, models.Quote.tenant_id == tenant_id).options(selectinload(models.Quote.items))
+    query = select(models.Quote).filter(models.Quote.id == quote_in, models.Quote.tenant_id == user.tenant_id).options(selectinload(models.Quote.items))
     result = await db.execute(query)
     quote = result.scalars().first()
+    
+    user_id_int = int(user.user_id) if user.user_id else 0
     
     if not quote:
         raise ValueError("Cotización no encontrado")
@@ -916,7 +952,7 @@ async def convert_quote_to_invoice(db: AsyncSession, quote_in: int, tenant_id: i
     )
     
     # Crear Factura
-    new_invoice = await create_invoice(db, invoice_in, tenant_id, token)
+    new_invoice = await create_invoice(db, invoice_in, tenant_id=user.tenant_id, token=token, user_id=user_id_int, user_role=user.role)
     
     # Actualizar estado de Cotización
     quote.status = "INVOICED"

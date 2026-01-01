@@ -52,11 +52,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/finance/invoices/invoice-list/invoice-list.component').then(m => m.InvoiceListComponent)
       },
       {
-        path: 'quotes',
+        path: 'finance/quotes',
         loadComponent: () => import('./features/finance/quotes/quote-list/quote-list.component').then(m => m.QuoteListComponent),
       },
       {
-        path: 'quotes/new',
+        path: 'finance/quotes/new',
         loadComponent: () => import('./features/finance/quotes/quote-form/quote-form.component').then(m => m.QuoteFormComponent),
       }
     ]

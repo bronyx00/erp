@@ -147,7 +147,8 @@ async def create_invoice(
     Se comunica con el servicio de Inventario para verificar items y precios (opcional).
     Envía un evento a RabbitMQ (`invoice.created`) al finalizar.
     """
-    new_invoice = await crud.create_invoice(db, invoice, tenant_id=user.tenant_id, token=token)
+    user_id_int = int(user.user_id) if user.user_id else 0
+    new_invoice = await crud.create_invoice(db, invoice, tenant_id=user.tenant_id, token=token, user_id=user_id_int, user_role=user.role)
     
     invoice_dict = {
         "id": new_invoice.id,
@@ -299,7 +300,7 @@ async def convert_quote(
     quote_id: int,
     db: AsyncSession = Depends(database.get_db),
     user: UserPayload = Depends(RequirePermission(Permissions.QUOTE_CREATE)),
-    token: int = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme)
 ):
     """
     **Convertir a Factura**
@@ -308,7 +309,7 @@ async def convert_quote(
     Marca la cotización como FACTURADA (INVOICED).
     """
     try:
-        invoice = await crud.convert_quote_to_invoice(db, quote_id, user.tenant_id, token)
+        invoice = await crud.convert_quote_to_invoice(db, quote_id, user, token)
         return invoice
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

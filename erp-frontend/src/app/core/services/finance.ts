@@ -156,6 +156,55 @@ export interface QuoteCreate {
   terms?: string;
 }
 
+// --- CIERRE DE CAJA ---
+export interface CashCloseCreate {
+    declared_cash_usd: number;
+    declared_cash_ves: number;
+    declared_card_usd: number; 
+    declared_card_ves: number;
+    notes?: string;
+}
+
+export interface CashCloseResponse {
+    id: number;
+    period_start: string;
+    period_end: string;
+    
+    // 1. Totales Globales
+    total_sales_usd: number;
+    total_tax_usd: number;
+    total_sales_ves: number;
+    total_tax_ves: number;
+    
+    // Campo calculado 
+    total_system_income_usd?: number; 
+
+    // 2. Desglose Sistema USD
+    total_cash_usd: number;
+    total_debit_card_usd: number;
+    total_transfer_usd: number;
+    total_credit_sales_usd: number;
+    
+    // 3. Desglose Sistema VES
+    total_cash_ves: number;
+    total_debit_card_ves: number;
+    total_transfer_ves: number;  
+    total_credit_sales_ves: number; 
+    
+    // 4. Declarado por Usuario
+    declared_cash_usd: number;
+    declared_cash_ves: number;
+    declared_card_usd: number;
+    declared_card_ves: number;
+    
+    // 5. Diferencias
+    difference_usd: number;
+    difference_ves: number;
+    
+    created_at: string;
+    notes?: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -215,5 +264,10 @@ export class FinanceService {
 
   convertQuoteToInvoice(quoteId: number): Observable<any> {
     return this.http.post(`${this.API_URL}/quotes/${quoteId}/convert`, {});
+  }
+  
+  // --- CIERRE DE CAJA ---
+  performCashClose(data: CashCloseCreate): Observable<CashCloseResponse> {
+    return this.http.post<CashCloseResponse>(`${this.API_URL}/cash-close`, data);
   }
 }
