@@ -1,90 +1,88 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet, NavigationEnd } from '@angular/router';
-import { AuthService } from '../services/auth';
-import { filter } from 'rxjs';
+import { RouterModule, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 
+import { AuthService } from '../services/auth';
+
+// 1. Definimos la interfaz estricta para tu menú
 interface MenuItem {
   label: string;
-  icon: string;
-  route?: string;
+  icon: string;       // Clase de FontAwesome (ej: 'fas fa-home')
+  route?: string;     // Opcional si tiene hijos
   children?: MenuItem[];
-  isOpen?: boolean; // Para controlar el sub-menú
+  isOpen?: boolean;   // Estado para el acordeón
 }
 
 @Component({
-  selector: 'app-app-layout',
+  selector: 'app-layout',
   standalone: true,
   imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
   templateUrl: './app-layout.component.html',
-  styleUrls: ['./app-layout.component.scss'] 
+  styles: [`
+    /* Scrollbar personalizado para que combine con el diseño */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 20px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background-color: #94a3b8;
+    }
+  `]
 })
-export class AppLayoutComponent implements OnInit {
+export class AppLayoutComponent {
   private authService = inject(AuthService);
-  private router = inject(Router);
-
-  // Estado del Sidebar
+  
+  // -- STATE SIGNALS --
   isSidebarCollapsed = signal(false);
   isMobileMenuOpen = signal(false);
   
+  // Mock User Data (Reemplazar con AuthService.user())
   currentUser = this.authService.currentUser;
-  
-  // Título de la página actual 
-  pageTitle = signal('Dashboard');
 
-  // --- CONFIGURACIÓN DEL MENÚ ---
+  // -- MENU CONFIGURATION (Dynamic & Type Safe) --
   menuItems = signal<MenuItem[]>([
     { 
       label: 'Dashboard', 
-      icon: 'fas fa-chart-pie', 
-      route: '/dashboard' 
+      route: '/dashboard', 
+      icon: 'fas fa-chart-pie' 
     },
+    
+    // SECCIÓN CONTABILIDAD (Anidada)
     { 
-      label: 'Punto de Venta', 
-      icon: 'fas fa-cash-register', 
-      route: '/pos' 
-    },
-    { 
-      label: 'Inventario', 
-      icon: 'fas fa-boxes-stacked', 
-      route: '/inventory' 
-    },
-    { 
-      label: 'Clientes (CRM)', 
-      icon: 'fas fa-users', 
-      route: '/crm' 
-    },
-    { 
-      label: 'Recursos Humanos', 
-      icon: 'fas fa-user-tie', 
+      label: 'Contabilidad', 
+      icon: 'fas fa-calculator', // Icono FontAwesome
+      isOpen: false, // Cerrado por defecto
       children: [
-        { label: 'Empleados', icon: 'fas fa-id-card', route: '/hhrr' },
-        { label: 'Nómina', icon: 'fas fa-file-invoice-dollar', route: '/hhrr/payroll' },
-        { label: 'Asistencia', icon: 'fas fa-clock', route: '/hhrr/attendance' }
+        { label: 'Plan de Cuentas', route: '/accounting/chart-of-accounts', icon: '' },
+        { label: 'Libro Diario', route: '/accounting/journal', icon: '' },
+        { label: 'Reportes', route: '/accounting/reports', icon: '' },
       ]
     },
-    { 
-      label: 'Finanzas', 
-      icon: 'fas fa-coins', 
+
+    // SECCIÓN FINANZAS (Anidada)
+    {
+      label: 'Finanzas',
+      icon: 'fas fa-file-invoice-dollar',
+      isOpen: false,
       children: [
-        { label: 'Facturas', icon: 'fas fa-file-invoice', route: '/finance/invoices' },
-        { label: 'Cotizaciones', icon: 'fas fa-receipt', route: '/finance/quotes' }
+        { label: 'Facturas', route: '/finance/invoices', icon: '' },
+        { label: 'Cotizaciones', route: '/finance/quotes', icon: '' },
       ]
     },
-    { 
-      label: 'Configuración', 
-      icon: 'fas fa-cogs', 
-      route: '/settings' 
-    }
+
+    { label: 'Inventario', route: '/inventory', icon: 'fas fa-boxes' },
+    { label: 'CRM Clientes', route: '/crm', icon: 'fas fa-users' },
+    { label: 'RRHH', route: '/hr', icon: 'fas fa-id-card' },
+    { label: 'Punto de Venta', route: '/pos', icon: 'fas fa-cash-register' },
+    { label: 'Configuración', route: '/settings', icon: 'fas fa-cog' },
   ]);
-  
-  ngOnInit() {
-    if (this.authService.isAuthenticated() && !this.currentUser()) {
-        this.authService.me().subscribe({
-            error: () => this.authService.logout() // Si falla (token invalido), logout
-        });
-    }
-  }
 
   getRoleLabel(role: string | undefined): string {
       const roles: any = {
@@ -97,15 +95,17 @@ export class AppLayoutComponent implements OnInit {
       return role ? (roles[role] || role) : 'Usuario';
   }
 
-  constructor() {
-    // Detectar cambios de ruta para actualizar título o cerrar menú móvil
-    this.router.events.pipe(
-      filter(event => event instanceof NavigationEnd)
-    ).subscribe(() => {
-      this.isMobileMenuOpen.set(false);
-      this.updateTitle();
-    });
+
+
+  ngOnInit() {
+    if (this.authService.isAuthenticated() && !this.currentUser()) {
+        this.authService.me().subscribe({
+            error: () => this.authService.logout() // Si falla (token invalido), logout
+        });
+    }
   }
+
+  // -- ACTIONS --
 
   toggleSidebar() {
     this.isSidebarCollapsed.update(v => !v);
@@ -115,27 +115,28 @@ export class AppLayoutComponent implements OnInit {
     this.isMobileMenuOpen.update(v => !v);
   }
 
-  toggleSubmenu(item: MenuItem) {
-    if (!this.isSidebarCollapsed()) {
-      item.isOpen = !item.isOpen;
-    } else {
-      // Si está colapsado y hacen click, expandimos para mostrar el submenú
+  // Lógica para el Acordeón del Menú
+  toggleSubmenu(label: string) {
+    // Si la sidebar está colapsada, al abrir un submenú deberíamos expandirla para UX
+    if (this.isSidebarCollapsed()) {
       this.isSidebarCollapsed.set(false);
-      item.isOpen = true;
     }
+
+    this.menuItems.update(items => 
+      items.map(item => {
+        if (item.label === label) {
+          return { ...item, isOpen: !item.isOpen };
+        }
+        // Opcional: Cerrar los otros menús al abrir uno (Accordion Effect)
+        // return { ...item, isOpen: false }; 
+        return item;
+      })
+    );
   }
 
   logout() {
     if(confirm('¿Cerrar sesión?')) {
       this.authService.logout();
-    }
-  }
-
-  private updateTitle() {
-    // Lógica simple para obtener título basado en la URL
-    const url = this.router.url.split('/')[1];
-    if (url) {
-      this.pageTitle.set(url.charAt(0).toUpperCase() + url.slice(1));
     }
   }
 }

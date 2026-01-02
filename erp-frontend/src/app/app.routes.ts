@@ -1,65 +1,80 @@
 import { Routes } from '@angular/router';
-import { LoginComponent } from './features/auth/login/login';
-import { RegisterComponent } from './features/auth/register/register.component';
 import { AppLayoutComponent } from './core/layout/app-layout.component';
 
 export const routes: Routes = [
-  { path: 'login', 
-    component: LoginComponent ,
-    title: 'ERP - Iniciar Sesión'
+  // --- AUTH FLOW ---
+  {
+    path: 'auth',
+    loadChildren: () => import('./features/auth/auth.routes').then(m => m.AUTH_ROUTES)
   },
-  { path: 'register', 
-    component: RegisterComponent ,
-    title: 'ERP - Crea tu cuenta'
-  },
+
+  // --- APP SHELL ---
   {
     path: '',
     component: AppLayoutComponent,
+    // canActivate: [AuthGuard], // Descomentar cuando tenga el Guard
     children: [
-      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+      /** 
+      // 1. Dashboard Principal
       {
-        path: 'settings',
-        loadComponent: () => import('./features/settings/settings').then(m => m.Settings)
-      },
-      {
-        path: 'hhrr',
-        loadComponent: () => import('./features/employees/employees.component').then(m => m.EmployeesComponent)
+        path: 'dashboard',
+        loadComponent: () => import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),
+        title: 'ERP | Resumen'
+      },*/
 
+      // 2. CONTABILIDAD (Agrupado)
+      {
+        path: 'accounting',
+        loadChildren: () => import('./features/accounting/accounting.routes').then(m => m.ACCOUNTING_ROUTES)
       },
+
+      // 3. FINANZAS (Agrupado)
+      {
+        path: 'finance',
+        loadChildren: () => import('./features/finance/finance.routes').then(m => m.FINANCE_ROUTES)
+      },
+
+      // 4. CRM
       {
         path: 'crm',
-        loadComponent: () => import('./features/crm/client-list/client-list.component').then(m => m.ClientListComponent)
+        loadComponent: () => import('./features/crm/client-list/client-list.component').then(m => m.ClientListComponent),
+        title: 'ERP | CRM'
       },
-      // --- PUNTO DE VENTA (POS) --- 
-      // Requiere permisos de gestión o caja
+
+      // 5. INVENTARIO
+      {
+        path: 'inventory',
+        loadComponent: () => import('./features/inventory/product-list/product-list.component').then(m => m.ProductListComponent),
+        title: 'ERP | Inventario'
+      },
+
+      // 6. POS
       {
         path: 'pos',
         loadComponent: () => import('./features/pos/pos-terminal/pos-terminal.component').then(m => m.PosTerminalComponent),
-        title: 'ERP - Punto de Venta',
+        title: 'ERP | POS'
       },
-      // --- INVENTARIO ---
-      // Requiere permisos de gestión o almacén
-      {
-        path: 'inventory',
-        loadComponent: () => import('./features/inventory/product-list/product-list.component').then(m => m.ProductListComponent)
-      },
-      // --- CONTABILIDAD ---
-      // Requiere permisos de gestión o contabilidad
 
-      // --- FINANZAS ---
+      // 7. RRHH (Antes HHRR)
       {
-        path: 'finance/invoices',
-        loadComponent: () => import('./features/finance/invoices/invoice-list/invoice-list.component').then(m => m.InvoiceListComponent)
+        path: 'hr',
+        loadComponent: () => import('./features/employees/employees.component').then(m => m.EmployeesComponent),
+        title: 'ERP | Recursos Humanos'
       },
+
+      // 8. CONFIGURACIÓN
       {
-        path: 'finance/quotes',
-        loadComponent: () => import('./features/finance/quotes/quote-list/quote-list.component').then(m => m.QuoteListComponent),
+        path: 'settings',
+        loadComponent: () => import('./features/settings/settings').then(m => m.Settings),
+        title: 'ERP | Configuración'
       },
-      {
-        path: 'finance/quotes/new',
-        loadComponent: () => import('./features/finance/quotes/quote-form/quote-form.component').then(m => m.QuoteFormComponent),
-      }
+
+      // Redirección por defecto dentro del Shell
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' }
     ]
   },
-  { path: '**', redirectTo: 'login' }
+
+  // --- REDIRECCIONES GLOBALES ---
+  { path: '', redirectTo: 'auth/login', pathMatch: 'full' },
+  { path: '**', redirectTo: 'auth/login' }
 ];

@@ -1,9 +1,8 @@
 import asyncio
 import sys
-from sqlalchemy import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.models import Account
-from app.database import AsyncSessionLocal
 
 # ==============================================================================
 #  PUC VENEZUELA - BASE COMÚN (NIVEL 4/5 DETALLADO)
@@ -226,12 +225,11 @@ TEMPLATES = {
     "livestock": CORE_ACCOUNTS + AGRICULTURE_ACCOUNTS # Alias
 }
 
-async def seed_puc(tenant_id: int, sector: str = "commerce"):
+async def seed_puc(db: AsyncSession, tenant_id: int, sector: str = "commerce"):
     """
     Carga inteligente de Plan de Cuentas.
     sector: 'commerce', 'services', 'industry', 'agriculture'.
     """
-    db = AsyncSessionLocal()
     try:
         # Normalizar sector
         sector_key = sector.lower()
@@ -292,9 +290,7 @@ async def seed_puc(tenant_id: int, sector: str = "commerce"):
                 for row in new_rows:
                     code_to_id_map[row.code] = row.id
                 
-                # CRÍTICO: Si "Do Nothing" se activó, no nos devuelve ID.
-                # Debemos buscar los IDs de las cuentas que YA existían para poder usarlas de padres.
-                # Solo buscamos si el número de insertados < número de intentados
+                # Recuperar IDs de cuentas existentes si el INSERT las ignoró
                 if len(new_rows) < len(insert_rows):
                      codes_to_fetch = [x['code'] for x in insert_rows]
                      from sqlalchemy import select

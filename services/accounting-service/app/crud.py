@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy import func, text
 from . import models, schemas
 import httpx
@@ -125,6 +126,127 @@ async def get_balance(db: AsyncSession, tenant_id: int) -> dict[str, Decimal]:
         "net_profit": total_income - total_expense
     }
     
+# --- CUENTAS CONTABLES ---
+async def create_account(
+    db: AsyncSession,
+    account: schemas.AccountCreate,
+    tenant_id: int
+):
+    """Crea cuenta contable para PUC de la empresa"""
+    level = len(account.code.split('.'))
+    
+    db_account = models.Account(
+        tenant_id=tenant_id,
+        code=account.code,
+        name=account.name,
+        account_type=account.account_type,
+        level=level,
+        is_transactional=account.is_transactional,
+        parent_id=account.parent_id,
+        balance=0,
+        is_active=True
+    )
+    db.add(db_account)
+    try:
+        await db.commit()
+        await db.refresh(db_account)
+        return db_account
+    except Exception as e:
+        await db.rollback()
+        raise ValueError(f"Error creando cuenta. (Posible código duplicado): {str(e)}")
+    
+async def update_account(
+    db: AsyncSession,
+    account_id: int,
+    update_data: schemas.AccountUpdate,
+    tenant_id
+):
+    """Actualiza una cuenta contable ya existente"""
+    query = select(models.Account).filter(
+        models.Account.id == account_id,
+        models.Account.tenant_id == tenant_id
+    )
+    result = await db.execute(query)
+    db_account = result.scalars().first()
+    
+    if not db_account:
+        return None
+    
+    db_account.name = update_data.name
+    db_account.is_active = update_data.is_active
+    
+    await db.commit()
+    await db.refresh(db_account)
+    return db_account
+
+async def get_all_accounts(
+    db: AsyncSession,
+    tenant_id: int,
+    transactional_only: bool = False
+) -> List[models.Account]:
+    """
+    Obtiene el árbol plano de cuentas.
+    """
+    conditions = [
+        models.Account.tenant_id == tenant_id,
+        models.Account.is_active == True
+    ]
+    
+    if transactional_only:
+        conditions.append(models.Account.is_transactional == True)
+    
+    query = select(models.Account).filter(*conditions).order_by(models.Account.code)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+# --- ASIENTOS CONTABLES ---
+async def create_ledger_entry(
+    db: AsyncSession,
+    entry_in: schemas.LedgerEntryCreate,
+    tenant_id: int
+) -> models.LedgerEntry:
+    """
+    Crea un asiento contable validando partida doble.
+    """
+    # 1. Validar Balance
+    if not entry_in.is_balanced:
+        raise ValueError(f"El asiento está descuadrado. Debe: {entry_in.total_debit}, Haber: {entry_in.total_credit}")
+
+    if entry_in.total_debit == 0:
+        raise ValueError("El asiento no puede estar en cero.")
+    
+    # 2. Crear Cabecera
+    db_entry = models.LedgerEntry(
+        tenant_id=tenant_id,
+        transaction_date=entry_in.transaction_date,
+        description=entry_in.description,
+        reference=entry_in.reference,
+        total_amount=entry_in.total_debit
+    )
+    db.add(db_entry)
+    await db.flush() # Obtener ID
+    
+    # 3. Crear Líneas
+    for line in entry_in.lines:
+        db_line = models.LedgerLine(
+            entry_id=db_entry.id,
+            account_id=line.account_id,
+            debit=line.debit,
+            credit=line.credit
+        )
+        db.add(db_line)
+        
+    await db.commit()
+    await db.refresh(db_entry)
+    
+    # Para retornar respuesta completa
+    query = select(models.LedgerEntry).options(
+        selectinload(models.LedgerEntry.lines).selectinload(models.LedgerLine.account)
+    ).filter(models.LedgerEntry.id == db_entry.id)
+    
+    result = await db.execute(query)
+    return result.scalars().first()
+    
 # --- REPORTE CONTABLE ---
 async def get_account_balances(
     db: AsyncSession, 
@@ -223,8 +345,7 @@ async def get_account_balances(
             
     return final_report
 
-# --- REPORTES FINANCIEROS OPTIMIZADOS ---
-
+# --- REPORTES FINANCIEROS ---
 async def get_account_balances_at_date(
     db: AsyncSession, 
     tenant_id: int, 
@@ -249,7 +370,6 @@ async def get_account_balances_at_date(
     
     return await get_account_balances(db, tenant_id, start_of_time, cut_off_date)
     
-
 async def get_period_movements(
     db: AsyncSession, 
     tenant_id: int, 

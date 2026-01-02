@@ -12,8 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import crud, schemas, database, models
 from erp_common.security import RequirePermission, Permissions, UserPayload, oauth2_scheme, get_current_tenant_id
-from .schemas import PaginatedResponse
+from .schemas import PaginatedResponse, SeedPucRequest
 from .utils.financial_pdf import FinancialReportGenerator
+from .services.template_engine import AccountingTemplateEngine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -57,6 +58,22 @@ async def get_balance(
     en base a todas las transacciones registradas.
     """
     return await crud.get_balance(db, tenant_id)
+
+
+# --- CUENTAS CONTABLES ---
+@app.post("/accounts/seed-puc-ve")
+async def trigger_seed_puc(
+    payload: SeedPucRequest,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.ACCOUNTING_MANAGE))
+):
+    """
+    Carga el PUC Venezolano Completo.
+    Payload: { "sector": "commerce" | "industry" | "services" | "agriculture" }
+    """
+    from app.seed_puc_ve import seed_puc
+    await seed_puc(db=db, tenant_id=user.tenant_id, sector=payload.sector)
+    return {"message": "Carga exitosa"}
 
 @app.post("/accounts/import", response_model=schemas.ImportResult)
 async def import_chart_of_accounts(
@@ -111,18 +128,93 @@ async def import_chart_of_accounts(
         await db.rollback()
         raise HTTPException(500, f"Error procesando archivo: {str(e)}")
             
-    
-@app.post("/accounts/seed-puc-ve")
-async def trigger_seed_puc(
+@app.post("/accounts", response_model=schemas.AccountResponse)
+async def create_account(
+    account: schemas.AccountCreate,
     db: AsyncSession = Depends(database.get_db),
-    tenant_id: int = Depends(get_current_tenant_id)
+    user: UserPayload = Depends(RequirePermission(Permissions.ACCOUNTING_MANAGE))
 ):
-    """Carga el PUC Venezolano Completo"""
-    from app.seed_puc_ve import seed_puc
-    await seed_puc(tenant_id=tenant_id)
-    return {"message": "PUC Venezuela iniciado"}
+    """
+    Crea una cuenta contable nueva para el PUC de la empresa
+    
+    :account: Cuenta a crear
+    """
+    try:
+        return await crud.create_account(db, account, user.tenant_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-# --- ENDPOINTS DE LIBROS CONTABLES ---
+@app.put("/accounts/{account_id}", response_model=schemas.AccountResponse)
+async def update_account(
+    account_id: int,
+    account: schemas.AccountUpdate,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.ACCOUNTING_MANAGE))
+):
+    """
+    Edita una cuenta contable ya existente.
+    
+    - account: Lo que se va a editar, solo puede ser nombre y si esta activo
+    """
+    updated = await crud.update_account(db, account_id, account, user.tenant_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+    return updated
+
+@app.get("/accounts", response_model=List[schemas.AccountResponse])
+async def list_accounts(
+    transactional: bool = False,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.ACCOUNTING_READ))
+):
+    """
+    Lista el Plan de Cuentas.
+    - transactional=true: Solo cuentas donde se puede contabilizar (para Dropdowns).
+    - transactional=false: Todas (para ver el árbol completo).
+    """
+    return await crud.get_all_accounts(db, user.tenant_id, transactional)
+
+# --- ASIENTOS CONTABLES ---
+
+@app.post("/entries", response_model=schemas.LedgerEntryResponse)
+async def create_entry(
+    entry: schemas.LedgerEntryCreate,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.ACCOUNTING_MANAGE))
+):
+    """
+    Crea un asiento manual complejo (Partida Doble).
+    Valida que Débitos == Créditos.
+    """
+    try:
+        return await crud.create_ledger_entry(db, entry, user.tenant_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/templates", response_model=List[schemas.EntryTemplate])
+async def get_templates(
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.ACCOUNTING_READ))
+):
+    """Retorna la lista de plantillas de asientos disponibles."""
+    return await AccountingTemplateEngine.get_available_templates(db, user.tenant_id)
+
+@app.post("/templates/preview", response_model=schemas.LedgerEntryCreate)
+async def preview_template_entry(
+    request: schemas.ApplyTemplateRequest,
+    db: AsyncSession = Depends(database.get_db),
+    user: UserPayload = Depends(RequirePermission(Permissions.ACCOUNTING_MANAGE))
+):
+    """
+    Recibe data simple (monto, concepto) y retorna la estructura del asiento completa (cuentas, débitos, créditos).
+    El Frontend recibe esto, se lo muestra al usuario para confirmar, y luego lo manda a /entries.
+    """
+    try:
+        return await AccountingTemplateEngine.process_template(db, user.tenant_id, request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+# --- LIBROS CONTABLES ---
 
 @app.get("/books/journal", response_model=PaginatedResponse[schemas.LedgerEntryResponse])
 async def get_journal_book(   
@@ -203,6 +295,7 @@ async def get_general_ledger(
     
     return ledger
 
+# --- PDF de REPORTES FINANCIEROS ---
 @app.get("/reports/download")
 async def download_financial_report(
     report_type: str, # 'balance_sheet', 'income_statement', 'equity_changes', 'clear'
